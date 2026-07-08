@@ -1,3 +1,5 @@
+import type { MediaValue } from '@tiao/plugin-media'
+
 export interface SceneParams {
   speed: number
   count: number
@@ -7,6 +9,8 @@ export interface SceneParams {
   center: { x: number; y: number }
   mode: 'orbit' | 'wave'
   running: boolean
+  /** uploaded image/video drawn as the particle sprite (dots when null) */
+  sprite: MediaValue
 }
 
 export interface SceneHandle {
@@ -48,6 +52,13 @@ export function startScene(canvas: HTMLCanvasElement, getParams: () => ScenePara
     const cy = h / 2 + p.center.y * h * 0.4
     ctx.fillStyle = p.color
 
+    // uploaded media becomes the particle sprite — the same element a WebGL/
+    // WebGPU scene would upload as a texture each frame
+    const sprite = p.sprite
+    const spriteReady =
+      sprite !== null &&
+      (sprite instanceof HTMLImageElement ? sprite.naturalWidth > 0 : sprite.videoWidth > 0)
+
     for (let i = 0; i < p.count; i++) {
       const a = (i / p.count) * Math.PI * 2
       let x: number
@@ -60,9 +71,15 @@ export function startScene(canvas: HTMLCanvasElement, getParams: () => ScenePara
         x = (i / p.count) * w
         y = cy + Math.sin(a * 3 + t * 2) * h * 0.2 * Math.sin(t * 0.5 + i * 0.05)
       }
-      ctx.beginPath()
-      ctx.arc(x, y, p.size * devicePixelRatio, 0, Math.PI * 2)
-      ctx.fill()
+      const radius = p.size * devicePixelRatio
+      if (spriteReady) {
+        const s = radius * 4
+        ctx.drawImage(sprite, x - s / 2, y - s / 2, s, s)
+      } else {
+        ctx.beginPath()
+        ctx.arc(x, y, radius, 0, Math.PI * 2)
+        ctx.fill()
+      }
     }
   }
   raf = requestAnimationFrame(frame)

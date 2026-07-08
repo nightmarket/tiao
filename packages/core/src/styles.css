@@ -15,26 +15,30 @@
   /* ---- theme tokens ---- */
   --tiao-bg: rgba(250, 250, 250, 0.95);
   --tiao-fg: var(--tiao-neutral-900);
+  /* muted: value/label text sits one tick below headers in the hierarchy */
+  --tiao-fg-muted: var(--tiao-neutral-600);
   --tiao-fg-dim: var(--tiao-neutral-400);
   /* translucent interaction surfaces so controls read at any nesting depth */
   --tiao-titlebar-bg: rgba(0, 0, 0, 0.05);
-  /* nest-bg marks nested containers; hover sits one contrast step above it */
-  --tiao-nest-bg: rgba(0, 0, 0, 0.045);
+  /* vertical guide marking folder nesting depth; active while hovered */
+  --tiao-depth-line: rgba(0, 0, 0, 0.09);
+  --tiao-depth-line-active: rgba(0, 0, 0, 0.3);
   --tiao-hover: rgba(0, 0, 0, 0.08);
+  /* softer section-wide highlight, one contrast step below row hover */
+  --tiao-hover-soft: rgba(0, 0, 0, 0.04);
   --tiao-hover-strong: rgba(0, 0, 0, 0.12);
   --tiao-surface: rgba(0, 0, 0, 0.04);
   --tiao-surface-hover: rgba(0, 0, 0, 0.08);
   --tiao-button-bg: rgba(0, 0, 0, 0.07);
   --tiao-button-bg-hover: rgba(0, 0, 0, 0.11);
   --tiao-fill: rgba(0, 0, 0, 0.08);
-  --tiao-accent: #3478f6;
-  --tiao-accent-fg: #ffffff;
+  --tiao-accent: #84cc16;
+  --tiao-accent-fg: #1a2e05;
   --tiao-border: rgba(0, 0, 0, 0.07);
-  --tiao-nest-border: rgba(0, 0, 0, 0.06);
-  --tiao-radius: 10px;
-  --tiao-radius-sm: 5px;
+  --tiao-radius: 7px;
+  --tiao-radius-sm: 4px;
   --tiao-width: 280px;
-  /* gutter aligns folder-header text with row labels (rack 2 + row 2 + label 6) */
+  /* folder-header inset and chevron gap; keeps header titles aligned with row labels */
   --tiao-gutter: 4px;
   --tiao-max-height: 500px;
   --tiao-font:
@@ -67,20 +71,22 @@
 .tiao-pane.tiao-theme-dark {
   --tiao-bg: rgba(23, 23, 23, 0.95);
   --tiao-fg: var(--tiao-neutral-100);
+  --tiao-fg-muted: var(--tiao-neutral-300);
   --tiao-fg-dim: var(--tiao-neutral-500);
   --tiao-titlebar-bg: rgba(255, 255, 255, 0.06);
-  --tiao-nest-bg: rgba(255, 255, 255, 0.05);
+  --tiao-depth-line: rgba(255, 255, 255, 0.11);
+  --tiao-depth-line-active: rgba(255, 255, 255, 0.34);
   --tiao-hover: rgba(255, 255, 255, 0.09);
+  --tiao-hover-soft: rgba(255, 255, 255, 0.045);
   --tiao-hover-strong: rgba(255, 255, 255, 0.14);
   --tiao-surface: rgba(255, 255, 255, 0.055);
   --tiao-surface-hover: rgba(255, 255, 255, 0.1);
   --tiao-button-bg: rgba(255, 255, 255, 0.08);
   --tiao-button-bg-hover: rgba(255, 255, 255, 0.13);
   --tiao-fill: rgba(255, 255, 255, 0.11);
-  --tiao-accent: #4c8dff;
-  --tiao-accent-fg: #ffffff;
+  --tiao-accent: #a3e635;
+  --tiao-accent-fg: #1a2e05;
   --tiao-border: rgba(255, 255, 255, 0.08);
-  --tiao-nest-border: rgba(255, 255, 255, 0.07);
 }
 
 .tiao-pane *,
@@ -121,6 +127,28 @@
 }
 .tiao-pane input {
   outline: none;
+  caret-color: var(--tiao-accent);
+}
+/* custom 2px caret drawn over focused pane inputs (the native bar is too
+   thin to notice); the native caret is hidden while this one is active */
+.tiao-caret {
+  position: absolute;
+  z-index: 200;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--tiao-accent);
+  pointer-events: none;
+  animation: tiao-caret-blink 1s steps(2, jump-none) infinite;
+}
+@keyframes tiao-caret-blink {
+  50% {
+    opacity: 0;
+  }
+}
+/* the accent theme color carries into text highlights inside inputs */
+.tiao-pane input::selection {
+  background: var(--tiao-accent);
+  color: var(--tiao-accent-fg);
 }
 
 .tiao-icon {
@@ -129,11 +157,13 @@
   flex: none;
 }
 
-/* values and row labels are monospace; headers and buttons keep the UI font */
+/* values and row labels are monospace and one tick less primary than headers,
+   so section titles carry the hierarchy */
 .tiao-pane :where(.tiao-label, .tiao-num-input, .tiao-text-input, .tiao-select,
     .tiao-color-text, .tiao-monitor-text, .tiao-graph-value) {
   font-family: var(--tiao-font-mono);
   font-size: var(--tiao-font-size-mono);
+  color: var(--tiao-fg-muted);
 }
 
 /* ---- pane chrome ---- */
@@ -144,11 +174,13 @@
   width: 100%;
   height: 28px;
   background: var(--tiao-titlebar-bg);
+  border-bottom: 1px solid var(--tiao-border);
   border-radius: var(--tiao-radius) var(--tiao-radius) 0 0;
   transition: background 0.12s ease;
 }
 .tiao-pane:not(.tiao-expanded) > .tiao-titlebar {
   border-radius: var(--tiao-radius);
+  border-bottom-color: transparent;
 }
 .tiao-titlebar:hover {
   background: var(--tiao-hover-strong);
@@ -160,11 +192,45 @@
 .tiao-draggable > .tiao-titlebar:active {
   cursor: grabbing;
 }
-.tiao-pane-gear {
+.tiao-titlebar-main {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 100%;
+  padding: 0 6px 0 8px;
+  min-width: 0;
+}
+/* centered on the full titlebar width (the action icons would otherwise skew
+   it left); clicks pass through to the collapse button / icons underneath */
+.tiao-pane-title {
   position: absolute;
-  left: 6px;
+  left: 50%;
   top: 50%;
-  transform: translateY(-50%);
+  transform: translate(-50%, -50%);
+  max-width: calc(100% - 104px);
+  pointer-events: none;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tiao-titlebar .tiao-icon-triangle {
+  color: var(--tiao-fg-dim);
+  transition: transform 0.18s ease;
+}
+.tiao-pane:not(.tiao-expanded) .tiao-titlebar .tiao-icon-triangle {
+  transform: rotate(-90deg);
+}
+/* action icons (search, gear) on the right; revealed on titlebar hover */
+.tiao-titlebar-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 100%;
+  padding-right: 6px;
+}
+.tiao-titlebar-btn {
   width: 18px;
   height: 18px;
   display: flex;
@@ -175,36 +241,48 @@
   opacity: 0;
   transition: opacity 0.12s ease, color 0.12s ease;
 }
-.tiao-titlebar:hover .tiao-pane-gear,
-.tiao-pane-gear:focus-visible {
+.tiao-titlebar:hover .tiao-titlebar-btn,
+.tiao-titlebar-btn:focus-visible {
   opacity: 1;
 }
-.tiao-pane-gear:hover {
+.tiao-titlebar-btn:hover {
   color: var(--tiao-fg);
 }
-.tiao-titlebar-main {
-  flex: 1;
+/* keep the search icon visible while the search row is open */
+.tiao-search-on .tiao-pane-search {
+  opacity: 1;
+  color: var(--tiao-accent);
+}
+
+/* ---- search row ---- */
+.tiao-searchbar {
   display: flex;
   align-items: center;
-  gap: 6px;
-  height: 100%;
-  padding: 0 8px 0 28px;
-  font-weight: 600;
-  min-width: 0;
-}
-.tiao-pane-title {
-  flex: 1;
-  text-align: center;
+  height: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  padding: 0 4px;
+  transition: height 0.15s ease;
 }
-.tiao-titlebar .tiao-icon-chevron {
+.tiao-searchbar.tiao-open {
+  height: 28px;
+}
+.tiao-search-input {
+  appearance: none;
+  -webkit-appearance: none;
+  flex: 1;
+  min-width: 0;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: var(--tiao-radius-sm);
+  background: var(--tiao-surface);
+  font-family: var(--tiao-font-mono);
+  font-size: var(--tiao-font-size-mono);
+}
+.tiao-search-input::placeholder {
   color: var(--tiao-fg-dim);
-  transition: transform 0.18s ease;
 }
-.tiao-pane:not(.tiao-expanded) .tiao-titlebar .tiao-icon-chevron {
-  transform: rotate(-90deg);
+.tiao-search-input::-webkit-search-cancel-button {
+  display: none;
 }
 
 .tiao-pane-body,
@@ -222,12 +300,19 @@
   overflow: hidden;
   min-height: 0;
 }
+/* scrollbar is hidden so overflow never changes the content width */
 .tiao-pane > .tiao-pane-body > .tiao-pane-clip {
   max-height: calc(var(--tiao-max-height) - 28px);
   overflow-y: auto;
   overscroll-behavior: contain;
-  scrollbar-width: thin;
-  scrollbar-color: var(--tiao-fill) transparent;
+  scrollbar-width: none;
+}
+.tiao-pane > .tiao-pane-body > .tiao-pane-clip::-webkit-scrollbar {
+  display: none;
+}
+/* floating panes never grow past the window height either */
+.tiao-pane.tiao-floating > .tiao-pane-body > .tiao-pane-clip {
+  max-height: min(calc(var(--tiao-max-height) - 28px), calc(100dvh - 44px));
 }
 .tiao-pane > .tiao-pane-body > .tiao-pane-clip > .tiao-rack {
   padding: 1px 2px 2px;
@@ -270,10 +355,13 @@
   cursor: pointer;
 }
 .tiao-label {
-  /* labelled rows split exactly in half so control columns align across rows */
-  flex: 0 0 calc(50% - 6px);
+  /* labelled rows split exactly in half so control columns align across rows.
+     each folder level indents the row by 12px; shrinking the label by an
+     extra 6px/level (50% of the narrower row already absorbs the other half)
+     keeps control columns identical across nesting depths. --tiao-depth is
+     set on folder racks from JS. */
+  flex: 0 0 calc(50% - 6px - var(--tiao-depth, 0) * 6px);
   padding-left: 6px;
-  color: var(--tiao-fg);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -289,74 +377,39 @@
   width: 100%;
 }
 
+/* inset from the edges so sections get some breathing room */
 .tiao-separator {
   height: 1px;
-  margin: 4px 0;
+  margin: 4px 8px;
   background: var(--tiao-border);
 }
 
-/* ---- folders: translucent nested surface (compounds naturally with depth) ---- */
+/* ---- folders: chevron-led headers, children indented behind a depth line ---- */
 .tiao-folder {
   margin-top: 2px;
-  border-radius: calc(var(--tiao-radius-sm) + 2px);
-  background: var(--tiao-nest-bg);
-  box-shadow: inset 0 0 0 1px var(--tiao-nest-border);
+  border-radius: var(--tiao-radius-sm);
+  transition: background 0.12s ease;
+}
+/* hovering a collapse control (header or depth line) highlights the whole
+   section; the folder box already carries the rack's 2px inset */
+.tiao-folder:not(.tiao-folder-static):has(> .tiao-folder-header:hover),
+.tiao-folder:not(.tiao-folder-static):has(> .tiao-folder-body > .tiao-folder-line:hover) {
+  background: var(--tiao-hover-soft);
 }
 .tiao-folder-header {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--tiao-gutter);
   width: 100%;
   height: 24px;
-  /* gutter + label inset, so header text lines up with row labels below */
-  padding: 0 calc(var(--tiao-gutter) + 6px);
+  padding: 0 6px 0 var(--tiao-gutter);
   text-align: left;
-  border-radius: calc(var(--tiao-radius-sm) + 2px);
-}
-.tiao-folder-header::before {
-  content: '';
-  position: absolute;
-  inset: 2px;
   border-radius: var(--tiao-radius-sm);
-  background: transparent;
-  transition: background 0.12s ease;
-  pointer-events: none;
 }
-/* expanded folders keep the hover surface on their header for contrast */
-.tiao-folder-header:hover::before,
-.tiao-folder.tiao-expanded > .tiao-folder-header::before {
-  background: var(--tiao-hover);
-}
-.tiao-folder.tiao-expanded > .tiao-folder-header:hover::before {
-  background: var(--tiao-hover-strong);
-}
-.tiao-folder-header > * {
-  position: relative;
-}
-/* non-collapsible sections: plain header, no chevron, no click affordance */
+/* non-collapsible sections: same caret, but no click affordance */
 .tiao-folder-static > .tiao-folder-header {
   cursor: default;
-}
-.tiao-folder-static > .tiao-folder-header .tiao-icon-chevron {
-  display: none;
-}
-.tiao-folder-static.tiao-expanded > .tiao-folder-header:hover::before {
-  background: var(--tiao-hover);
-}
-/* hierarchical section numbers: 1, 1.1, 1.1.1 (racks scope the counter) */
-.tiao-rack {
-  counter-reset: tiao-section;
-}
-.tiao-folder {
-  counter-increment: tiao-section;
-}
-.tiao-folder-index {
-  color: var(--tiao-fg-dim);
-  font-variant-numeric: tabular-nums;
-}
-.tiao-folder-index::before {
-  content: counters(tiao-section, '.');
 }
 .tiao-folder-title {
   flex: 1;
@@ -364,15 +417,83 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.tiao-folder-header .tiao-icon-chevron {
+/* optional section number ("1.2"), subtler than the title */
+.tiao-folder-index {
+  color: var(--tiao-fg-dim);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+.tiao-folder-header .tiao-icon-triangle {
+  position: relative;
+  top: -1px;
   color: var(--tiao-fg-dim);
   transition: transform 0.18s ease;
 }
-.tiao-folder:not(.tiao-expanded) > .tiao-folder-header .tiao-icon-chevron {
+.tiao-folder:not(.tiao-expanded) > .tiao-folder-header .tiao-icon-triangle {
   transform: rotate(-90deg);
 }
+/* clickable depth line under the caret: the hit area is a slim button, the
+   visible line is inset from the body edges so it clears the hover pills */
+.tiao-folder-body {
+  position: relative;
+}
+.tiao-folder-line {
+  position: absolute;
+  /* hit area centered on the line, under the caret (header gutter 4 + half icon 6) */
+  left: 4px;
+  top: 2px;
+  bottom: 4px;
+  width: 10px;
+  cursor: pointer;
+}
+.tiao-folder-line::before {
+  content: '';
+  position: absolute;
+  left: 5px;
+  top: 2px;
+  bottom: 2px;
+  width: 1px;
+  border-radius: 1px;
+  background: var(--tiao-depth-line);
+  transition: background 0.12s ease;
+}
+.tiao-folder:hover > .tiao-folder-body > .tiao-folder-line::before {
+  background: var(--tiao-depth-line-active);
+}
+.tiao-folder-line:hover::before {
+  background: var(--tiao-accent);
+}
+.tiao-folder-static > .tiao-folder-body > .tiao-folder-line {
+  pointer-events: none;
+}
+/* colored folders: title takes the color; caret and depth line take softer mixes */
+.tiao-folder-colored > .tiao-folder-header .tiao-folder-title {
+  color: var(--tiao-folder-color);
+}
+.tiao-folder-colored > .tiao-folder-header .tiao-folder-index {
+  color: color-mix(in srgb, var(--tiao-folder-color) 55%, transparent);
+}
+.tiao-folder-colored > .tiao-folder-header .tiao-icon-triangle {
+  color: color-mix(in srgb, var(--tiao-folder-color) 65%, transparent);
+}
+.tiao-folder-colored > .tiao-folder-body > .tiao-folder-line::before {
+  background: color-mix(in srgb, var(--tiao-folder-color) 30%, transparent);
+}
+.tiao-folder-colored:hover > .tiao-folder-body > .tiao-folder-line::before {
+  background: color-mix(in srgb, var(--tiao-folder-color) 55%, transparent);
+}
+.tiao-folder-colored > .tiao-folder-body > .tiao-folder-line:hover::before {
+  background: var(--tiao-folder-color);
+}
+/* children indent past the depth line; label text lines up with the header
+   title. no right padding: nested control columns end flush with top-level
+   ones (the pane rack already provides the outer 2px inset) */
 .tiao-folder > .tiao-folder-body > .tiao-folder-clip > .tiao-rack {
-  padding: 0 2px 2px;
+  padding: 0 0 2px 12px;
+}
+/* nested row hover pills sit slightly inside the indent */
+.tiao-folder-clip > .tiao-rack > .tiao-row::before {
+  left: 2px;
 }
 
 /* ---- tabs ---- */
@@ -406,14 +527,13 @@
   display: block;
 }
 
-/* ---- buttons ---- */
+/* ---- buttons: UI font, unlike value fields ---- */
 .tiao-button {
-  height: var(--tiao-row-height);
+  /* slightly taller than value fields so labels get breathing room */
+  height: calc(var(--tiao-row-height) + 2px);
   padding: 0 12px;
   border-radius: var(--tiao-radius-sm);
   background: var(--tiao-button-bg);
-  font-family: var(--tiao-font-mono);
-  font-size: var(--tiao-font-size-mono);
   transition: background 0.12s ease;
 }
 .tiao-button:hover {
@@ -421,6 +541,22 @@
 }
 .tiao-button:active {
   transform: translateY(0.5px);
+}
+
+/* ---- button groups: equal-width siblings sharing one row ---- */
+.tiao-btngroup {
+  display: flex;
+  gap: 2px;
+  width: 100%;
+  min-width: 0;
+}
+.tiao-btngroup .tiao-button {
+  flex: 1;
+  min-width: 0;
+  padding: 0 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ---- number: compact fill slider + number field in the control column ---- */
@@ -475,18 +611,23 @@
   width: 100%;
   min-width: 0;
 }
-/* left grip dots advertise horizontal draggability (hidden while editing) */
+/* left grip bar advertises horizontal draggability (hidden while editing) */
 .tiao-scrub-grip {
   position: absolute;
-  left: 4px;
+  left: 5px;
   top: 50%;
   transform: translateY(-50%);
-  width: 6px;
+  width: 2px;
   height: 11px;
+  border-radius: 1px;
   pointer-events: none;
-  background-image: radial-gradient(circle, var(--tiao-fg-dim) 0.9px, transparent 1px);
-  background-size: 3px 3px;
+  background: var(--tiao-fg-dim);
   opacity: 0.8;
+  transition: background 0.12s ease;
+}
+.tiao-row:hover .tiao-scrub-grip {
+  background: var(--tiao-accent);
+  opacity: 1;
 }
 .tiao-scrub .tiao-num-input:read-write + .tiao-scrub-grip {
   display: none;
@@ -495,35 +636,52 @@
 .tiao-number .tiao-slider-num .tiao-scrub-grip {
   display: none;
 }
-/* tick ruler revealed while dragging; background-position scrolls with dx */
-.tiao-scrub-guide {
+/* full-screen tick ruler shown while scrubbing: it sits on <body> so the
+   ruler bleeds off the pane and the resize cursor holds across the screen.
+   color variables are copied inline from the pane at drag start. */
+.tiao-drag-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  cursor: ew-resize;
+}
+.tiao-drag-overlay-guide {
   position: absolute;
-  left: 4px;
-  right: 4px;
-  bottom: 2px;
+  left: 0;
+  right: 0;
   height: 4px;
-  opacity: 0;
   pointer-events: none;
   background-image: repeating-linear-gradient(
     90deg,
     var(--tiao-fg-dim) 0 1px,
     transparent 1px 5px
   );
-  background-position-x: 50%;
-  transition: opacity 0.1s ease;
+  opacity: 0.6;
 }
-.tiao-scrub-guide::after {
-  content: '';
+.tiao-drag-overlay-marker {
   position: absolute;
-  left: 50%;
-  top: -2px;
-  bottom: 0;
   width: 2px;
+  height: 6px;
   margin-left: -1px;
+  pointer-events: none;
   background: var(--tiao-accent);
 }
-.tiao-scrub.tiao-scrubbing .tiao-scrub-guide {
-  opacity: 0.7;
+/* directional arrows flanking the origin marker */
+.tiao-drag-overlay-marker::before,
+.tiao-drag-overlay-marker::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  border: 4px solid transparent;
+}
+.tiao-drag-overlay-marker::before {
+  left: -11px;
+  border-right-color: var(--tiao-accent);
+}
+.tiao-drag-overlay-marker::after {
+  right: -11px;
+  border-left-color: var(--tiao-accent);
 }
 .tiao-num-input {
   width: 100%;
@@ -609,7 +767,7 @@
   pointer-events: none;
 }
 
-/* ---- pane settings menu ---- */
+/* ---- pane settings menu: a real embedded Pane beside the host pane ---- */
 .tiao-pane-menu {
   position: absolute;
   top: 4px;
@@ -617,11 +775,10 @@
   z-index: 100;
   display: none;
   flex-direction: column;
-  gap: 4px;
-  width: 132px;
-  padding: 8px;
+  width: 190px;
+  padding: 4px;
   background: var(--tiao-bg);
-  border-radius: calc(var(--tiao-radius-sm) + 2px);
+  border-radius: var(--tiao-radius);
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.22), 0 0 0 1px var(--tiao-border);
 }
 .tiao-pane-menu.tiao-open {
@@ -631,46 +788,49 @@
   left: auto;
   right: calc(100% + 6px);
 }
-.tiao-pane-menu-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-  min-height: 18px;
+/* the embedded settings pane inherits the shell's chrome */
+.tiao-pane-menu > .tiao-pane {
+  width: 100%;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
-.tiao-pane-menu-label {
-  color: var(--tiao-fg-dim);
-  font-weight: 500;
-  margin-top: 2px;
+.tiao-pane-menu > .tiao-pane > .tiao-titlebar {
+  display: none;
 }
+/* swatch group in the control column, under the accent row */
+.tiao-accent-palette {
+  padding: 2px 0;
+}
+.tiao-accent-swatch {
+  flex: 1;
+  aspect-ratio: 1;
+  border-radius: 3px;
+  box-shadow: inset 0 0 0 1px var(--tiao-border);
+  transition: filter 0.1s ease;
+}
+.tiao-accent-swatch:hover {
+  filter: brightness(1.12);
+}
+/* 3x3 button grid (tweakpane-style), one cell per anchor position */
 .tiao-anchor-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 3px;
+  gap: 2px;
+  width: 100%;
 }
 .tiao-anchor-cell {
-  height: 22px;
-  border-radius: 4px;
-  background: var(--tiao-surface);
-  position: relative;
+  height: 14px;
+  border-radius: 3px;
+  background: var(--tiao-button-bg);
   transition: background 0.12s ease;
 }
 .tiao-anchor-cell:hover {
-  background: var(--tiao-surface-hover);
-}
-.tiao-anchor-cell::after {
-  content: '';
-  position: absolute;
-  inset: 7px;
-  border-radius: 2px;
-  background: var(--tiao-fg-dim);
-  transition: background 0.12s ease;
+  background: var(--tiao-button-bg-hover);
 }
 .tiao-anchor-cell.tiao-selected {
   background: var(--tiao-accent);
-}
-.tiao-anchor-cell.tiao-selected::after {
-  background: var(--tiao-accent-fg);
 }
 
 /* ---- popups (color picker, xy pad) ---- */
@@ -832,13 +992,20 @@
   height: 18px;
   flex: none;
   border-radius: var(--tiao-radius-sm);
-  background: var(--tiao-surface);
-  color: var(--tiao-fg-dim);
+  /* inverted by default: prominent gray chip (like the slider fill), so the
+     affordance reads without hovering */
+  background: var(--tiao-fill);
+  color: var(--tiao-fg-muted);
   transition: background 0.12s ease, color 0.12s ease;
 }
 .tiao-point-pad-toggle:hover {
-  background: var(--tiao-surface-hover);
+  background: var(--tiao-hover-strong);
   color: var(--tiao-fg);
+}
+/* hovering anywhere on the row lights the pad toggle up in accent */
+.tiao-row:hover .tiao-point-pad-toggle {
+  background: var(--tiao-accent);
+  color: var(--tiao-accent-fg);
 }
 .tiao-point-pad-toggle .tiao-icon {
   width: 10px;
@@ -847,16 +1014,12 @@
 .tiao-point-pad-popup {
   width: 148px;
 }
+/* plain surface: the x/y axis elements are the only guide lines */
 .tiao-point-pad {
   position: relative;
   height: 136px;
   border-radius: var(--tiao-radius-sm);
   background: var(--tiao-surface);
-  background-image:
-    linear-gradient(var(--tiao-border) 1px, transparent 1px),
-    linear-gradient(90deg, var(--tiao-border) 1px, transparent 1px);
-  background-size: 17px 17px;
-  background-position: center;
   cursor: crosshair;
   touch-action: none;
 }
@@ -930,6 +1093,86 @@
   position: absolute;
   top: 3px;
   right: 6px;
-  color: var(--tiao-fg);
   font-variant-numeric: tabular-nums;
+}
+.tiao-graph-unit {
+  margin-left: 0.25em;
+  color: var(--tiao-fg-dim);
+}
+/* labeled fps blade mirrors a standard two-column row */
+.tiao-fps {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+
+/* ---- buffered log monitor: a mini scrollable console ---- */
+.tiao-monitor-log {
+  width: 100%;
+  line-height: 14px;
+  height: calc(var(--tiao-log-rows, 3) * 14px + 8px);
+  padding: 4px 6px;
+  border-radius: var(--tiao-radius-sm);
+  background: var(--tiao-surface);
+  box-shadow: inset 0 0 0 1px var(--tiao-border);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  font-family: var(--tiao-font-mono);
+  font-size: var(--tiao-font-size-mono);
+  color: var(--tiao-fg-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- edge resize: invisible strips straddling the pane edges ---- */
+.tiao-resize {
+  position: absolute;
+  z-index: 10;
+  touch-action: none;
+}
+.tiao-resize-left,
+.tiao-resize-right {
+  top: 8px;
+  bottom: 8px;
+  width: 7px;
+  cursor: ew-resize;
+}
+.tiao-resize-left {
+  left: -3px;
+}
+.tiao-resize-right {
+  right: -3px;
+}
+.tiao-resize-bottom {
+  left: 8px;
+  right: 8px;
+  bottom: -3px;
+  height: 7px;
+  cursor: ns-resize;
+}
+.tiao-resize-bottom-left,
+.tiao-resize-bottom-right {
+  bottom: -3px;
+  width: 11px;
+  height: 11px;
+}
+.tiao-resize-bottom-left {
+  left: -3px;
+  cursor: nesw-resize;
+}
+.tiao-resize-bottom-right {
+  right: -3px;
+  cursor: nwse-resize;
+}
+
+/* ---- search filtering (last: ties against folder collapse rules must lose to these) ---- */
+.tiao-search-miss {
+  display: none !important;
+}
+/* folders holding a match are forced open so the hits are reachable */
+.tiao-folder.tiao-search-open > .tiao-folder-body {
+  grid-template-rows: 1fr;
+}
+.tiao-folder.tiao-search-open > .tiao-folder-header .tiao-icon-triangle {
+  transform: none;
 }

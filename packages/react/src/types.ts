@@ -1,12 +1,19 @@
 import type { BindingOptions, PaneOptions } from '@tiao/core'
 
 export const BUTTON = Symbol('tiao.button')
+export const BUTTON_GROUP = Symbol('tiao.buttonGroup')
 export const MONITOR = Symbol('tiao.monitor')
 
 export interface ButtonItem {
   [BUTTON]: true
   title: string
   onClick: () => void
+}
+
+export interface ButtonGroupItem {
+  [BUTTON_GROUP]: true
+  buttons: Record<string, () => void>
+  label?: string | undefined
 }
 
 export interface MonitorItem {
@@ -19,18 +26,28 @@ export interface InputDef<T = unknown> extends BindingOptions {
   value: T
 }
 
-export type SchemaItem = ButtonItem | MonitorItem | InputDef | number | string | boolean | object
+export type SchemaItem =
+  | ButtonItem
+  | ButtonGroupItem
+  | MonitorItem
+  | InputDef
+  | number
+  | string
+  | boolean
+  | object
 
 export type Schema = Record<string, SchemaItem>
 
 /** Extract the runtime value type of a schema item. */
 export type SchemaValue<I> = I extends ButtonItem
   ? never
-  : I extends MonitorItem
+  : I extends ButtonGroupItem
     ? never
-    : I extends InputDef<infer T>
-      ? T
-      : I
+    : I extends MonitorItem
+      ? never
+      : I extends InputDef<infer T>
+        ? T
+        : I
 
 export type SchemaValues<S extends Schema> = {
   [K in keyof S as SchemaValue<S[K]> extends never ? never : K]: SchemaValue<S[K]>
@@ -48,6 +65,14 @@ export function button(onClick: () => void, title?: string): ButtonItem {
   return { [BUTTON]: true, onClick, title: title ?? '' }
 }
 
+/** Schema helper: a row of equally-styled buttons, each with its own callback. */
+export function buttonGroup(
+  buttons: Record<string, () => void>,
+  label?: string,
+): ButtonGroupItem {
+  return { [BUTTON_GROUP]: true, buttons, label }
+}
+
 /** Schema helper: a readonly monitor polling `get` (use view: 'graph' for a chart). */
 export function monitor(get: () => unknown, options: BindingOptions = {}): MonitorItem {
   return { [MONITOR]: true, get, options: { ...options, readonly: true } }
@@ -55,6 +80,10 @@ export function monitor(get: () => unknown, options: BindingOptions = {}): Monit
 
 export function isButton(item: SchemaItem): item is ButtonItem {
   return typeof item === 'object' && item !== null && BUTTON in item
+}
+
+export function isButtonGroup(item: SchemaItem): item is ButtonGroupItem {
+  return typeof item === 'object' && item !== null && BUTTON_GROUP in item
 }
 
 export function isMonitor(item: SchemaItem): item is MonitorItem {

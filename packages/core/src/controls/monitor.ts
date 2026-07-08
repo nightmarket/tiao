@@ -2,7 +2,7 @@ import { h } from '../dom'
 import { formatNumber } from '../util'
 import type { MonitorPlugin, PluginContext } from '../plugin'
 
-/** Readonly text display for any value. */
+/** Readonly text display for any value; bufferSize > 1 turns it into a log. */
 export const textMonitorPlugin: MonitorPlugin<unknown> = {
   id: 'text',
   type: 'monitor',
@@ -11,6 +11,9 @@ export const textMonitorPlugin: MonitorPlugin<unknown> = {
   },
   create(ctx) {
     const format = (ctx.options.format as ((v: unknown) => string) | undefined) ?? defaultFormat
+    const bufferSize = typeof ctx.options['bufferSize'] === 'number' ? ctx.options['bufferSize'] : 1
+    if (bufferSize > 1) return { element: createLog(ctx, bufferSize, format) }
+
     const el = h('div', 'tiao-monitor-text', format(ctx.value.get()))
     ctx.onDispose(
       ctx.value.subscribe((v) => {
@@ -20,6 +23,33 @@ export const textMonitorPlugin: MonitorPlugin<unknown> = {
     )
     return { element: el }
   },
+}
+
+const DEFAULT_LOG_ROWS = 3
+
+/**
+ * Mini scrollable console (tweakpane bufferSize behavior): keeps the last
+ * `bufferSize` values as lines, newest at the bottom, pinned to the tail
+ * unless the user scrolled up to read history.
+ */
+function createLog(
+  ctx: PluginContext<unknown>,
+  bufferSize: number,
+  format: (v: unknown) => string,
+): HTMLElement {
+  const rows = typeof ctx.options['rows'] === 'number' ? ctx.options['rows'] : DEFAULT_LOG_ROWS
+  const el = h('div', 'tiao-monitor-log')
+  el.style.setProperty('--tiao-log-rows', String(rows))
+
+  const push = (v: unknown) => {
+    const stick = el.scrollTop + el.clientHeight >= el.scrollHeight - 2
+    el.append(h('div', 'tiao-monitor-log-line', format(v)))
+    while (el.childElementCount > bufferSize) el.firstElementChild?.remove()
+    if (stick) el.scrollTop = el.scrollHeight
+  }
+  push(ctx.value.get())
+  ctx.onDispose(ctx.value.subscribe(push))
+  return el
 }
 
 function defaultFormat(v: unknown): string {
@@ -46,7 +76,10 @@ export function createGraph(ctx: PluginContext<number>): HTMLElement {
   const bufferSize = (ctx.options['bufferSize'] as number | undefined) ?? DEFAULT_BUFFER
   const buffer: number[] = []
   const canvas = h('canvas', 'tiao-graph-canvas')
-  const valueEl = h('span', 'tiao-graph-value')
+  const numberEl = h('span', 'tiao-graph-number')
+  // unit (e.g. "s", "FPS") renders after the number in a subtler color
+  const unit = typeof ctx.options['unit'] === 'string' ? ctx.options['unit'] : ''
+  const valueEl = h('span', 'tiao-graph-value', numberEl, unit ? h('span', 'tiao-graph-unit', unit) : null)
   const el = h('div', 'tiao-graph', canvas, valueEl)
 
   const explicitMin = ctx.options.min
@@ -104,7 +137,7 @@ export function createGraph(ctx: PluginContext<number>): HTMLElement {
     ctx.value.subscribe((v) => {
       buffer.push(v)
       if (buffer.length > bufferSize) buffer.splice(0, buffer.length - bufferSize)
-      valueEl.textContent = format(v)
+      numberEl.textContent = format(v)
       draw()
     }),
   )

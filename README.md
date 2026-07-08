@@ -9,6 +9,7 @@ A themeable, draggable debug pane for tweaking parameters — tweakpane-style bi
 | `@tiao/plugin-fps` | FPS graph blade |
 | `@tiao/plugin-bezier` | Cubic-bezier easing editor input |
 | `@tiao/plugin-radio-grid` | Segmented radio grid input |
+| `@tiao/plugin-media` | Image/video upload input (drag & drop) for WebGL/WebGPU textures |
 | `@tiao/export-pane` | Pre-configured pane that exports a canvas to PNG / WebM / MP4 |
 
 ## Quick start (vanilla)
@@ -39,6 +40,7 @@ const folder = pane.addFolder({ title: 'Advanced', expanded: false }) // collaps
 folder.addBinding(stats, 'fps', { readonly: true, view: 'graph', min: 0, max: 120 })
 
 pane.addButton({ title: 'Reset' }).on('click', reset)
+pane.addButtonGroup({ label: 'zoom', buttons: { '0.5x': () => zoom(0.5), '1x': () => zoom(1) } })
 pane.on('change', (ev) => console.log(ev.key, ev.value, ev.last))
 
 pane.dispose() // full cleanup
@@ -48,8 +50,9 @@ Styles are injected automatically on first pane creation. To manage CSS yourself
 
 ### Pane chrome
 
-- `anchor`: any corner or side center (`'top-left'`, `'top-center'`, `'right-center'`, ...), or `container: element` for inline panes
-- Hover the title bar for a gear icon (or right-click the pane) to open the settings menu: toggle dragging and jump between the 8 anchor positions
+- `anchor`: any corner, side center, or `'center'` (`'top-left'`, `'top-center'`, `'right-center'`, ...), or `container: element` for inline panes
+- Hover the title bar for a gear icon (or right-click the pane) to open the Pane Settings panel: toggle dragging, switch the light/dark theme, pick the accent color, and jump between the 9 anchor positions on a mini window that mirrors your viewport's aspect ratio
+- The search icon in the title bar opens a filter row: rows are matched by label/title, folders holding a match are forced open, and a folder-title match keeps its whole subtree visible. `pane.filter(query)` / `pane.searchOpen` do the same programmatically
 - `draggable: true` (default for floating panes); drag position, anchor, and the draggable toggle persist to `localStorage` when the pane has an `id`
 - `toggleKey: '\`'` toggles visibility; `pane.hidden`, `pane.expanded` are settable
 - `maxHeight: 500` (default) caps the pane height; content scrolls when it overflows
@@ -62,8 +65,11 @@ All styling flows through CSS custom properties on `.tiao-pane` (`--tiao-bg`, `-
 
 ```ts
 new Pane({ theme: { accent: '#f0f', '--tiao-width': '320px' } })
-pane.element.classList.add('tiao-theme-dark') // built-in dark theme
+pane.theme = 'dark'       // built-in dark theme ('light' | 'dark')
+pane.accent = '#ff0080'   // sets --tiao-accent
 ```
+
+Theme and accent are also editable from the Pane Settings panel (gear icon or right-click), and both persist to `localStorage` when the pane has an `id`.
 
 ## React
 
@@ -117,13 +123,18 @@ if (import.meta.env.DEV) {
 import { addFpsGraph } from '@tiao/plugin-fps'
 import { registerBezierPlugin } from '@tiao/plugin-bezier'
 import { registerRadioGridPlugin } from '@tiao/plugin-radio-grid'
+import { registerMediaPlugin, type MediaValue } from '@tiao/plugin-media'
 
 addFpsGraph(pane)
 registerBezierPlugin()
 pane.addBinding(params, 'easing', { view: 'bezier' })          // [x1, y1, x2, y2]
 registerRadioGridPlugin()
 pane.addBinding(params, 'mode', { view: 'radiogrid', options: { Line: 'line', Scatter: 'scatter' } })
+registerMediaPlugin()
+pane.addBinding(params, 'texture', { view: 'media' })          // MediaValue
 ```
+
+The media input takes a png/jpeg/webp image or mp4/webm video via drag & drop or click-to-browse. The bound value becomes the loaded `HTMLImageElement` or `HTMLVideoElement` (`null` when empty) — both are valid WebGL `TexImageSource`s; for WebGPU pass images through `createImageBitmap` and videos through `importExternalTexture`. Videos autoplay muted on loop, so re-uploading the element each frame gives animated textures.
 
 ### Writing your own
 

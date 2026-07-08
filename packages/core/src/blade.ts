@@ -10,6 +10,24 @@ export interface BladeHost {
   registry: PluginRegistry
 }
 
+/**
+ * When a click lands outside a focused pane input, the pane blurs it on
+ * pointerdown (see Pane). If that click lands on the same row, its later
+ * `click` must not immediately re-activate the input we just deselected.
+ */
+let lastPointerBlurAt = 0
+let lastPointerBlurRow: Element | null = null
+
+/** internal: called by the Pane right before it blurs an input from a pointerdown */
+export function markPointerBlur(row: Element | null): void {
+  lastPointerBlurAt = Date.now()
+  lastPointerBlurRow = row
+}
+
+function clickFollowsPointerBlur(row: Element): boolean {
+  return lastPointerBlurRow === row && Date.now() - lastPointerBlurAt < 400
+}
+
 export interface TiaoChangeEvent<T = unknown> {
   value: T
   last: boolean
@@ -46,6 +64,18 @@ export abstract class Item {
   set disabled(v: boolean) {
     this._disabled = v
     this.element.classList.toggle('tiao-disabled', v)
+  }
+
+  /** internal: hide/show against a search query; returns whether this item matched */
+  applySearch(query: string): boolean {
+    const match = query === '' || this.searchText().toLowerCase().includes(query)
+    this.element.classList.toggle('tiao-search-miss', !match)
+    return match
+  }
+
+  /** text a search query matches against (labels, titles, ...) */
+  protected searchText(): string {
+    return ''
   }
 
   dispose(): void {
@@ -94,7 +124,13 @@ export abstract class Container extends Item {
     return api
   }
 
-  addFolder(params: { title: string; expanded?: boolean; collapsible?: boolean }): FolderApi {
+  addFolder(params: {
+    title: string
+    expanded?: boolean
+    collapsible?: boolean
+    /** tints the folder title; caret and depth line get softer mixes of it */
+    color?: string
+  }): FolderApi {
     const api = new FolderApi(this.host, params)
     this.attach(api)
     return api
@@ -102,6 +138,12 @@ export abstract class Container extends Item {
 
   addButton(params: { title: string; label?: string }): ButtonApi {
     const api = new ButtonApi(this.host, params)
+    this.attach(api)
+    return api
+  }
+
+  addButtonGroup(params: { label?: string; buttons: Record<string, () => void> }): ButtonGroupApi {
+    const api = new ButtonGroupApi(this.host, params)
     this.attach(api)
     return api
   }
@@ -135,12 +177,37 @@ export abstract class Container extends Item {
       this.children.push(item)
       this.rack.append(item.element)
     }
+    if (item instanceof FolderApi) item.updateDepth()
+    this.notifyStructure()
   }
 
   /** internal: remove bookkeeping only (called from Item.dispose) */
   detach(item: Item): void {
     const i = this.children.indexOf(item)
     if (i >= 0) this.children.splice(i, 1)
+    this.notifyStructure()
+  }
+
+  /** internal: bubbles child add/remove to the root (the Pane renumbers sections) */
+  notifyStructure(): void {
+    this.parent?.notifyStructure()
+  }
+
+  /**
+   * A container matches when its own title matches (whole subtree stays
+   * visible) or when any descendant matches (folder shown, forced open so the
+   * hits are reachable).
+   */
+  override applySearch(query: string): boolean {
+    const titleMatch = query === '' || this.searchText().toLowerCase().includes(query)
+    let childMatch = false
+    for (const child of this.children) {
+      if (child.applySearch(titleMatch ? '' : query)) childMatch = true
+    }
+    const match = titleMatch || childMatch
+    this.element.classList.toggle('tiao-search-miss', !match)
+    this.element.classList.toggle('tiao-search-open', query !== '' && childMatch && !titleMatch)
+    return match
   }
 
   /** re-read all bindings in this subtree from their targets */
@@ -212,11 +279,14 @@ export class BindingApi<T> extends Item {
       )
     }
 
-    // clicking the label area activates the control (focus input, open picker, ...)
+    // clicking the row outside the concrete control activates it (focus input, open picker, ...)
     if (view.activate && !view.full) {
       this.element.classList.add('tiao-row-activate')
       const onRowClick = (e: MouseEvent) => {
-        if ((e.target as Element | null)?.closest?.('.tiao-control')) return
+        const target = e.target as Node | null
+        if (target && view.element.contains(target)) return
+        // this click just deselected this row's input; don't immediately focus it again
+        if (clickFollowsPointerBlur(this.element)) return
         view.activate?.()
       }
       this.element.addEventListener('click', onRowClick)
@@ -255,6 +325,10 @@ export class BindingApi<T> extends Item {
     if (this.labelEl) this.labelEl.textContent = v
   }
 
+  protected override searchText(): string {
+    return `${this.label} ${this.key}`
+  }
+
   on(name: 'change', fn: (ev: TiaoChangeEvent<T>) => void): () => void {
     return this.bindingEmitter.on(name, fn)
   }
@@ -279,10 +353,12 @@ export class ButtonApi extends Item {
   readonly element: HTMLElement
   private buttonEmitter = new Emitter<ButtonEvents>()
   private buttonEl: HTMLButtonElement
+  private labelText: string
 
   constructor(host: BladeHost, params: { title: string; label?: string }) {
     super()
     void host
+    this.labelText = params.label ?? ''
     this.buttonEl = h('button', 'tiao-button', params.title)
     this.buttonEl.type = 'button'
     const onClick = () => {
@@ -303,6 +379,10 @@ export class ButtonApi extends Item {
     this.buttonEl.textContent = v
   }
 
+  protected override searchText(): string {
+    return `${this.title} ${this.labelText}`
+  }
+
   on(name: 'click', fn: (ev: { target: ButtonApi }) => void): () => void {
     return this.buttonEmitter.on(name, fn)
   }
@@ -310,6 +390,37 @@ export class ButtonApi extends Item {
   override dispose(): void {
     this.buttonEmitter.clear()
     super.dispose()
+  }
+}
+
+/** A row of equally-styled action buttons, each with its own callback. */
+export class ButtonGroupApi extends Item {
+  readonly element: HTMLElement
+  private titles: string[]
+
+  constructor(host: BladeHost, params: { label?: string; buttons: Record<string, () => void> }) {
+    super()
+    void host
+    this.titles = Object.keys(params.buttons)
+    const group = h('div', 'tiao-btngroup')
+    for (const [title, onClick] of Object.entries(params.buttons)) {
+      const btn = h('button', 'tiao-button', title)
+      btn.type = 'button'
+      const handler = () => {
+        if (!this.disabled) onClick()
+      }
+      btn.addEventListener('click', handler)
+      this.disposers.push(() => btn.removeEventListener('click', handler))
+      group.append(btn)
+    }
+    this.element = params.label
+      ? h('div', 'tiao-row', h('div', 'tiao-label', params.label), h('div', 'tiao-control', group))
+      : h('div', 'tiao-row tiao-row-full', group)
+  }
+
+  protected override searchText(): string {
+    const label = this.element.querySelector('.tiao-label')?.textContent ?? ''
+    return `${label} ${this.titles.join(' ')}`
   }
 }
 
@@ -350,7 +461,10 @@ export class FolderApi extends Container {
 
   private collapsible: boolean
 
-  constructor(host: BladeHost, params: { title: string; expanded?: boolean; collapsible?: boolean }) {
+  constructor(
+    host: BladeHost,
+    params: { title: string; expanded?: boolean; collapsible?: boolean; color?: string },
+  ) {
     super(host)
     this.collapsible = params.collapsible ?? true
     this._expanded = this.collapsible ? params.expanded ?? true : true
@@ -358,13 +472,21 @@ export class FolderApi extends Container {
     this.headerEl = h(
       'button',
       'tiao-folder-header',
-      h('span', 'tiao-folder-index'),
+      icon('triangle'),
       h('span', 'tiao-folder-title', params.title),
-      icon('chevron'),
     )
     this.headerEl.type = 'button'
-    const body = h('div', 'tiao-folder-body', h('div', 'tiao-folder-clip', this.rack))
+    // the depth line doubles as a collapse control (keyboard users have the header)
+    const lineEl = h('button', 'tiao-folder-line')
+    lineEl.type = 'button'
+    lineEl.tabIndex = -1
+    lineEl.setAttribute('aria-hidden', 'true')
+    const body = h('div', 'tiao-folder-body', h('div', 'tiao-folder-clip', this.rack), lineEl)
     this.element = h('div', 'tiao-folder', this.headerEl, body)
+    if (params.color) {
+      this.element.classList.add('tiao-folder-colored')
+      this.element.style.setProperty('--tiao-folder-color', params.color)
+    }
     this.applyExpanded()
 
     if (this.collapsible) {
@@ -372,7 +494,11 @@ export class FolderApi extends Container {
         this.expanded = !this.expanded
       }
       this.headerEl.addEventListener('click', onClick)
-      this.disposers.push(() => this.headerEl.removeEventListener('click', onClick))
+      lineEl.addEventListener('click', onClick)
+      this.disposers.push(() => {
+        this.headerEl.removeEventListener('click', onClick)
+        lineEl.removeEventListener('click', onClick)
+      })
     } else {
       this.element.classList.add('tiao-folder-static')
       this.headerEl.tabIndex = -1
@@ -387,6 +513,20 @@ export class FolderApi extends Container {
     if (el) el.textContent = v
   }
 
+  /** internal: show/clear the section number before the title (pane "Numbers" setting) */
+  setSectionIndex(index: string | null): void {
+    let el = this.headerEl.querySelector('.tiao-folder-index')
+    if (index === null) {
+      el?.remove()
+      return
+    }
+    if (!el) {
+      el = h('span', 'tiao-folder-index')
+      this.headerEl.querySelector('.tiao-folder-title')?.before(el)
+    }
+    el.textContent = index
+  }
+
   get expanded(): boolean {
     return this._expanded
   }
@@ -394,6 +534,23 @@ export class FolderApi extends Container {
     if (!this.collapsible || this._expanded === v) return
     this._expanded = v
     this.applyExpanded()
+  }
+
+  protected override searchText(): string {
+    return this.title
+  }
+
+  /** internal: exposes the folder nesting depth to CSS so control columns
+      stay aligned across indent levels (see .tiao-label) */
+  updateDepth(): void {
+    let depth = 1
+    for (let p = this.parent; p; p = p.parent) {
+      if (p instanceof FolderApi) depth++
+    }
+    this.rack.style.setProperty('--tiao-depth', String(depth))
+    for (const child of this.children) {
+      if (child instanceof FolderApi) child.updateDepth()
+    }
   }
 
   private applyExpanded(): void {
@@ -410,6 +567,10 @@ export class TabPageApi extends Container {
     super(host)
     this.rack = h('div', 'tiao-rack')
     this.element = h('div', 'tiao-tab-page', this.rack)
+  }
+
+  protected override searchText(): string {
+    return this.title
   }
 }
 
@@ -461,6 +622,14 @@ export class TabApi extends Item {
 
   refresh(): void {
     for (const p of this.pages) p.refresh()
+  }
+
+  /** the tab strip stays visible while any page holds a match */
+  override applySearch(query: string): boolean {
+    let match = false
+    for (const p of this.pages) if (p.applySearch(query)) match = true
+    this.element.classList.toggle('tiao-search-miss', !match)
+    return match
   }
 
   private applySelection(): void {

@@ -1,93 +1,66 @@
 import { h } from './dom'
-import type { Anchor } from './pane'
+import type { Anchor, Pane, PaneOptions, PaneTheme } from './pane'
 
 export interface PaneMenuHost {
   element: HTMLElement
   document: Document
+  /** factory injected by the Pane to avoid a module cycle */
+  createPane(options: PaneOptions): Pane
   getDraggable(): boolean
   setDraggable(v: boolean): void
   getAnchor(): Anchor | null
   setAnchor(anchor: Anchor): void
+  getTheme(): PaneTheme
+  setTheme(theme: PaneTheme): void
+  getAccent(): string
+  setAccent(accent: string): void
+  getNumbers(): boolean
+  setNumbers(v: boolean): void
   onDispose(fn: () => void): void
 }
 
-/** 3x3 layout: corners + side centers, empty middle. */
-const ANCHOR_GRID: (Anchor | null)[] = [
+/** 3x3 layout mirroring the window: corners, side centers, and center. */
+const ANCHOR_GRID: Anchor[] = [
   'top-left',
   'top-center',
   'top-right',
   'left-center',
-  null,
+  'center',
   'right-center',
   'bottom-left',
   'bottom-center',
   'bottom-right',
 ]
 
+/** quick accent swatches, loosely based on syntax-highlighting palettes */
+const ACCENT_PALETTE = [
+  '#f87171',
+  '#fb923c',
+  '#facc15',
+  '#a3e635',
+  '#22d3ee',
+  '#60a5fa',
+  '#a78bfa',
+  '#f472b6',
+]
+
 /**
- * Pane settings menu: draggable toggle + anchor grid.
- * Opens beside the pane (gear click or right-click).
+ * Pane settings menu: a real embedded Pane, so every row is a regular binding
+ * with the standard components and row behaviors (label click toggles/opens).
+ * Opens beside the pane (gear or right-click); built lazily on first open.
  */
 export function createPaneMenu(host: PaneMenuHost): { toggle(): void; close(): void } {
   const doc = host.document
-
-  const dragCheck = h('button', 'tiao-check')
-  dragCheck.type = 'button'
-  dragCheck.setAttribute('role', 'switch')
-  const dragRow = h('div', 'tiao-pane-menu-row', h('span', 'tiao-label', 'Draggable'), dragCheck)
-
-  const grid = h('div', 'tiao-anchor-grid')
-  const anchorButtons = new Map<Anchor, HTMLButtonElement>()
-  for (const anchor of ANCHOR_GRID) {
-    if (!anchor) {
-      grid.append(h('span', 'tiao-anchor-spacer'))
-      continue
-    }
-    const btn = h('button', 'tiao-anchor-cell')
-    btn.type = 'button'
-    btn.title = anchor.replace('-', ' ')
-    const onClick = () => {
-      host.setAnchor(anchor)
-      render()
-    }
-    btn.addEventListener('click', onClick)
-    host.onDispose(() => btn.removeEventListener('click', onClick))
-    anchorButtons.set(anchor, btn)
-    grid.append(btn)
-  }
-
-  const menu = h(
-    'div',
-    'tiao-pane-menu',
-    dragRow,
-    h('div', 'tiao-pane-menu-label', 'Anchor'),
-    grid,
-  )
-  host.element.append(menu)
-
-  const render = () => {
-    const draggable = host.getDraggable()
-    dragCheck.classList.toggle('tiao-checked', draggable)
-    dragCheck.setAttribute('aria-checked', String(draggable))
-    const current = host.getAnchor()
-    for (const [anchor, btn] of anchorButtons) {
-      btn.classList.toggle('tiao-selected', anchor === current)
-    }
-  }
-
-  const onDragToggle = () => {
-    host.setDraggable(!host.getDraggable())
-    render()
-  }
-  dragCheck.addEventListener('click', onDragToggle)
-  host.onDispose(() => dragCheck.removeEventListener('click', onDragToggle))
+  let built: { shell: HTMLElement; refresh: () => void } | null = null
 
   let open = false
   const onOutside = (e: PointerEvent) => {
     const target = e.target as Element | null
     // the trigger's own click handler toggles; closing here would re-open
     if (target?.closest?.('[data-tiao-menu-trigger]')) return
-    if (!menu.contains(e.target as Node)) close()
+    // picker popups may render outside the menu node
+    if (target?.closest?.('.tiao-popup')) return
+    if (built && !built.shell.contains(e.target as Node)) close()
   }
   const onKey = (e: KeyboardEvent) => {
     if (e.key === 'Escape') close()
@@ -95,14 +68,15 @@ export function createPaneMenu(host: PaneMenuHost): { toggle(): void; close(): v
 
   const openMenu = () => {
     open = true
-    render()
-    menu.classList.add('tiao-open')
+    built ??= buildMenu(host)
+    built.refresh()
+    built.shell.classList.add('tiao-open')
     // open to whichever side of the pane has room
     const rect = host.element.getBoundingClientRect()
-    const menuWidth = menu.offsetWidth || 140
+    const menuWidth = built.shell.offsetWidth || 190
     const viewportWidth = doc.defaultView?.innerWidth ?? Infinity
     const fitsRight = rect.right + menuWidth + 12 <= viewportWidth
-    menu.classList.toggle('tiao-menu-left', !fitsRight)
+    built.shell.classList.toggle('tiao-menu-left', !fitsRight)
     // capture phase so clicks inside other panes still close it
     doc.addEventListener('pointerdown', onOutside, true)
     doc.addEventListener('keydown', onKey)
@@ -110,7 +84,7 @@ export function createPaneMenu(host: PaneMenuHost): { toggle(): void; close(): v
   const close = () => {
     if (!open) return
     open = false
-    menu.classList.remove('tiao-open')
+    built?.shell.classList.remove('tiao-open')
     doc.removeEventListener('pointerdown', onOutside, true)
     doc.removeEventListener('keydown', onKey)
   }
@@ -120,4 +94,111 @@ export function createPaneMenu(host: PaneMenuHost): { toggle(): void; close(): v
     toggle: () => (open ? close() : openMenu()),
     close,
   }
+}
+
+function buildMenu(host: PaneMenuHost): { shell: HTMLElement; refresh: () => void } {
+  const shell = h('div', 'tiao-pane-menu')
+  host.element.append(shell)
+
+  const settings = {
+    draggable: host.getDraggable(),
+    theme: host.getTheme(),
+    accent: host.getAccent(),
+    numbers: host.getNumbers(),
+  }
+  const menuPane = host.createPane({ container: shell, menu: false, storage: false })
+  host.onDispose(() => menuPane.dispose())
+
+  // the embedded pane re-declares the theme variables, so its chrome has to
+  // track the host's theme and accent explicitly
+  const syncChrome = () => {
+    menuPane.theme = host.getTheme()
+    menuPane.applyTheme({ accent: host.getAccent() })
+  }
+
+  const dragBinding = menuPane.addBinding(settings, 'draggable', { label: 'Draggable' })
+  dragBinding.on('change', (ev) => host.setDraggable(Boolean(ev.value)))
+
+  const numbersBinding = menuPane.addBinding(settings, 'numbers', { label: 'Numbers' })
+  numbersBinding.on('change', (ev) => host.setNumbers(Boolean(ev.value)))
+
+  menuPane.addSeparator()
+
+  const themeBinding = menuPane.addBinding(settings, 'theme', {
+    label: 'Theme',
+    options: { Light: 'light', Dark: 'dark' },
+  })
+  themeBinding.on('change', (ev) => {
+    host.setTheme(ev.value)
+    syncChrome()
+  })
+
+  const accentBinding = menuPane.addBinding(settings, 'accent', { label: 'Accent' })
+  accentBinding.on('change', (ev) => {
+    host.setAccent(String(ev.value))
+    syncChrome()
+  })
+
+  // accent palette: blank-labeled row so swatches sit in the control column
+  const palette = h('div', 'tiao-btngroup tiao-accent-palette')
+  for (const color of ACCENT_PALETTE) {
+    const btn = h('button', 'tiao-accent-swatch')
+    btn.type = 'button'
+    btn.title = color
+    btn.style.background = color
+    const onClick = () => {
+      host.setAccent(color)
+      settings.accent = color
+      accentBinding.refresh()
+      syncChrome()
+    }
+    btn.addEventListener('click', onClick)
+    host.onDispose(() => btn.removeEventListener('click', onClick))
+    palette.append(btn)
+  }
+  menuPane.rack.append(
+    h('div', 'tiao-row', h('div', 'tiao-label'), h('div', 'tiao-control', palette)),
+  )
+
+  // anchor: 3x3 button grid in a standard row
+  const grid = h('div', 'tiao-anchor-grid')
+  const anchorButtons = new Map<Anchor, HTMLButtonElement>()
+  for (const anchor of ANCHOR_GRID) {
+    const btn = h('button', 'tiao-anchor-cell')
+    btn.type = 'button'
+    btn.title = anchor.replace('-', ' ')
+    const onClick = () => {
+      host.setAnchor(anchor)
+      renderAnchors()
+    }
+    btn.addEventListener('click', onClick)
+    host.onDispose(() => btn.removeEventListener('click', onClick))
+    anchorButtons.set(anchor, btn)
+    grid.append(btn)
+  }
+  menuPane.rack.append(
+    h('div', 'tiao-row', h('div', 'tiao-label', 'Anchor'), h('div', 'tiao-control', grid)),
+  )
+
+  const renderAnchors = () => {
+    const current = host.getAnchor()
+    for (const [anchor, btn] of anchorButtons) {
+      btn.classList.toggle('tiao-selected', anchor === current)
+    }
+  }
+
+  const refresh = () => {
+    settings.draggable = host.getDraggable()
+    settings.theme = host.getTheme()
+    settings.accent = host.getAccent()
+    settings.numbers = host.getNumbers()
+    dragBinding.refresh()
+    themeBinding.refresh()
+    accentBinding.refresh()
+    numbersBinding.refresh()
+    renderAnchors()
+    syncChrome()
+  }
+
+  return { shell, refresh }
 }

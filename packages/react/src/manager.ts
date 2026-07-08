@@ -1,5 +1,5 @@
 import { ControlStore } from './store'
-import { isButton, isInputDef, isMonitor, itemValue, type Schema } from './types'
+import { isButton, isButtonGroup, isInputDef, isMonitor, itemValue, type Schema } from './types'
 import type { BindingApi, Container, FolderApi, Pane, PaneOptions } from '@tiao/core'
 
 type CoreModule = typeof import('@tiao/core')
@@ -170,6 +170,15 @@ export class PaneManager {
         const btn = container.addButton({ title: item.title || name })
         btn.on('click', item.onClick)
         reg.disposers.push(() => btn.dispose())
+        continue
+      }
+
+      if (isButtonGroup(item)) {
+        const group = container.addButtonGroup({
+          label: item.label ?? name,
+          buttons: item.buttons,
+        })
+        reg.disposers.push(() => group.dispose())
         continue
       }
 

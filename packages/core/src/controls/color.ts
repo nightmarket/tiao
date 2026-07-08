@@ -22,8 +22,10 @@ import type { InputPlugin, PluginContext } from '../plugin'
 /**
  * Color input: swatch + format-aware text field, with a floating picker popup
  * (SV area, hue bar, optional alpha bar) like tweakpane.
- * Accepts '#hex', 'rgb()/rgba()', 'oklch()/oklab()' strings, {r,g,b(,a)} objects
- * and 0xffffff numbers; writes back in the same format.
+ * Accepts '#hex', 'rgb()/rgba()', 'hsl()/hsla()', 'hsv()/hsva()',
+ * 'oklch()/oklab()' strings, {r,g,b(,a)} / {h,s,l(,a)} / {h,s,v(,a)} objects
+ * and 0xffffff numbers; writes back in the same format. Alpha is enabled via
+ * `color: { alpha: true }` or inferred from the initial value's format.
  */
 export const colorInputPlugin: InputPlugin<unknown> = {
   id: 'color',
@@ -42,18 +44,22 @@ export const colorInputPlugin: InputPlugin<unknown> = {
   },
 }
 
-type DisplayFamily = 'hex' | 'rgb' | 'oklch' | 'oklab'
+type DisplayFamily = 'hex' | 'rgb' | 'hsl' | 'hsv' | 'oklch' | 'oklab'
 
 const FAMILIES: Array<{ id: DisplayFamily; label: string }> = [
   { id: 'hex', label: 'Hex' },
   { id: 'rgb', label: 'RGB' },
+  { id: 'hsl', label: 'HSL' },
+  { id: 'hsv', label: 'HSV' },
   { id: 'oklch', label: 'OKLCH' },
   { id: 'oklab', label: 'OKLAB' },
 ]
 
 function familyOf(format: ColorFormat): DisplayFamily {
-  if (format.startsWith('oklch')) return 'oklch'
-  if (format.startsWith('oklab')) return 'oklab'
+  if (format.includes('oklch')) return 'oklch'
+  if (format.includes('oklab')) return 'oklab'
+  if (format.includes('hsv')) return 'hsv'
+  if (format.includes('hsl')) return 'hsl'
   if (format.startsWith('rgb')) return 'rgb'
   return 'hex'
 }
@@ -64,6 +70,10 @@ function displayFormat(family: DisplayFamily, alpha: boolean): ColorFormat {
       return alpha ? 'hex-alpha' : 'hex'
     case 'rgb':
       return alpha ? 'rgba-string' : 'rgb-string'
+    case 'hsl':
+      return alpha ? 'hsla-string' : 'hsl-string'
+    case 'hsv':
+      return alpha ? 'hsva-string' : 'hsv-string'
     case 'oklch':
       return alpha ? 'oklch-alpha' : 'oklch'
     case 'oklab':
@@ -148,9 +158,11 @@ function createColorView(ctx: PluginContext<unknown>) {
   }
 
   // format dropdown + matching text field
-  // oklab renders identically to oklch in the picker, so it's only offered
-  // to bindings that already use it
-  const families = FAMILIES.filter((f) => f.id !== 'oklab' || family === 'oklab')
+  // oklab (renders like oklch) and hsv (not a CSS notation) are only offered
+  // to bindings that already use them
+  const families = FAMILIES.filter(
+    (f) => (f.id !== 'oklab' && f.id !== 'hsv') || family === f.id,
+  )
   const modeSelect = h('select', 'tiao-select')
   for (const f of families) {
     const opt = ctx.document.createElement('option')

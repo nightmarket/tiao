@@ -1,9 +1,10 @@
 export { Pane } from './pane'
-export type { Anchor, PaneOptions } from './pane'
+export type { Anchor, PaneOptions, PaneTheme } from './pane'
 export {
   BindingApi,
   BladeApi,
   ButtonApi,
+  ButtonGroupApi,
   Container,
   FolderApi,
   Item,
@@ -26,7 +27,7 @@ export type {
 export { Value } from './value'
 export type { ValueListener, ValueMeta } from './value'
 export { onTick, onInterval } from './ticker'
-export { h, icon, gearIcon, draggable } from './dom'
+export { h, icon, gearIcon, searchIcon, draggable } from './dom'
 export type { DragState, DragHandlers } from './dom'
 export { clamp, mapRange, snap, formatNumber } from './util'
 export { createGraph } from './controls/monitor'

@@ -29,9 +29,15 @@ importers:
       '@tiao/plugin-bezier':
         specifier: workspace:^
         version: link:../../packages/plugin-bezier
+      '@tiao/plugin-camera':
+        specifier: workspace:^
+        version: link:../../packages/plugin-camera
       '@tiao/plugin-fps':
         specifier: workspace:^
         version: link:../../packages/plugin-fps
+      '@tiao/plugin-media':
+        specifier: workspace:^
+        version: link:../../packages/plugin-media
       '@tiao/plugin-radio-grid':
         specifier: workspace:^
         version: link:../../packages/plugin-radio-grid
@@ -99,7 +105,33 @@ importers:
         specifier: ^5.7.3
         version: 5.9.3
 
+  packages/plugin-camera:
+    dependencies:
+      '@tiao/core':
+        specifier: workspace:^
+        version: link:../core
+    devDependencies:
+      tsup:
+        specifier: ^8.3.6
+        version: 8.5.1(postcss@8.5.16)(typescript@5.9.3)
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
+
   packages/plugin-fps:
+    dependencies:
+      '@tiao/core':
+        specifier: workspace:^
+        version: link:../core
+    devDependencies:
+      tsup:
+        specifier: ^8.3.6
+        version: 8.5.1(postcss@8.5.16)(typescript@5.9.3)
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
+
+  packages/plugin-media:
     dependencies:
       '@tiao/core':
         specifier: workspace:^

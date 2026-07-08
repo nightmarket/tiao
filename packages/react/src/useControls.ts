@@ -3,6 +3,7 @@ import { isTiaoEnabled } from './config'
 import { DEFAULT_PANE_ID, getManager, keyFor, type PaneManager } from './manager'
 import {
   isButton,
+  isButtonGroup,
   isMonitor,
   itemValue,
   type Schema,
@@ -51,7 +52,7 @@ export function useControls<S extends Schema>(
 
     const folderPath = folder ? folder.split('.').filter(Boolean) : []
     const valueKeys = Object.entries(schema)
-      .filter(([, item]) => !isButton(item) && !isMonitor(item))
+      .filter(([, item]) => !isButton(item) && !isButtonGroup(item) && !isMonitor(item))
       .map(([name, item]) => ({ name, key: keyFor(folderPath, name), initial: itemValue(item) }))
 
     stable.current = {
