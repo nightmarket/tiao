@@ -1,17 +1,4 @@
-import { h, registerPlugin, type InputPlugin } from '@tiao/core'
-
-interface Entry {
-  text: string
-  value: unknown
-}
-
-function entries(options: unknown): Entry[] {
-  if (Array.isArray(options)) return options as Entry[]
-  if (options && typeof options === 'object') {
-    return Object.entries(options).map(([text, value]) => ({ text, value }))
-  }
-  return []
-}
+import { h, injectCss, normalizeOptions, registerPlugin, type InputPlugin } from '@tiao/core'
 
 /**
  * Segmented button grid input (the "Line | Scatter" control). Usage:
@@ -29,7 +16,7 @@ export const radioGridPlugin: InputPlugin<unknown> = {
     return options.view === 'radiogrid' && options.options !== undefined
   },
   create(ctx) {
-    const items = entries(ctx.options.options)
+    const items = normalizeOptions(ctx.options.options)
     const columns = typeof ctx.options['columns'] === 'number' ? ctx.options['columns'] : items.length
     const grid = h('div', 'tiao-radiogrid')
     grid.setAttribute('role', 'radiogroup')
@@ -57,7 +44,7 @@ export const radioGridPlugin: InputPlugin<unknown> = {
     render(ctx.value.get())
     ctx.onDispose(ctx.value.subscribe(render))
 
-    ensureStyles(ctx.document)
+    injectCss(ctx.document, 'data-tiao-radiogrid', CSS)
     return { element: grid }
   },
 }
@@ -81,14 +68,6 @@ const CSS = `
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 `
-
-function ensureStyles(doc: Document): void {
-  if (doc.querySelector('style[data-tiao-radiogrid]')) return
-  const style = doc.createElement('style')
-  style.setAttribute('data-tiao-radiogrid', '')
-  style.textContent = CSS
-  doc.head.append(style)
-}
 
 let registered = false
 

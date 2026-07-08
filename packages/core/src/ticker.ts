@@ -4,7 +4,8 @@ const fns = new Set<TickFn>()
 let rafId = 0
 
 function loop(time: number): void {
-  for (const fn of [...fns]) fn(time)
+  // Sets tolerate delete-during-iteration, so no defensive copy per frame
+  for (const fn of fns) fn(time)
   rafId = fns.size > 0 ? requestAnimationFrame(loop) : 0
 }
 

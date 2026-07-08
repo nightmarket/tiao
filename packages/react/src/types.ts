@@ -91,13 +91,8 @@ export function isMonitor(item: SchemaItem): item is MonitorItem {
 }
 
 export function isInputDef(item: SchemaItem): item is InputDef {
-  return (
-    typeof item === 'object' &&
-    item !== null &&
-    'value' in item &&
-    !isButton(item) &&
-    !isMonitor(item)
-  )
+  // buttons/monitors have no `value` property, so this check alone excludes them
+  return typeof item === 'object' && item !== null && 'value' in item
 }
 
 /** Default value for a schema item ('value' wrapper unwrapped). */

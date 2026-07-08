@@ -1,5 +1,5 @@
 import { draggable, h } from '../dom'
-import { clamp, formatNumber, mapRange, snap } from '../util'
+import { clamp, mapRange, snap } from '../util'
 import { createScrubber } from './scrubber'
 import type { InputPlugin, PluginContext, PluginView } from '../plugin'
 
@@ -25,7 +25,6 @@ export const numberInputPlugin: InputPlugin<number> = {
 function createSliderRow(ctx: PluginContext<number>, min: number, max: number): PluginView {
   const { value, options } = ctx
   const step = options.step
-  const format = (options.format as ((v: number) => string) | undefined) ?? ((v) => formatNumber(v, step))
   const constrain = (v: number) => clamp(snap(v, step), min, max)
 
   const fill = h('div', 'tiao-slider-fill')
@@ -34,7 +33,12 @@ function createSliderRow(ctx: PluginContext<number>, min: number, max: number): 
     value,
     () => value.get(),
     (v, last) => value.set(constrain(v), { source: 'ui', last }),
-    { min, max, format, ...(typeof step === 'number' ? { step } : {}) },
+    {
+      min,
+      max,
+      ...(options.format ? { format: options.format } : {}),
+      ...(typeof step === 'number' ? { step } : {}),
+    },
   )
   scrub.element.classList.add('tiao-slider-num')
   const el = h('div', 'tiao-number', track, scrub.element)
@@ -46,13 +50,18 @@ function createSliderRow(ctx: PluginContext<number>, min: number, max: number): 
   ctx.onDispose(value.subscribe(render))
   ctx.onDispose(scrub.dispose)
 
+  // the track rect is read once per drag to avoid a layout read per pointermove
+  let trackRect: DOMRect | null = null
   const fromPointer = (clientX: number) => {
-    const rect = track.getBoundingClientRect()
+    const rect = (trackRect ??= track.getBoundingClientRect())
     return constrain(mapRange(clientX, rect.left, rect.right, min, max))
   }
   ctx.onDispose(
     draggable(track, {
-      onStart: (e) => value.set(fromPointer(e.clientX), { source: 'ui', last: false }),
+      onStart: (e) => {
+        trackRect = track.getBoundingClientRect()
+        value.set(fromPointer(e.clientX), { source: 'ui', last: false })
+      },
       onMove: (s) => value.set(fromPointer(s.x), { source: 'ui', last: false }),
       onEnd: (s) => value.set(fromPointer(s.x), { source: 'ui', last: true }),
     }),
@@ -75,12 +84,11 @@ function createSliderRow(ctx: PluginContext<number>, min: number, max: number): 
 
 function createScrubberRow(ctx: PluginContext<number>): PluginView {
   const { value, options } = ctx
-  const step = options.step
-  const format = (options.format as ((v: number) => string) | undefined) ?? ((v) => formatNumber(v, step))
-  const opts: { min?: number; max?: number; step?: number; format: (v: number) => string } = { format }
+  const opts: { min?: number; max?: number; step?: number; format?: (v: number) => string } = {}
+  if (options.format) opts.format = options.format
   if (typeof options.min === 'number') opts.min = options.min
   if (typeof options.max === 'number') opts.max = options.max
-  if (typeof step === 'number') opts.step = step
+  if (typeof options.step === 'number') opts.step = options.step
 
   const scrub = createScrubber(
     value,

@@ -126,9 +126,15 @@ function buildKitchenSink(pane: Pane): Pane {
     texture: null as MediaValue,
     time: 0,
   }
-  setInterval(() => {
+  const timeTicker = setInterval(() => {
     params.time = performance.now() / 1000
   }, 50)
+  // the demo tears panes down on example switches; take the ticker with it
+  const baseDispose = pane.dispose.bind(pane)
+  pane.dispose = () => {
+    clearInterval(timeTicker)
+    baseDispose()
+  }
 
   // one labeled two-column graph, one full-width label-less graph
   addFpsGraph(pane, { label: 'FPS' })

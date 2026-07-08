@@ -64,11 +64,11 @@ export function useControls<S extends Schema>(
       enabled: isTiaoEnabled(options.enabled),
     }
   }
-  const { manager, folderPath, valueKeys, keys, enabled } = stable.current
+  const { manager, folderPath, schema: stableSchema, valueKeys, keys, enabled } = stable.current
 
   useEffect(() => {
     if (!enabled) return
-    const reg = manager.register(folderPath, stable.current!.schema)
+    const reg = manager.register(folderPath, stableSchema)
     return () => manager.unregister(reg)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- captured on first render
   }, [])

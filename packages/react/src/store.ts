@@ -17,11 +17,8 @@ export class ControlStore {
     this.values.set(key, value)
     this.versions.set(key, (this.versions.get(key) ?? 0) + 1)
     const set = this.listeners.get(key)
-    if (set) for (const fn of [...set]) fn()
-  }
-
-  delete(key: string): void {
-    this.values.delete(key)
+    // Sets tolerate delete-during-iteration, so no defensive copy per change
+    if (set) for (const fn of set) fn()
   }
 
   /** monotonically increasing across a set of keys; cheap change detection for snapshots */

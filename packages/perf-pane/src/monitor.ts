@@ -107,14 +107,14 @@ export function createPerfMonitor(options: PerfMonitorOptions = {}): PerfMonitor
   const renderer = options.renderer
   const gl = options.gl ?? detectGl(renderer)
   const timer = !options.gpuTime && gl ? createGlTimer(gl) : null
-  const webgpuTimestamps =
-    !options.gpuTime &&
-    !timer &&
-    renderer?.trackTimestamp === true &&
+  const resolveTimestamps =
+    !options.gpuTime && !timer && renderer?.trackTimestamp === true &&
     typeof renderer.resolveTimestampsAsync === 'function'
+      ? renderer.resolveTimestampsAsync.bind(renderer)
+      : null
 
   const capabilities: PerfCapabilities = {
-    gpu: Boolean(options.gpuTime || timer || webgpuTimestamps),
+    gpu: Boolean(options.gpuTime || timer || resolveTimestamps),
     counts: Boolean(renderer?.info),
     shaders: Array.isArray(renderer?.info.programs),
     jsHeap: readHeap() !== null,
@@ -175,11 +175,11 @@ export function createPerfMonitor(options: PerfMonitorOptions = {}): PerfMonitor
     } else if (timer) {
       const ms = timer.poll()
       if (ms >= 0) stats.gpu = ms
-    } else if (webgpuTimestamps) {
+    } else if (resolveTimestamps) {
       const ts = renderer?.info.render?.timestamp
       if (typeof ts === 'number') stats.gpu = ts
       // kick the next resolve; the value lands in info.render.timestamp
-      void renderer?.resolveTimestampsAsync?.().catch(() => {})
+      void resolveTimestamps().catch(() => {})
     }
 
     const heap = readHeap()

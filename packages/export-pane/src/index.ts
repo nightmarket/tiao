@@ -70,6 +70,16 @@ export function createExportPane(options: ExportPaneOptions): Pane {
   let timer: ReturnType<typeof setInterval> | null = null
   const recordButton = video.addButton({ title: 'Start recording' })
 
+  // disposing the pane mid-recording must stop the capture stream and timer
+  const baseDispose = pane.dispose.bind(pane)
+  pane.dispose = () => {
+    if (timer) clearInterval(timer)
+    timer = null
+    void recorder?.stop()
+    recorder = null
+    baseDispose()
+  }
+
   const setIdle = () => {
     recorder = null
     if (timer) clearInterval(timer)

@@ -20,7 +20,6 @@ interface FolderRef {
 export interface Registration {
   folderPath: string[]
   schema: Schema
-  keys: string[]
   active: boolean
   /** true once ensureFolder ran, so unregister only releases what it acquired */
   materialized: boolean
@@ -48,7 +47,6 @@ export function keyFor(folderPath: string[], name: string): string {
 export class PaneManager {
   readonly store = new ControlStore()
   private pane: Pane | null = null
-  private core: CoreModule | null = null
   private paneOptions: PaneOptions = {}
   private folders = new Map<string, FolderRef>()
   private registrations = new Set<Registration>()
@@ -79,7 +77,6 @@ export class PaneManager {
     const reg: Registration = {
       folderPath,
       schema,
-      keys: Object.keys(schema).map((k) => keyFor(folderPath, k)),
       active: true,
       materialized: false,
       disposers: [],
@@ -87,9 +84,7 @@ export class PaneManager {
     }
     this.registrations.add(reg)
     void loadCore().then((core) => {
-      if (!reg.active) return
-      this.core = core
-      this.materialize(reg, core)
+      if (reg.active) this.materialize(reg, core)
     })
     return reg
   }
@@ -146,7 +141,6 @@ export class PaneManager {
   }
 
   private releaseFolders(path: string[]): void {
-    if (!this.core) return
     for (let i = path.length; i > 0; i--) {
       const joined = path.slice(0, i).join('.')
       const ref = this.folders.get(joined)
@@ -197,7 +191,7 @@ export class PaneManager {
       binding.on('change', (ev) => this.store.set(key, ev.value))
       // seed the store so first render after hydration matches the pane
       this.store.set(key, initial)
-      reg.bindings.set(key, { binding: binding as BindingApi<unknown>, target, name })
+      reg.bindings.set(key, { binding, target, name })
       reg.disposers.push(() => binding.dispose())
     }
   }

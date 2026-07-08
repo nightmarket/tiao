@@ -112,15 +112,19 @@ function createPadPopup(ctx: PluginContext<PointValue>, options: BindingOptions)
   render(ctx.value.get())
   ctx.onDispose(ctx.value.subscribe(render))
 
+  // the pad rect is read once per drag to avoid a layout read per pointermove
+  let rect: DOMRect
   const apply = (clientX: number, clientY: number, last: boolean) => {
-    const rect = area.getBoundingClientRect()
     const x = clamp(mapRange(clientX, rect.left, rect.right, xMin, xMax), xMin, xMax)
     const y = clamp(mapRange(clientY, rect.bottom, rect.top, yMin, yMax), yMin, yMax)
     ctx.value.set({ ...ctx.value.get(), x, y }, { source: 'ui', last })
   }
   ctx.onDispose(
     draggable(area, {
-      onStart: (e) => apply(e.clientX, e.clientY, false),
+      onStart: (e) => {
+        rect = area.getBoundingClientRect()
+        apply(e.clientX, e.clientY, false)
+      },
       onMove: (s) => apply(s.x, s.y, false),
       onEnd: (s) => apply(s.x, s.y, true),
     }),

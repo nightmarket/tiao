@@ -5,6 +5,7 @@ import {
   draggable,
   h,
   icon,
+  injectCss,
   mapRange,
   registerPlugin,
   Value,
@@ -110,7 +111,7 @@ export const bezierPlugin: InputPlugin<BezierValue> = {
     return options.view === 'bezier' && isBezier(value)
   },
   create(ctx) {
-    ensureStyles(ctx.document)
+    injectCss(ctx.document, 'data-tiao-bezier', CSS)
     const doc = ctx.document
 
     const svgEl = <K extends keyof SVGElementTagNameMap>(
@@ -226,6 +227,7 @@ export const bezierPlugin: InputPlugin<BezierValue> = {
     // --- playback preview (tweakpane behavior: replay on every change) ---
     let playing = false
     let startTime = -1
+    let rafId = 0
     const updateMarker = (progress: number) => {
       marker.style.left = `${curveY(ctx.value.get(), clamp(progress, 0, 1)) * 100}%`
     }
@@ -233,10 +235,12 @@ export const bezierPlugin: InputPlugin<BezierValue> = {
       const dt = Date.now() - startTime
       updateMarker(dt / PREVIEW_DURATION)
       if (dt > PREVIEW_DURATION + PREVIEW_DELAY) stopPlayback()
-      if (playing) requestAnimationFrame(onTimer)
+      if (playing) rafId = requestAnimationFrame(onTimer)
     }
     const stopPlayback = () => {
       playing = false
+      // cancel the pending frame so restarts don't stack rAF chains
+      cancelAnimationFrame(rafId)
       marker.classList.remove('tiao-active')
     }
     const play = () => {
@@ -246,7 +250,7 @@ export const bezierPlugin: InputPlugin<BezierValue> = {
       marker.classList.add('tiao-active')
       startTime = Date.now() + PREVIEW_DELAY
       playing = true
-      requestAnimationFrame(onTimer)
+      rafId = requestAnimationFrame(onTimer)
     }
     ctx.onDispose(stopPlayback)
     const onStripDown = (e: PointerEvent) => {
@@ -567,14 +571,6 @@ const CSS = `
   min-width: 0;
 }
 `
-
-function ensureStyles(doc: Document): void {
-  if (doc.querySelector('style[data-tiao-bezier]')) return
-  const style = doc.createElement('style')
-  style.setAttribute('data-tiao-bezier', '')
-  style.textContent = CSS
-  doc.head.append(style)
-}
 
 let registered = false
 

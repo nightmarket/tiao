@@ -42,7 +42,6 @@ export const fpsPlugin: BladePlugin = {
     )
 
     const graph = createGraph({
-      document: ctx.document,
       value,
       options: {
         min: 0,
@@ -51,7 +50,6 @@ export const fpsPlugin: BladePlugin = {
         format: (v: number) => String(Math.round(v)),
         ...(bufferSize !== undefined && { bufferSize }),
       },
-      label: 'fps',
       onDispose: ctx.onDispose,
     })
     // labeled: standard two-column row; label-less: full-width graph

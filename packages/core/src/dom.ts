@@ -16,7 +16,7 @@ export function h<K extends keyof HTMLElementTagNameMap>(
 
 const SVG_NS = 'http://www.w3.org/2000/svg'
 
-export function icon(name: 'chevron' | 'check' | 'plus' | 'triangle'): SVGSVGElement {
+export function icon(name: 'chevron' | 'plus' | 'triangle'): SVGSVGElement {
   const svg = document.createElementNS(SVG_NS, 'svg')
   svg.setAttribute('viewBox', '0 0 12 12')
   svg.setAttribute('class', `tiao-icon tiao-icon-${name}`)
@@ -24,7 +24,6 @@ export function icon(name: 'chevron' | 'check' | 'plus' | 'triangle'): SVGSVGEle
   const path = document.createElementNS(SVG_NS, 'path')
   const d = {
     chevron: 'M3.5 4.5 L6 7.5 L8.5 4.5',
-    check: 'M2.5 6.5 L5 9 L9.5 3.5',
     plus: 'M6 2.5 V9.5 M2.5 6 H9.5',
     // leva-style filled collapse caret, pointing down; the glyph is centered
     // in the viewBox so rotating it while collapsed keeps it optically aligned
@@ -85,6 +84,16 @@ export function gearIcon(): SVGSVGElement {
 /** Lucide "search" (ISC licensed path data, embedded to stay zero-dep). */
 export function searchIcon(): SVGSVGElement {
   return lucideIcon('search', [svgCircle(11, 11, 8), svgPath('m21 21-4.3-4.3')])
+}
+
+/** Move a text input's cursor to the end, deselecting (best-effort). */
+export function collapseSelection(input: HTMLInputElement): void {
+  try {
+    const end = input.value.length
+    input.setSelectionRange(end, end)
+  } catch {
+    /* some input types do not support selection ranges */
+  }
 }
 
 export interface DragState {

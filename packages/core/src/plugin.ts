@@ -12,7 +12,8 @@ export interface BindingOptions {
   readonly?: boolean
   /** monitor poll interval in ms (default 66) */
   interval?: number
-  format?: (value: never) => string
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- callable with the plugin's value type
+  format?: (value: any) => string
   [key: string]: unknown
 }
 

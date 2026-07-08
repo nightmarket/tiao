@@ -1,4 +1,4 @@
-import { h, registerPlugin, type InputPlugin } from '@tiao/core'
+import { h, injectCss, registerPlugin, type InputPlugin } from '@tiao/core'
 
 /**
  * Loaded media, ready to upload as a texture: both element types are valid
@@ -32,7 +32,7 @@ export const mediaPlugin: InputPlugin<MediaValue> = {
     return options.view === 'media' && isMediaValue(value)
   },
   create(ctx) {
-    ensureStyles(ctx.document)
+    injectCss(ctx.document, 'data-tiao-media', CSS)
     const doc = ctx.document
 
     const input = h('input')
@@ -272,14 +272,6 @@ const CSS = `
   background: rgba(0, 0, 0, 0.65);
 }
 `
-
-function ensureStyles(doc: Document): void {
-  if (doc.querySelector('style[data-tiao-media]')) return
-  const style = doc.createElement('style')
-  style.setAttribute('data-tiao-media', '')
-  style.textContent = CSS
-  doc.head.append(style)
-}
 
 let registered = false
 

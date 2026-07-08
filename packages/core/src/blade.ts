@@ -137,13 +137,13 @@ export abstract class Container extends Item {
   }
 
   addButton(params: { title: string; label?: string }): ButtonApi {
-    const api = new ButtonApi(this.host, params)
+    const api = new ButtonApi(params)
     this.attach(api)
     return api
   }
 
   addButtonGroup(params: { label?: string; buttons: Record<string, () => void> }): ButtonGroupApi {
-    const api = new ButtonGroupApi(this.host, params)
+    const api = new ButtonGroupApi(params)
     this.attach(api)
     return api
   }
@@ -155,7 +155,7 @@ export abstract class Container extends Item {
   }
 
   addSeparator(): SeparatorApi {
-    const api = new SeparatorApi(this.host)
+    const api = new SeparatorApi()
     this.attach(api)
     return api
   }
@@ -228,6 +228,10 @@ export abstract class Container extends Item {
 
 const DEFAULT_MONITOR_INTERVAL = 66
 
+/** shared meta objects so per-tick polling does not allocate */
+const MONITOR_META = { source: 'monitor' } as const
+const REFRESH_META = { source: 'refresh' } as const
+
 interface BindingEvents<T> {
   change: TiaoChangeEvent<T>
   [key: string]: unknown
@@ -298,7 +302,7 @@ export class BindingApi<T> extends Item {
       const interval = options.interval ?? DEFAULT_MONITOR_INTERVAL
       this.disposers.push(
         onInterval(() => {
-          this.value.set(this.target[this.key] as T, { source: 'monitor' })
+          this.value.set(this.target[this.key] as T, MONITOR_META)
         }, interval),
       )
     } else {
@@ -335,7 +339,7 @@ export class BindingApi<T> extends Item {
 
   /** re-read the current value from the bound object */
   refresh(): void {
-    this.value.set(this.target[this.key] as T, { source: 'refresh' })
+    this.value.set(this.target[this.key] as T, REFRESH_META)
   }
 
   override dispose(): void {
@@ -355,9 +359,8 @@ export class ButtonApi extends Item {
   private buttonEl: HTMLButtonElement
   private labelText: string
 
-  constructor(host: BladeHost, params: { title: string; label?: string }) {
+  constructor(params: { title: string; label?: string }) {
     super()
-    void host
     this.labelText = params.label ?? ''
     this.buttonEl = h('button', 'tiao-button', params.title)
     this.buttonEl.type = 'button'
@@ -398,9 +401,8 @@ export class ButtonGroupApi extends Item {
   readonly element: HTMLElement
   private titles: string[]
 
-  constructor(host: BladeHost, params: { label?: string; buttons: Record<string, () => void> }) {
+  constructor(params: { label?: string; buttons: Record<string, () => void> }) {
     super()
-    void host
     this.titles = Object.keys(params.buttons)
     const group = h('div', 'tiao-btngroup')
     for (const [title, onClick] of Object.entries(params.buttons)) {
@@ -427,9 +429,8 @@ export class ButtonGroupApi extends Item {
 export class SeparatorApi extends Item {
   readonly element: HTMLElement
 
-  constructor(host: BladeHost) {
+  constructor() {
     super()
-    void host
     this.element = h('div', 'tiao-separator')
   }
 }

@@ -1,4 +1,4 @@
-import { draggable, h } from '../dom'
+import { collapseSelection, draggable, h } from '../dom'
 import { clamp, formatNumber, parseNumberInput, snap } from '../util'
 import type { Value } from '../value'
 
@@ -81,15 +81,6 @@ export function createScrubber(
     }, 0)
   }
 
-  const collapseSelection = () => {
-    try {
-      const end = input.value.length
-      input.setSelectionRange(end, end)
-    } catch {
-      /* selection ranges are best-effort for text-like inputs */
-    }
-  }
-
   let dragBase = 0
   const disposeDrag = draggable(input, {
     onStart: () => {
@@ -115,12 +106,12 @@ export function createScrubber(
 
   const commitText = () => {
     if (input.readOnly) return
-    collapseSelection()
+    collapseSelection(input)
     const parsed = parseNumberInput(input.value)
     if (parsed !== null) set(constrain(parsed), true)
     input.readOnly = true
     input.value = format(get())
-    collapseSelection()
+    collapseSelection(input)
   }
   const onKeyDown = (e: KeyboardEvent) => {
     if (input.readOnly) {
@@ -135,7 +126,7 @@ export function createScrubber(
     if (e.key === 'Escape') {
       input.readOnly = true
       input.value = format(get())
-      collapseSelection()
+      collapseSelection(input)
     }
   }
   input.addEventListener('blur', commitText)

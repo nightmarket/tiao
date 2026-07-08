@@ -1,13 +1,14 @@
 import { h, icon } from '../dom'
 import type { BindingOptions, InputPlugin } from '../plugin'
 
-interface SelectEntry {
+export interface SelectEntry {
   text: string
   value: unknown
 }
 
-export function normalizeOptions(options: BindingOptions['options']): SelectEntry[] | null {
-  if (!options) return null
+/** Normalize an `options` map or entry array into `{ text, value }` entries. */
+export function normalizeOptions(options: BindingOptions['options']): SelectEntry[] {
+  if (!options) return []
   if (Array.isArray(options)) return options as SelectEntry[]
   return Object.entries(options).map(([text, value]) => ({ text, value }))
 }
@@ -20,7 +21,7 @@ export const selectInputPlugin: InputPlugin<unknown> = {
     return options.options !== undefined && options.view === undefined
   },
   create(ctx) {
-    const entries = normalizeOptions(ctx.options.options) ?? []
+    const entries = normalizeOptions(ctx.options.options)
     const select = h('select', 'tiao-select')
     entries.forEach((entry, i) => {
       const opt = h('option', undefined, entry.text)

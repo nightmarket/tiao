@@ -14,7 +14,8 @@ export function snap(v: number, step: number | undefined, origin = 0): number {
   return Number(snapped.toFixed(Math.min(decimals, 12)))
 }
 
-function decimalCount(n: number): number {
+/** Number of decimal places in a step like 0.01 (handles 1e-7 notation). */
+export function decimalCount(n: number): number {
   const s = String(n)
   const e = s.indexOf('e-')
   if (e >= 0) return Number(s.slice(e + 2))

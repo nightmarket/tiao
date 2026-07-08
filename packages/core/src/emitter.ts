@@ -18,7 +18,8 @@ export class Emitter<M extends Record<string, unknown>> {
   emit<K extends keyof M>(name: K, ev: M[K]): void {
     const set = this.map.get(name)
     if (!set) return
-    for (const fn of [...set]) (fn as (e: M[K]) => void)(ev)
+    // Sets tolerate delete-during-iteration, so no defensive copy per event
+    for (const fn of set) (fn as (e: M[K]) => void)(ev)
   }
 
   clear(): void {

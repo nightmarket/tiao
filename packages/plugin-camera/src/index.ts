@@ -1,8 +1,10 @@
 import {
   clamp,
   createScrubber,
+  decimalCount,
   draggable,
   h,
+  injectCss,
   registerPlugin,
   snap,
   type InputPlugin,
@@ -27,17 +29,9 @@ const DEFAULT_RING_UNIT: RingUnit = { ticks: 5, pixels: 40, value: 10 }
 const WHEEL_TICKS = 10
 const WHEEL_PIXELS = 40
 
-function decimalDigits(n: number): number {
-  const s = String(n)
-  const e = s.indexOf('e-')
-  if (e >= 0) return Number(s.slice(e + 2))
-  const dot = s.indexOf('.')
-  return dot >= 0 ? s.length - dot - 1 : 0
-}
-
 /** scale labels get a trailing space when signed so digits stay optically centered */
 function createRingFormatter(unit: RingUnit): (v: number) => string {
-  const digits = decimalDigits(unit.value)
+  const digits = decimalCount(unit.value)
   return (v) => {
     const text = v.toFixed(digits)
     const ch = text.charAt(0)
@@ -111,6 +105,15 @@ function createRing(ctx: PluginContext<number>, config: RingConfig): HTMLElement
     }
   }
 
+  // text/opacity writes are skipped when unchanged (updates run per drag move)
+  const setText = (node: HTMLElement, text: string) => {
+    if (node.textContent !== text) node.textContent = text
+  }
+  const setOpacity = (node: HTMLElement | SVGElement, opacity: number) => {
+    const text = String(opacity)
+    if (node.style.opacity !== text) node.style.opacity = text
+  }
+
   const updateScale = (bw: number) => {
     const uv = unit.value
     const uw = unit.pixels
@@ -123,17 +126,19 @@ function createRing(ctx: PluginContext<number>, config: RingConfig): HTMLElement
 
     labelEls.forEach((label, i) => {
       const lv = ov + i * uv
-      label.textContent = config.ringFormat(lv)
-      label.style.opacity = String(opacity(lv))
+      setText(label, config.ringFormat(lv))
+      setOpacity(label, opacity(lv))
     })
     const tpu = unit.ticks
     tickEls.forEach((tick, i) => {
-      tick.style.opacity = String(opacity(ov + (i / tpu) * uv))
+      setOpacity(tick, opacity(ov + (i / tpu) * uv))
     })
   }
 
+  // width comes from the ResizeObserver, so drag updates avoid layout reads
+  let measuredWidth = -1
   const update = () => {
-    const bw = el.getBoundingClientRect().width
+    const bw = measuredWidth >= 0 ? measuredWidth : el.getBoundingClientRect().width
     if (bw === 0) return
     const uv = unit.value
     const uw = unit.pixels
@@ -141,12 +146,19 @@ function createRing(ctx: PluginContext<number>, config: RingConfig): HTMLElement
     const halfUnitCount = Math.ceil(bw / 2 / uw) + 1
     const offsetFromCenter = ((v % uv) + uv * halfUnitCount) * (uw / uv)
     offsetEl.style.transform = `translateX(${bw / 2 - offsetFromCenter}px)`
-    tooltip.textContent = config.textFormat(v)
+    setText(tooltip, config.textFormat(v))
     rebuildScaleIfNeeded(bw)
     updateScale(bw)
   }
 
-  const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(update) : null
+  const ro =
+    typeof ResizeObserver === 'function'
+      ? new ResizeObserver((entries) => {
+          const width = entries[0]?.contentRect.width
+          if (width !== undefined) measuredWidth = width
+          update()
+        })
+      : null
   ro?.observe(el)
   ctx.onDispose(() => ro?.disconnect())
 
@@ -184,7 +196,7 @@ function createRing(ctx: PluginContext<number>, config: RingConfig): HTMLElement
 /** ring (2/3) + editable number field (1/3), the non-wide layout */
 function createRingWithText(ctx: PluginContext<number>, config: RingConfig): HTMLElement {
   const ring = createRing(ctx, { ...config, tooltipEnabled: false })
-  const format = ctx.options.format as ((v: number) => string) | undefined
+  const format = ctx.options.format
   const scrub = createScrubber(
     ctx.value,
     () => ctx.value.get(),
@@ -201,9 +213,9 @@ function createRingWithText(ctx: PluginContext<number>, config: RingConfig): HTM
 }
 
 function textFormatter(ctx: PluginContext<number>): (v: number) => string {
-  const custom = ctx.options.format as ((v: number) => string) | undefined
+  const custom = ctx.options.format
   if (custom) return custom
-  const digits = ctx.options.step !== undefined ? decimalDigits(ctx.options.step) : 2
+  const digits = ctx.options.step !== undefined ? decimalCount(ctx.options.step) : 2
   return (v) => v.toFixed(digits)
 }
 
@@ -220,7 +232,7 @@ export const cameraRingPlugin: InputPlugin<number> = {
     return options.view === 'cameraring' && typeof value === 'number'
   },
   create(ctx) {
-    ensureStyles(ctx.document)
+    injectCss(ctx.document, 'data-tiao-camera', CSS)
     const series = ([0, 1, 2] as const).includes(ctx.options['series'] as RingSeries)
       ? (ctx.options['series'] as RingSeries)
       : 0
@@ -249,7 +261,7 @@ export const cameraWheelPlugin: InputPlugin<number> = {
     return options.view === 'camerawheel' && typeof value === 'number'
   },
   create(ctx) {
-    ensureStyles(ctx.document)
+    injectCss(ctx.document, 'data-tiao-camera', CSS)
     const amount =
       typeof ctx.options['amount'] === 'number' ? ctx.options['amount'] : ctx.options.step ?? 1
     const unit: RingUnit = { ticks: WHEEL_TICKS, pixels: WHEEL_PIXELS, value: amount * WHEEL_PIXELS }
@@ -472,14 +484,6 @@ const CSS = `
   min-width: 0;
 }
 `
-
-function ensureStyles(doc: Document): void {
-  if (doc.querySelector('style[data-tiao-camera]')) return
-  const style = doc.createElement('style')
-  style.setAttribute('data-tiao-camera', '')
-  style.textContent = CSS
-  doc.head.append(style)
-}
 
 let registered = false
 

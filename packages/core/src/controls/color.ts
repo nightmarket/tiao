@@ -132,13 +132,16 @@ function createColorView(ctx: PluginContext<unknown>) {
   ).join(', ')})`
 
   let planeHue = -1
+  let planeImg: ImageData | null = null
   const drawPlane = () => {
     const c2d = okCanvas.getContext?.('2d')
     if (!c2d) return
     const w = okCanvas.width
     const hgt = okCanvas.height
-    const img = c2d.createImageData(w, hgt)
-    const data = img.data
+    // reuse one ImageData across redraws (hue drags redraw per pointermove)
+    planeImg ??= c2d.createImageData(w, hgt)
+    const data = planeImg.data
+    data.fill(0)
     for (let y = 0; y < hgt; y++) {
       const L = 1 - y / (hgt - 1)
       for (let x = 0; x < w; x++) {
@@ -153,7 +156,7 @@ function createColorView(ctx: PluginContext<unknown>) {
         data[i + 3] = 255
       }
     }
-    c2d.putImageData(img, 0, 0)
+    c2d.putImageData(planeImg, 0, 0)
     planeHue = ok.H
   }
 
@@ -215,6 +218,9 @@ function createColorView(ctx: PluginContext<unknown>) {
   const textValue = (): string =>
     stringWrite ? String(serializeColor(rgba, displayFormat(family, alpha))) : toHexText(rgba, alpha)
 
+  // last written values, so per-move renders skip redundant style writes
+  let lastSvHue = -1
+  let lastAlphaColor = ''
   const render = () => {
     const css = toCss(rgba)
     swatch.style.background = css
@@ -231,15 +237,22 @@ function createColorView(ctx: PluginContext<unknown>) {
       okThumb.style.background = css
       okHueThumb.style.left = `${(ok.H / 360) * 100}%`
     } else {
-      svArea.style.background =
-        `linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, transparent), hsl(${hsv.h}, 100%, 50%)`
+      if (hsv.h !== lastSvHue) {
+        lastSvHue = hsv.h
+        svArea.style.background =
+          `linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, transparent), hsl(${hsv.h}, 100%, 50%)`
+      }
       svThumb.style.left = `${hsv.s * 100}%`
       svThumb.style.top = `${(1 - hsv.v) * 100}%`
       svThumb.style.background = css
       hueThumb.style.left = `${(hsv.h / 360) * 100}%`
     }
     alphaThumb.style.left = `${rgba.a * 100}%`
-    alphaBar.style.setProperty('--tiao-alpha-color', `rgb(${Math.round(rgba.r)}, ${Math.round(rgba.g)}, ${Math.round(rgba.b)})`)
+    const alphaColor = `rgb(${Math.round(rgba.r)}, ${Math.round(rgba.g)}, ${Math.round(rgba.b)})`
+    if (alphaColor !== lastAlphaColor) {
+      lastAlphaColor = alphaColor
+      alphaBar.style.setProperty('--tiao-alpha-color', alphaColor)
+    }
   }
 
   const setFromHsv = (last: boolean) => {
@@ -260,57 +273,56 @@ function createColorView(ctx: PluginContext<unknown>) {
     commit(last)
   }
 
+  // drag helpers; the rect is read once per drag, not per pointermove
   const barDrag = (el: HTMLElement, apply: (t: number, last: boolean) => void) => {
-    const fromEvent = (clientX: number) => {
-      const rect = el.getBoundingClientRect()
-      return clamp((clientX - rect.left) / rect.width, 0, 1)
-    }
+    let rect: DOMRect
+    const fromEvent = (clientX: number) => clamp((clientX - rect.left) / rect.width, 0, 1)
     ctx.onDispose(
       draggable(el, {
-        onStart: (e) => apply(fromEvent(e.clientX), false),
+        onStart: (e) => {
+          rect = el.getBoundingClientRect()
+          apply(fromEvent(e.clientX), false)
+        },
         onMove: (s) => apply(fromEvent(s.x), false),
         onEnd: (s) => apply(fromEvent(s.x), true),
       }),
     )
   }
-
-  // SV area drag
-  {
-    const apply = (clientX: number, clientY: number, last: boolean) => {
-      const rect = svArea.getBoundingClientRect()
-      hsv.s = clamp((clientX - rect.left) / rect.width, 0, 1)
-      hsv.v = 1 - clamp((clientY - rect.top) / rect.height, 0, 1)
-      setFromHsv(last)
-    }
+  const areaDrag = (el: HTMLElement, apply: (tx: number, ty: number, last: boolean) => void) => {
+    let rect: DOMRect
+    const fromEvent = (clientX: number, clientY: number, last: boolean) =>
+      apply(
+        clamp((clientX - rect.left) / rect.width, 0, 1),
+        clamp((clientY - rect.top) / rect.height, 0, 1),
+        last,
+      )
     ctx.onDispose(
-      draggable(svArea, {
-        onStart: (e) => apply(e.clientX, e.clientY, false),
-        onMove: (s) => apply(s.x, s.y, false),
-        onEnd: (s) => apply(s.x, s.y, true),
+      draggable(el, {
+        onStart: (e) => {
+          rect = el.getBoundingClientRect()
+          fromEvent(e.clientX, e.clientY, false)
+        },
+        onMove: (s) => fromEvent(s.x, s.y, false),
+        onEnd: (s) => fromEvent(s.x, s.y, true),
       }),
     )
   }
+
+  areaDrag(svArea, (tx, ty, last) => {
+    hsv.s = tx
+    hsv.v = 1 - ty
+    setFromHsv(last)
+  })
   barDrag(hueBar, (t, last) => {
     hsv.h = t * 360
     setFromHsv(last)
   })
 
-  // OK L/C plane drag
-  {
-    const apply = (clientX: number, clientY: number, last: boolean) => {
-      const rect = okArea.getBoundingClientRect()
-      ok.C = clamp((clientX - rect.left) / rect.width, 0, 1) * OK_C_MAX
-      ok.L = 1 - clamp((clientY - rect.top) / rect.height, 0, 1)
-      setFromOk(last)
-    }
-    ctx.onDispose(
-      draggable(okArea, {
-        onStart: (e) => apply(e.clientX, e.clientY, false),
-        onMove: (s) => apply(s.x, s.y, false),
-        onEnd: (s) => apply(s.x, s.y, true),
-      }),
-    )
-  }
+  areaDrag(okArea, (tx, ty, last) => {
+    ok.C = tx * OK_C_MAX
+    ok.L = 1 - ty
+    setFromOk(last)
+  })
   barDrag(okHueBar, (t, last) => {
     ok.H = t * 360
     setFromOk(last)

@@ -1,7 +1,7 @@
 import { Container, FolderApi, TabApi, markPointerBlur, type BladeHost } from './blade'
 import { ensureBuiltins } from './controls/index'
 import { installCaret } from './controls/caret'
-import { draggable, gearIcon, h, icon, searchIcon } from './dom'
+import { collapseSelection, draggable, gearIcon, h, icon, searchIcon } from './dom'
 import { createPaneMenu } from './pane-menu'
 import { PluginRegistry, globalRegistry, type TiaoPlugin } from './plugin'
 import { injectStyles } from './styles'
@@ -222,6 +222,8 @@ export class Pane extends Container {
 
       let baseX = 0
       let baseY = 0
+      let baseW = 0
+      let baseH = 0
       this.disposers.push(
         draggable(this.titlebar, {
           // pointer capture would swallow the action buttons' clicks
@@ -230,12 +232,15 @@ export class Pane extends Container {
             const rect = this.element.getBoundingClientRect()
             baseX = rect.left
             baseY = rect.top
+            // size is captured once so each move avoids a forced layout read
+            baseW = rect.width
+            baseH = rect.height
             dragged = false
           },
           onMove: (s) => {
             if (!this._draggable || !s.moved) return
             dragged = true
-            this.moveTo(baseX + s.dx, baseY + s.dy)
+            this.setPosition(baseX + s.dx, baseY + s.dy, baseW, baseH)
           },
           onEnd: (s) => {
             if (this._draggable && s.moved) {
@@ -299,14 +304,6 @@ export class Pane extends Container {
 
     // clicking anywhere outside a focused pane input deselects/commits it,
     // even when the click target swallows focus changes (e.g. canvases)
-    const collapseInputSelection = (input: HTMLInputElement) => {
-      try {
-        const end = input.value.length
-        input.setSelectionRange(end, end)
-      } catch {
-        /* some input types do not support selection ranges */
-      }
-    }
     const onDocPointerDown = (e: PointerEvent) => {
       const active = doc.activeElement
       if (!(active instanceof HTMLInputElement) || !this.element.contains(active)) return
@@ -314,10 +311,10 @@ export class Pane extends Container {
       if (target && (active === target || active.contains(target))) return
       const activeRow = active.closest('.tiao-row')
       const targetRow = target instanceof Element ? target.closest('.tiao-row') : null
-      collapseInputSelection(active)
+      collapseSelection(active)
       markPointerBlur(targetRow === activeRow ? activeRow : null)
       active.blur()
-      collapseInputSelection(active)
+      collapseSelection(active)
     }
     doc.addEventListener('pointerdown', onDocPointerDown, true)
     this.disposers.push(() => doc.removeEventListener('pointerdown', onDocPointerDown, true))
@@ -350,10 +347,11 @@ export class Pane extends Container {
     // a persisted free position may be off-screen on a smaller window
     this.clampToViewport()
 
-    if (options.id) {
-      panes.set(options.id, this)
+    const id = options.id
+    if (id) {
+      panes.set(id, this)
       this.disposers.push(() => {
-        if (panes.get(options.id as string) === this) panes.delete(options.id as string)
+        if (panes.get(id) === this) panes.delete(id)
       })
     }
   }
@@ -490,10 +488,13 @@ export class Pane extends Container {
   }
 
   moveTo(x: number, y: number): void {
+    this.setPosition(x, y, this.element.offsetWidth, this.element.offsetHeight)
+  }
+
+  /** moveTo with a known size, so drag moves skip the layout read */
+  private setPosition(x: number, y: number, w: number, h: number): void {
     this._anchor = null
     const win = this.doc.defaultView
-    const w = this.element.offsetWidth
-    const h = this.element.offsetHeight
     if (win && w) x = clamp(x, 0, Math.max(0, win.innerWidth - w))
     if (win && h) y = clamp(y, 0, Math.max(0, win.innerHeight - h))
     const s = this.element.style

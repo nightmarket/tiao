@@ -10,7 +10,7 @@ export const textMonitorPlugin: MonitorPlugin<unknown> = {
     return true
   },
   create(ctx) {
-    const format = (ctx.options.format as ((v: unknown) => string) | undefined) ?? defaultFormat
+    const format = ctx.options.format ?? defaultFormat
     const bufferSize = typeof ctx.options['bufferSize'] === 'number' ? ctx.options['bufferSize'] : 1
     if (bufferSize > 1) return { element: createLog(ctx, bufferSize, format) }
 
@@ -68,11 +68,13 @@ export const graphMonitorPlugin: MonitorPlugin<number> = {
     return typeof value === 'number' && options.view === 'graph'
   },
   create(ctx) {
-    return { element: createGraph(ctx), full: false }
+    return { element: createGraph(ctx) }
   },
 }
 
-export function createGraph(ctx: PluginContext<number>): HTMLElement {
+export function createGraph(
+  ctx: Pick<PluginContext<number>, 'value' | 'options' | 'onDispose'>,
+): HTMLElement {
   const bufferSize = (ctx.options['bufferSize'] as number | undefined) ?? DEFAULT_BUFFER
   const buffer: number[] = []
   const canvas = h('canvas', 'tiao-graph-canvas')
@@ -84,27 +86,42 @@ export function createGraph(ctx: PluginContext<number>): HTMLElement {
 
   const explicitMin = ctx.options.min
   const explicitMax = ctx.options.max
-  const format = (ctx.options.format as ((v: number) => string) | undefined) ?? ((v) => formatNumber(v))
+  const format = ctx.options.format ?? ((v: number) => formatNumber(v))
 
   let width = 0
   let height = 0
+  let dirty = false
+  // getComputedStyle returns a live declaration; resolve it once, read per draw
+  let computed: CSSStyleDeclaration | null = null
+  let c2d: CanvasRenderingContext2D | null = null
   const dpr = typeof devicePixelRatio === 'number' ? devicePixelRatio : 1
 
   const resize = () => {
     const rect = canvas.getBoundingClientRect()
-    if (rect.width === 0) return
+    // zero size means collapsed/hidden: stop drawing until visible again
+    if (rect.width === 0) {
+      width = 0
+      return
+    }
     width = Math.round(rect.width * dpr)
     height = Math.round(rect.height * dpr)
     if (canvas.width !== width) canvas.width = width
     if (canvas.height !== height) canvas.height = height
+    if (dirty) draw()
   }
   const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(resize) : null
   ro?.observe(canvas)
   ctx.onDispose(() => ro?.disconnect())
 
   const draw = () => {
-    const c = canvas.getContext('2d')
-    if (!c || width === 0 || buffer.length < 2) return
+    if (width === 0 || buffer.length < 2) {
+      dirty = true
+      return
+    }
+    c2d ??= canvas.getContext('2d')
+    if (!c2d) return
+    const c = c2d
+    dirty = false
     let min = typeof explicitMin === 'number' ? explicitMin : Infinity
     let max = typeof explicitMax === 'number' ? explicitMax : -Infinity
     if (!Number.isFinite(min) || !Number.isFinite(max)) {
@@ -118,8 +135,8 @@ export function createGraph(ctx: PluginContext<number>): HTMLElement {
       max += 1
     }
     c.clearRect(0, 0, width, height)
-    const style = getComputedStyle(el)
-    c.strokeStyle = style.getPropertyValue('--tiao-graph-stroke').trim() || style.color
+    computed ??= getComputedStyle(el)
+    c.strokeStyle = computed.getPropertyValue('--tiao-graph-stroke').trim() || computed.color
     c.lineWidth = 1.5 * dpr
     c.lineJoin = 'round'
     c.beginPath()

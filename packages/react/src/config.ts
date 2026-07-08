@@ -11,7 +11,5 @@ export function isTiaoEnabled(local?: boolean): boolean {
   if (local !== undefined) return local
   if (enabledOverride !== null) return enabledOverride
   // bundlers statically replace NODE_ENV, so the UI branch is dead code in prod
-  return typeof process !== 'undefined' && process !== undefined
-    ? process.env['NODE_ENV'] !== 'production'
-    : true
+  return typeof process === 'undefined' || process.env['NODE_ENV'] !== 'production'
 }

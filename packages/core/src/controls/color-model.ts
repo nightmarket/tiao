@@ -244,13 +244,13 @@ function toHex(n: number): string {
   return clamp(n, 0, 255).toString(16).padStart(2, '0')
 }
 
-function round2(n: number): number {
-  return Math.round(n * 100) / 100
-}
-
 function roundN(n: number, decimals: number): number {
   const f = Math.pow(10, decimals)
   return Math.round(n * f) / f
+}
+
+function round2(n: number): number {
+  return roundN(n, 2)
 }
 
 /* ---- OKLab / OKLCH (Björn Ottosson's reference conversions) ---- */
