@@ -1,8 +1,9 @@
 export { useControls } from './useControls'
 export type { ControlsResult } from './useControls'
 export { usePane } from './usePane'
-export { button, monitor } from './types'
+export { button, buttonGroup, monitor } from './types'
 export type {
+  ButtonGroupItem,
   ButtonItem,
   InputDef,
   MonitorItem,

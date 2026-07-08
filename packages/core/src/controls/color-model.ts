@@ -13,8 +13,16 @@ export type ColorFormat =
   | 'hex-alpha' // '#rrggbbaa'
   | 'rgb-string' // 'rgb(r, g, b)'
   | 'rgba-string'
+  | 'hsl-string' // 'hsl(h, s%, l%)'
+  | 'hsla-string'
+  | 'hsv-string' // 'hsv(h, s%, v%)' (tweakpane-style, not CSS)
+  | 'hsva-string'
   | 'object' // {r,g,b}
   | 'object-alpha' // {r,g,b,a}
+  | 'object-hsl' // {h,s,l} with s/l 0-100
+  | 'object-hsl-alpha'
+  | 'object-hsv' // {h,s,v} with s/v 0-100
+  | 'object-hsv-alpha'
   | 'number' // 0xrrggbb
   | 'oklch' // 'oklch(L C H)'
   | 'oklch-alpha' // 'oklch(L C H / a)'
@@ -28,6 +36,8 @@ export interface ParsedColor {
 
 const HEX_RE = /^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i
 const RGB_RE = /^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*(?:,\s*([\d.]+)\s*)?\)$/i
+const HSL_RE =
+  /^(hsla?|hsva?)\(\s*(-?[\d.]+)(?:deg)?\s*[, ]\s*([\d.]+)%?\s*[, ]\s*([\d.]+)%?\s*(?:[,/]\s*([\d.]+)(%)?\s*)?\)$/i
 const OK_RE =
   /^(oklch|oklab)\(\s*(-?[\d.]+)(%)?\s+(-?[\d.]+)%?\s+(-?[\d.]+)(?:deg)?\s*(?:\/\s*(-?[\d.]+)(%)?\s*)?\)$/i
 
@@ -49,6 +59,21 @@ export function parseColor(value: unknown): ParsedColor | null {
         a: hasAlpha ? (value['a'] as number) : 1,
       },
       format: hasAlpha ? 'object-alpha' : 'object',
+    }
+  }
+  // {h,s,l} / {h,s,v} objects with s/l/v in 0-100 (tweakpane conventions)
+  if (isRecord(value) && typeof value['h'] === 'number' && typeof value['s'] === 'number') {
+    const hasAlpha = typeof value['a'] === 'number'
+    const a = hasAlpha ? (value['a'] as number) : 1
+    const hue = value['h'] as number
+    const s = (value['s'] as number) / 100
+    if (typeof value['l'] === 'number') {
+      const { r, g, b } = hslToRgb(hue, s, (value['l'] as number) / 100)
+      return { rgba: { r, g, b, a }, format: hasAlpha ? 'object-hsl-alpha' : 'object-hsl' }
+    }
+    if (typeof value['v'] === 'number') {
+      const { r, g, b } = hsvToRgb(hue, s, (value['v'] as number) / 100)
+      return { rgba: { r, g, b, a }, format: hasAlpha ? 'object-hsv-alpha' : 'object-hsv' }
     }
   }
   return null
@@ -88,6 +113,20 @@ function parseColorString(s: string): ParsedColor | null {
       format: a !== undefined ? 'rgba-string' : 'rgb-string',
     }
   }
+  const hs = HSL_RE.exec(str)
+  if (hs) {
+    const [, fn, hRaw, sRaw, thirdRaw, aRaw, aPct] = hs
+    const isHsv = (fn as string).toLowerCase().startsWith('hsv')
+    const hue = ((Number(hRaw) % 360) + 360) % 360
+    const s = clamp(Number(sRaw) / 100, 0, 1)
+    const third = clamp(Number(thirdRaw) / 100, 0, 1)
+    const a = aRaw !== undefined ? clamp(Number(aRaw) / (aPct ? 100 : 1), 0, 1) : 1
+    const { r, g, b } = isHsv ? hsvToRgb(hue, s, third) : hslToRgb(hue, s, third)
+    const base: ColorFormat = isHsv
+      ? aRaw !== undefined ? 'hsva-string' : 'hsv-string'
+      : aRaw !== undefined ? 'hsla-string' : 'hsl-string'
+    return { rgba: { r, g, b, a }, format: base }
+  }
   const ok = OK_RE.exec(str)
   if (ok) {
     const [, fn, lRaw, lPct, second, third, aRaw, aPct] = ok
@@ -121,10 +160,34 @@ export function serializeColor(rgba: Rgba, format: ColorFormat): unknown {
       return `rgb(${r}, ${g}, ${b})`
     case 'rgba-string':
       return `rgba(${r}, ${g}, ${b}, ${round2(a)})`
+    case 'hsl-string':
+    case 'hsla-string': {
+      const { h: hh, s, l } = rgbToHsl(rgba.r, rgba.g, rgba.b)
+      const body = `${Math.round(hh)}, ${Math.round(s * 100)}%, ${Math.round(l * 100)}%`
+      return format === 'hsla-string' ? `hsla(${body}, ${round2(a)})` : `hsl(${body})`
+    }
+    case 'hsv-string':
+    case 'hsva-string': {
+      const { h: hh, s, v } = rgbToHsv(rgba.r, rgba.g, rgba.b)
+      const body = `${Math.round(hh)}, ${Math.round(s * 100)}%, ${Math.round(v * 100)}%`
+      return format === 'hsva-string' ? `hsva(${body}, ${round2(a)})` : `hsv(${body})`
+    }
     case 'object':
       return { r, g, b }
     case 'object-alpha':
       return { r, g, b, a: round2(a) }
+    case 'object-hsl':
+    case 'object-hsl-alpha': {
+      const { h: hh, s, l } = rgbToHsl(rgba.r, rgba.g, rgba.b)
+      const base = { h: Math.round(hh), s: Math.round(s * 100), l: Math.round(l * 100) }
+      return format === 'object-hsl-alpha' ? { ...base, a: round2(a) } : base
+    }
+    case 'object-hsv':
+    case 'object-hsv-alpha': {
+      const { h: hh, s, v } = rgbToHsv(rgba.r, rgba.g, rgba.b)
+      const base = { h: Math.round(hh), s: Math.round(s * 100), v: Math.round(v * 100) }
+      return format === 'object-hsv-alpha' ? { ...base, a: round2(a) } : base
+    }
     case 'number':
       return (r << 16) | (g << 8) | b
     case 'oklch':
@@ -153,7 +216,11 @@ export function formatHasAlpha(format: ColorFormat): boolean {
   return (
     format === 'hex-alpha' ||
     format === 'rgba-string' ||
+    format === 'hsla-string' ||
+    format === 'hsva-string' ||
     format === 'object-alpha' ||
+    format === 'object-hsl-alpha' ||
+    format === 'object-hsv-alpha' ||
     format === 'oklch-alpha' ||
     format === 'oklab-alpha'
   )
@@ -161,7 +228,7 @@ export function formatHasAlpha(format: ColorFormat): boolean {
 
 /** true when the format serializes to a string (drives the row text field) */
 export function formatIsString(format: ColorFormat): boolean {
-  return format !== 'object' && format !== 'object-alpha' && format !== 'number'
+  return format !== 'number' && !format.startsWith('object')
 }
 
 export function toCss(rgba: Rgba): string {
@@ -296,6 +363,20 @@ export function rgbToHsv(r: number, g: number, b: number): Hsv {
   }
   if (h < 0) h += 360
   return { h, s: max === 0 ? 0 : d / max, v: max }
+}
+
+/** h 0-360, s/l 0-1 */
+export function rgbToHsl(r: number, g: number, b: number): { h: number; s: number; l: number } {
+  const { h, s: sv, v } = rgbToHsv(r, g, b)
+  const l = v * (1 - sv / 2)
+  const s = l === 0 || l === 1 ? 0 : (v - l) / Math.min(l, 1 - l)
+  return { h, s, l }
+}
+
+export function hslToRgb(h: number, s: number, l: number): { r: number; g: number; b: number } {
+  const v = l + s * Math.min(l, 1 - l)
+  const sv = v === 0 ? 0 : 2 * (1 - l / v)
+  return hsvToRgb(h, sv, v)
 }
 
 export function hsvToRgb(h: number, s: number, v: number): { r: number; g: number; b: number } {

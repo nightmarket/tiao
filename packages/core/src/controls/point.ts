@@ -79,9 +79,10 @@ export const pointInputPlugin: InputPlugin<PointValue> = {
       const onClick = () => popup.toggle()
       toggle.addEventListener('click', onClick)
       ctx.onDispose(() => toggle.removeEventListener('click', onClick))
-    } else {
-      root.append(fields)
+      // clicking the row label opens the pad editor
+      return { element: root, activate: () => popup.toggle() }
     }
+    root.append(fields)
     return { element: root }
   },
 }

@@ -195,6 +195,191 @@ describe('Pane registry and chrome', () => {
     pane.dispose()
   })
 
+  it('clamps free positions and re-clamps on window resize', () => {
+    const pane = new Pane()
+    Object.defineProperty(pane.element, 'offsetWidth', { value: 300, configurable: true })
+    Object.defineProperty(pane.element, 'offsetHeight', { value: 200, configurable: true })
+
+    // jsdom viewport defaults to 1024x768
+    pane.moveTo(5000, -50)
+    expect(pane.element.style.left).toBe('724px')
+    expect(pane.element.style.top).toBe('0px')
+
+    // shrink the window; the free-positioned pane must move back inside
+    pane.element.getBoundingClientRect = () =>
+      ({ left: 724, top: 0, width: 300, height: 200 } as DOMRect)
+    const originalWidth = window.innerWidth
+    Object.defineProperty(window, 'innerWidth', { value: 600, configurable: true })
+    window.dispatchEvent(new Event('resize'))
+    expect(pane.element.style.left).toBe('300px')
+    Object.defineProperty(window, 'innerWidth', { value: originalWidth, configurable: true })
+    pane.dispose()
+  })
+
+  it('resizes via edge handles, clamps, and persists the result', () => {
+    const pane = new Pane({ id: 'rsz' })
+    pane.element.getBoundingClientRect = () =>
+      ({ left: 100, top: 0, width: 280, height: 400 } as DOMRect)
+
+    const drag = (edge: string, dx: number, dy: number) => {
+      const handle = pane.element.querySelector(`.tiao-resize-${edge}`) as HTMLElement
+      handle.dispatchEvent(new MouseEvent('pointerdown', { button: 0, clientX: 0, clientY: 0 }))
+      handle.dispatchEvent(new MouseEvent('pointermove', { clientX: dx, clientY: dy }))
+      handle.dispatchEvent(new MouseEvent('pointerup', { clientX: dx, clientY: dy }))
+    }
+
+    drag('right', 60, 0)
+    expect(pane.element.style.width).toBe('340px')
+
+    // dragging the left edge keeps the right edge pinned for free-positioned panes
+    pane.moveTo(100, 0)
+    drag('left', -40, 0)
+    expect(pane.element.style.width).toBe('320px')
+    expect(pane.element.style.left).toBe('60px')
+
+    drag('bottom', 0, 100)
+    expect(pane.element.style.getPropertyValue('--tiao-max-height')).toBe('500px')
+
+    // width clamps to its maximum
+    drag('right', 5000, 0)
+    expect(pane.element.style.width).toBe('640px')
+
+    const saved = JSON.parse(localStorage.getItem('tiao:rsz')!)
+    expect(saved.w).toBe(640)
+    expect(saved.hMax).toBe(500)
+    pane.dispose()
+  })
+
+  it('restores persisted width and max-height', () => {
+    localStorage.setItem('tiao:rsz2', JSON.stringify({ w: 350, hMax: 480 }))
+    const pane = new Pane({ id: 'rsz2' })
+    expect(pane.element.style.width).toBe('350px')
+    expect(pane.element.style.getPropertyValue('--tiao-max-height')).toBe('480px')
+    pane.dispose()
+  })
+
+  it('exposes folder nesting depth to CSS for column alignment', () => {
+    const pane = new Pane()
+    const outer = pane.addFolder({ title: 'outer' })
+    const inner = outer.addFolder({ title: 'inner' })
+    const rackDepth = (el: Element) =>
+      (el.querySelector(':scope > .tiao-folder-body > .tiao-folder-clip > .tiao-rack') as HTMLElement)
+        .style.getPropertyValue('--tiao-depth')
+    expect(rackDepth(outer.element)).toBe('1')
+    expect(rackDepth(inner.element)).toBe('2')
+    pane.dispose()
+  })
+
+  it('renders a subtle unit label next to graph readouts', () => {
+    const params = { time: 1.5 }
+    const pane = new Pane()
+    const binding = pane.addBinding(params, 'time', { readonly: true, view: 'graph', unit: 's' })
+    const unit = binding.element.querySelector('.tiao-graph-unit')
+    expect(unit?.textContent).toBe('s')
+    pane.dispose()
+  })
+
+  it('renders button groups as equal siblings with independent callbacks', () => {
+    const pane = new Pane()
+    const onHalf = vi.fn()
+    const onFull = vi.fn()
+    const group = pane.addButtonGroup({
+      label: 'zoom',
+      buttons: { '0.5x': onHalf, '1x': onFull },
+    })
+    const buttons = group.element.querySelectorAll<HTMLButtonElement>('.tiao-btngroup .tiao-button')
+    expect(buttons).toHaveLength(2)
+    expect(group.element.querySelector('.tiao-label')?.textContent).toBe('zoom')
+    buttons[0]!.click()
+    expect(onHalf).toHaveBeenCalledTimes(1)
+    expect(onFull).not.toHaveBeenCalled()
+
+    group.disabled = true
+    buttons[1]!.click()
+    expect(onFull).not.toHaveBeenCalled()
+    pane.dispose()
+  })
+
+  it('unlabeled button groups take the full row', () => {
+    const pane = new Pane()
+    const group = pane.addButtonGroup({ buttons: { a: () => {}, b: () => {} } })
+    expect(group.element.classList.contains('tiao-row-full')).toBe(true)
+    pane.dispose()
+  })
+
+  it('search icon toggles the filter row and filters bindings by label', () => {
+    const params = { speed: 1, color: '#fff', gravity: 9.8 }
+    const pane = new Pane()
+    const speed = pane.addBinding(params, 'speed')
+    const color = pane.addBinding(params, 'color')
+    const folder = pane.addFolder({ title: 'Physics', expanded: false })
+    const gravity = folder.addBinding(params, 'gravity')
+
+    const searchBtn = pane.element.querySelector('.tiao-pane-search') as HTMLButtonElement
+    searchBtn.click()
+    expect(pane.searchOpen).toBe(true)
+    const input = pane.element.querySelector('.tiao-search-input') as HTMLInputElement
+
+    input.value = 'grav'
+    input.dispatchEvent(new Event('input'))
+    expect(speed.element.classList.contains('tiao-search-miss')).toBe(true)
+    expect(color.element.classList.contains('tiao-search-miss')).toBe(true)
+    expect(gravity.element.classList.contains('tiao-search-miss')).toBe(false)
+    // the collapsed folder holding the match is forced open
+    expect(folder.element.classList.contains('tiao-search-miss')).toBe(false)
+    expect(folder.element.classList.contains('tiao-search-open')).toBe(true)
+
+    // a folder title match keeps its whole subtree visible
+    input.value = 'physics'
+    input.dispatchEvent(new Event('input'))
+    expect(folder.element.classList.contains('tiao-search-miss')).toBe(false)
+    expect(gravity.element.classList.contains('tiao-search-miss')).toBe(false)
+    expect(speed.element.classList.contains('tiao-search-miss')).toBe(true)
+
+    // closing the search clears the filter
+    pane.searchOpen = false
+    expect(speed.element.classList.contains('tiao-search-miss')).toBe(false)
+    expect(folder.element.classList.contains('tiao-search-open')).toBe(false)
+    expect(input.value).toBe('')
+    pane.dispose()
+  })
+
+  it('folder headers lead with the caret and have no index counter', () => {
+    const pane = new Pane()
+    const folder = pane.addFolder({ title: 'Section' })
+    const header = folder.element.querySelector('.tiao-folder-header')!
+    expect(header.firstElementChild?.classList.contains('tiao-icon-triangle')).toBe(true)
+    expect(header.querySelector('.tiao-folder-index')).toBeNull()
+    pane.dispose()
+  })
+
+  it('folders accept a color that tints title, caret, and depth line', () => {
+    const pane = new Pane()
+    const folder = pane.addFolder({ title: 'Tinted', color: '#fb923c' })
+    expect(folder.element.classList.contains('tiao-folder-colored')).toBe(true)
+    expect(folder.element.style.getPropertyValue('--tiao-folder-color')).toBe('#fb923c')
+    const plain = pane.addFolder({ title: 'Plain' })
+    expect(plain.element.classList.contains('tiao-folder-colored')).toBe(false)
+    pane.dispose()
+  })
+
+  it('clicking the depth line collapses the folder; static folders ignore it', () => {
+    const pane = new Pane()
+    const folder = pane.addFolder({ title: 'Collapsible' })
+    const line = folder.element.querySelector('.tiao-folder-line') as HTMLButtonElement
+    expect(folder.expanded).toBe(true)
+    line.click()
+    expect(folder.expanded).toBe(false)
+
+    const fixed = pane.addFolder({ title: 'Fixed', collapsible: false })
+    const fixedLine = fixed.element.querySelector('.tiao-folder-line') as HTMLButtonElement
+    fixedLine.click()
+    expect(fixed.expanded).toBe(true)
+    // the caret stays visible on static folders
+    expect(fixed.element.querySelector('.tiao-folder-header .tiao-icon-triangle')).not.toBeNull()
+    pane.dispose()
+  })
+
   it('collapsible: false folders stay expanded and ignore header clicks', () => {
     const pane = new Pane()
     const folder = pane.addFolder({ title: 'Fixed', collapsible: false })
@@ -218,10 +403,120 @@ describe('Pane registry and chrome', () => {
     expect(document.activeElement).toBe(pane.element.querySelector('.tiao-text-input'))
 
     rows[1]?.querySelector('.tiao-label')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
-    expect(pane.element.querySelector('.tiao-color-picker')?.classList.contains('tiao-open')).toBe(true)
+    expect(pane.element.querySelector('.tiao-color-picker.tiao-open')).not.toBeNull()
 
     rows[2]?.querySelector('.tiao-label')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     expect(params.on).toBe(true)
+    pane.dispose()
+  })
+
+  it('clicking the empty control column activates short controls once', () => {
+    const params = { on: false }
+    const pane = new Pane()
+    const binding = pane.addBinding(params, 'on')
+    const control = binding.element.querySelector('.tiao-control') as HTMLElement
+    const button = binding.element.querySelector('.tiao-check') as HTMLButtonElement
+
+    control.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    expect(params.on).toBe(true)
+
+    button.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    expect(params.on).toBe(false)
+    pane.dispose()
+  })
+
+  it('outside pointerdown blurs and deselects number inputs without typing', () => {
+    const params = { seed: 12 }
+    const pane = new Pane()
+    const binding = pane.addBinding(params, 'seed')
+    const label = binding.element.querySelector('.tiao-label') as HTMLElement
+    const input = binding.element.querySelector('.tiao-num-input') as HTMLInputElement
+
+    label.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    expect(document.activeElement).toBe(input)
+    expect(input.readOnly).toBe(false)
+
+    document.body.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }))
+    expect(document.activeElement).not.toBe(input)
+    expect(input.readOnly).toBe(true)
+    expect(input.selectionStart).toBe(input.value.length)
+    expect(input.selectionEnd).toBe(input.value.length)
+    pane.dispose()
+  })
+
+  it('outside pointerdown blurs and deselects number inputs after clicking the value', () => {
+    const params = { seed: 42 }
+    const pane = new Pane()
+    const binding = pane.addBinding(params, 'seed')
+    const input = binding.element.querySelector('.tiao-num-input') as HTMLInputElement
+
+    input.dispatchEvent(new MouseEvent('pointerdown', { button: 0, bubbles: true }))
+    input.dispatchEvent(new MouseEvent('pointerup', { button: 0, bubbles: true }))
+    expect(document.activeElement).toBe(input)
+    expect(input.readOnly).toBe(false)
+    expect(input.selectionStart).toBe(0)
+    expect(input.selectionEnd).toBe(input.value.length)
+
+    document.body.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }))
+    expect(document.activeElement).not.toBe(input)
+    expect(input.readOnly).toBe(true)
+    expect(input.selectionStart).toBe(input.value.length)
+    expect(input.selectionEnd).toBe(input.value.length)
+    pane.dispose()
+  })
+
+  it('number input blur collapses the highlighted value selection', () => {
+    const params = { seed: 42 }
+    const pane = new Pane()
+    const binding = pane.addBinding(params, 'seed')
+    const input = binding.element.querySelector('.tiao-num-input') as HTMLInputElement
+
+    input.dispatchEvent(new MouseEvent('pointerdown', { button: 0, bubbles: true }))
+    input.dispatchEvent(new MouseEvent('pointerup', { button: 0, bubbles: true }))
+    expect(input.selectionStart).toBe(0)
+    expect(input.selectionEnd).toBe(input.value.length)
+
+    input.dispatchEvent(new FocusEvent('blur'))
+    expect(input.readOnly).toBe(true)
+    expect(input.selectionStart).toBe(input.value.length)
+    expect(input.selectionEnd).toBe(input.value.length)
+    pane.dispose()
+  })
+
+  it('clicking another row in the same pane blurs the active input and activates that row', () => {
+    const params = { seed: 12, on: false }
+    const pane = new Pane()
+    const seed = pane.addBinding(params, 'seed')
+    const on = pane.addBinding(params, 'on')
+    const seedLabel = seed.element.querySelector('.tiao-label') as HTMLElement
+    const seedInput = seed.element.querySelector('.tiao-num-input') as HTMLInputElement
+    const onLabel = on.element.querySelector('.tiao-label') as HTMLElement
+
+    seedLabel.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    expect(document.activeElement).toBe(seedInput)
+
+    onLabel.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }))
+    onLabel.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    expect(document.activeElement).not.toBe(seedInput)
+    expect(seedInput.readOnly).toBe(true)
+    expect(params.on).toBe(true)
+    pane.dispose()
+  })
+
+  it('clicking the active input row outside the input deselects without reactivating it', () => {
+    const params = { seed: 12 }
+    const pane = new Pane()
+    const binding = pane.addBinding(params, 'seed')
+    const label = binding.element.querySelector('.tiao-label') as HTMLElement
+    const input = binding.element.querySelector('.tiao-num-input') as HTMLInputElement
+
+    label.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    expect(document.activeElement).toBe(input)
+
+    label.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }))
+    label.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    expect(document.activeElement).not.toBe(input)
+    expect(input.readOnly).toBe(true)
     pane.dispose()
   })
 
@@ -232,8 +527,8 @@ describe('Pane registry and chrome', () => {
     pane.addBinding(params, 'b')
     const selects = pane.element.querySelectorAll('.tiao-color-mode .tiao-select')
     const values = (s: Element) => [...s.querySelectorAll('option')].map((o) => o.value)
-    expect(values(selects[0]!)).toEqual(['hex', 'rgb', 'oklch'])
-    expect(values(selects[1]!)).toEqual(['hex', 'rgb', 'oklch', 'oklab'])
+    expect(values(selects[0]!)).toEqual(['hex', 'rgb', 'hsl', 'oklch'])
+    expect(values(selects[1]!)).toEqual(['hex', 'rgb', 'hsl', 'oklch', 'oklab'])
     pane.dispose()
   })
 
@@ -266,13 +561,15 @@ describe('Pane registry and chrome', () => {
     pane.dispose()
   })
 
-  it('gear opens the settings menu with a draggable toggle and 8 anchor cells', () => {
+  it('gear opens the settings menu with a draggable toggle and 9 anchor cells', () => {
     const pane = new Pane()
     const gear = pane.element.querySelector('.tiao-pane-gear') as HTMLButtonElement
     gear.click()
     const menu = pane.element.querySelector('.tiao-pane-menu.tiao-open')!
     expect(menu).not.toBeNull()
-    expect(menu.querySelectorAll('.tiao-anchor-cell')).toHaveLength(8)
+    // no title bar on the settings menu
+    expect(menu.querySelector('.tiao-pane-menu-title')).toBeNull()
+    expect(menu.querySelectorAll('.tiao-anchor-cell')).toHaveLength(9)
 
     const dragToggle = menu.querySelector('.tiao-check') as HTMLButtonElement
     expect(pane.draggable).toBe(true)
@@ -287,7 +584,7 @@ describe('Pane registry and chrome', () => {
     const menu = pane.element.querySelector('.tiao-pane-menu.tiao-open')!
     expect(menu).not.toBeNull()
 
-    const bottomCenter = menu.querySelectorAll('.tiao-anchor-cell')[6] as HTMLButtonElement
+    const bottomCenter = menu.querySelectorAll('.tiao-anchor-cell')[7] as HTMLButtonElement
     expect(bottomCenter.title).toBe('bottom center')
     bottomCenter.click()
     expect(pane.anchor).toBe('bottom-center')
@@ -298,6 +595,84 @@ describe('Pane registry and chrome', () => {
     // anchor persists per pane id
     const revived = new Pane({ id: 'anchored' })
     expect(revived.anchor).toBe('bottom-center')
+    revived.dispose()
+  })
+
+  it('supports the center anchor from the middle grid cell', () => {
+    const pane = new Pane()
+    pane.element.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))
+    const menu = pane.element.querySelector('.tiao-pane-menu.tiao-open')!
+    const center = menu.querySelectorAll('.tiao-anchor-cell')[4] as HTMLButtonElement
+    expect(center.title).toBe('center')
+    center.click()
+    expect(pane.anchor).toBe('center')
+    expect(pane.element.style.left).toBe('50%')
+    expect(pane.element.style.top).toBe('50%')
+    expect(pane.element.style.transform).toBe('translate(-50%, -50%)')
+    pane.dispose()
+  })
+
+  it('menu theme select switches light/dark and persists per pane id', () => {
+    const pane = new Pane({ id: 'themed' })
+    pane.element.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))
+    const menu = pane.element.querySelector('.tiao-pane-menu.tiao-open')!
+    // the settings menu is a real embedded pane, so theme is a select binding
+    const select = menu.querySelector('.tiao-select') as HTMLSelectElement
+    expect(pane.theme).toBe('light')
+
+    select.value = '1'
+    select.dispatchEvent(new Event('change'))
+    expect(pane.theme).toBe('dark')
+    expect(pane.element.classList.contains('tiao-theme-dark')).toBe(true)
+    pane.dispose()
+
+    const revived = new Pane({ id: 'themed' })
+    expect(revived.theme).toBe('dark')
+    revived.dispose()
+  })
+
+  it('menu "Numbers" toggle prepends nesting-aware section indexes to folder titles', () => {
+    const pane = new Pane({ id: 'numbered' })
+    const a = pane.addFolder({ title: 'Alpha' })
+    const a1 = a.addFolder({ title: 'Inner' })
+    const b = pane.addFolder({ title: 'Beta' })
+
+    pane.numbers = true
+    const indexOf = (f: { element: Element }) =>
+      f.element.querySelector('.tiao-folder-index')?.textContent
+    expect(indexOf(a)).toBe('1')
+    expect(indexOf(a1)).toBe('1.1')
+    expect(indexOf(b)).toBe('2')
+
+    // late additions are renumbered automatically
+    const a2 = a.addFolder({ title: 'Later' })
+    expect(indexOf(a2)).toBe('1.2')
+
+    pane.numbers = false
+    expect(indexOf(a)).toBeUndefined()
+    pane.dispose()
+
+    // persists per pane id
+    localStorage.setItem('tiao:numbered2', JSON.stringify({ numbers: true }))
+    const revived = new Pane({ id: 'numbered2' })
+    const f = revived.addFolder({ title: 'Only' })
+    expect(indexOf(f)).toBe('1')
+    revived.dispose()
+  })
+
+  it('menu accent color writes --tiao-accent and persists per pane id', () => {
+    const pane = new Pane({ id: 'accented' })
+    pane.element.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))
+    const menu = pane.element.querySelector('.tiao-pane-menu.tiao-open')!
+    const text = menu.querySelector('.tiao-color-text') as HTMLInputElement
+    text.value = '#ff0080'
+    text.dispatchEvent(new Event('blur'))
+    expect(pane.element.style.getPropertyValue('--tiao-accent')).toBe('#ff0080')
+    expect(pane.accent).toBe('#ff0080')
+    pane.dispose()
+
+    const revived = new Pane({ id: 'accented' })
+    expect(revived.element.style.getPropertyValue('--tiao-accent')).toBe('#ff0080')
     revived.dispose()
   })
 

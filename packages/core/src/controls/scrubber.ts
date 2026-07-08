@@ -30,10 +30,39 @@ export function createScrubber(
   input.inputMode = 'decimal'
   input.readOnly = true
   input.value = format(get())
-  // left grip dots signal draggability; tick ruler shows while scrubbing
+  // left grip dots signal draggability
   const grip = h('div', 'tiao-scrub-grip')
-  const guide = h('div', 'tiao-scrub-guide')
-  const wrap = h('div', 'tiao-scrub', input, grip, guide)
+  const wrap = h('div', 'tiao-scrub', input, grip)
+
+  // full-screen tick ruler while scrubbing: aligned with the input but spanning
+  // the whole viewport, so the drag direction reads even outside the pane
+  let overlay: HTMLElement | null = null
+  let overlayGuide: HTMLElement | null = null
+  let overlayCenter = 0
+  const showOverlay = () => {
+    if (overlay) return
+    const doc = input.ownerDocument
+    const rect = input.getBoundingClientRect()
+    overlayCenter = rect.left + rect.width / 2
+    overlayGuide = h('div', 'tiao-drag-overlay-guide')
+    overlayGuide.style.top = `${rect.bottom - 6}px`
+    const marker = h('div', 'tiao-drag-overlay-marker')
+    marker.style.left = `${overlayCenter}px`
+    marker.style.top = `${rect.bottom - 8}px`
+    overlay = h('div', 'tiao-drag-overlay', overlayGuide, marker)
+    // the overlay lives on <body>, outside the pane's CSS variable scope
+    const cs = doc.defaultView?.getComputedStyle(input)
+    if (cs) {
+      overlay.style.setProperty('--tiao-fg-dim', cs.getPropertyValue('--tiao-fg-dim'))
+      overlay.style.setProperty('--tiao-accent', cs.getPropertyValue('--tiao-accent'))
+    }
+    doc.body.append(overlay)
+  }
+  const hideOverlay = () => {
+    overlay?.remove()
+    overlay = null
+    overlayGuide = null
+  }
 
   const constrain = (v: number): number => {
     const snapped = snap(v, step)
@@ -52,6 +81,15 @@ export function createScrubber(
     }, 0)
   }
 
+  const collapseSelection = () => {
+    try {
+      const end = input.value.length
+      input.setSelectionRange(end, end)
+    } catch {
+      /* selection ranges are best-effort for text-like inputs */
+    }
+  }
+
   let dragBase = 0
   const disposeDrag = draggable(input, {
     onStart: () => {
@@ -59,12 +97,12 @@ export function createScrubber(
     },
     onMove: (s) => {
       if (!s.moved || !input.readOnly) return
-      wrap.classList.add('tiao-scrubbing')
-      guide.style.backgroundPositionX = `calc(50% + ${s.dx}px)`
+      showOverlay()
+      if (overlayGuide) overlayGuide.style.backgroundPositionX = `${overlayCenter + s.dx}px`
       set(constrain(dragBase + s.dx * scale), false)
     },
     onEnd: (s) => {
-      wrap.classList.remove('tiao-scrubbing')
+      hideOverlay()
       if (!input.readOnly) return
       if (s.moved) {
         set(constrain(dragBase + s.dx * scale), true)
@@ -77,10 +115,12 @@ export function createScrubber(
 
   const commitText = () => {
     if (input.readOnly) return
+    collapseSelection()
     const parsed = parseNumberInput(input.value)
     if (parsed !== null) set(constrain(parsed), true)
     input.readOnly = true
     input.value = format(get())
+    collapseSelection()
   }
   const onKeyDown = (e: KeyboardEvent) => {
     if (input.readOnly) {
@@ -95,6 +135,7 @@ export function createScrubber(
     if (e.key === 'Escape') {
       input.readOnly = true
       input.value = format(get())
+      collapseSelection()
     }
   }
   input.addEventListener('blur', commitText)
@@ -108,6 +149,7 @@ export function createScrubber(
     element: wrap,
     activate: enterEdit,
     dispose: () => {
+      hideOverlay()
       disposeDrag()
       input.removeEventListener('blur', commitText)
       input.removeEventListener('keydown', onKeyDown)

@@ -1,0 +1,4196 @@
+On branch main
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	modified:   README.md
+	modified:   apps/playground/package.json
+	modified:   apps/playground/src/App.tsx
+	modified:   apps/playground/src/scene.ts
+	modified:   packages/core/src/blade.ts
+	modified:   packages/core/src/controls/color-model.ts
+	modified:   packages/core/src/controls/color.ts
+	modified:   packages/core/src/controls/monitor.ts
+	modified:   packages/core/src/controls/point.ts
+	modified:   packages/core/src/controls/scrubber.ts
+	modified:   packages/core/src/core.test.ts
+	modified:   packages/core/src/dom.ts
+	modified:   packages/core/src/index.ts
+	modified:   packages/core/src/pane-menu.ts
+	modified:   packages/core/src/pane.ts
+	modified:   packages/core/src/styles.css
+	modified:   packages/plugin-bezier/src/index.ts
+	modified:   packages/plugin-fps/src/index.ts
+	modified:   packages/react/src/index.ts
+	modified:   packages/react/src/manager.ts
+	modified:   packages/react/src/types.ts
+	modified:   packages/react/src/useControls.ts
+	modified:   pnpm-lock.yaml
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	.git-commands-output.txt
+	packages/core/src/controls/caret.ts
+	packages/plugin-camera/
+	packages/plugin-media/
+
+no changes added to commit (use "git add" and/or "git commit -a")
+---COMMAND_SEPARATOR---
+diff --git a/README.md b/README.md
+index f7af5b9..d7d1053 100644
+--- a/README.md
++++ b/README.md
+@@ -9,6 +9,7 @@ A themeable, draggable debug pane for tweaking parameters — tweakpane-style bi
+ | `@tiao/plugin-fps` | FPS graph blade |
+ | `@tiao/plugin-bezier` | Cubic-bezier easing editor input |
+ | `@tiao/plugin-radio-grid` | Segmented radio grid input |
++| `@tiao/plugin-media` | Image/video upload input (drag & drop) for WebGL/WebGPU textures |
+ | `@tiao/export-pane` | Pre-configured pane that exports a canvas to PNG / WebM / MP4 |
+ 
+ ## Quick start (vanilla)
+@@ -39,6 +40,7 @@ const folder = pane.addFolder({ title: 'Advanced', expanded: false }) // collaps
+ folder.addBinding(stats, 'fps', { readonly: true, view: 'graph', min: 0, max: 120 })
+ 
+ pane.addButton({ title: 'Reset' }).on('click', reset)
++pane.addButtonGroup({ label: 'zoom', buttons: { '0.5x': () => zoom(0.5), '1x': () => zoom(1) } })
+ pane.on('change', (ev) => console.log(ev.key, ev.value, ev.last))
+ 
+ pane.dispose() // full cleanup
+@@ -48,8 +50,9 @@ Styles are injected automatically on first pane creation. To manage CSS yourself
+ 
+ ### Pane chrome
+ 
+-- `anchor`: any corner or side center (`'top-left'`, `'top-center'`, `'right-center'`, ...), or `container: element` for inline panes
+-- Hover the title bar for a gear icon (or right-click the pane) to open the settings menu: toggle dragging and jump between the 8 anchor positions
++- `anchor`: any corner, side center, or `'center'` (`'top-left'`, `'top-center'`, `'right-center'`, ...), or `container: element` for inline panes
++- Hover the title bar for a gear icon (or right-click the pane) to open the Pane Settings panel: toggle dragging, switch the light/dark theme, pick the accent color, and jump between the 9 anchor positions on a mini window that mirrors your viewport's aspect ratio
++- The search icon in the title bar opens a filter row: rows are matched by label/title, folders holding a match are forced open, and a folder-title match keeps its whole subtree visible. `pane.filter(query)` / `pane.searchOpen` do the same programmatically
+ - `draggable: true` (default for floating panes); drag position, anchor, and the draggable toggle persist to `localStorage` when the pane has an `id`
+ - `toggleKey: '\`'` toggles visibility; `pane.hidden`, `pane.expanded` are settable
+ - `maxHeight: 500` (default) caps the pane height; content scrolls when it overflows
+@@ -62,9 +65,12 @@ All styling flows through CSS custom properties on `.tiao-pane` (`--tiao-bg`, `-
+ 
+ ```ts
+ new Pane({ theme: { accent: '#f0f', '--tiao-width': '320px' } })
+-pane.element.classList.add('tiao-theme-dark') // built-in dark theme
++pane.theme = 'dark'       // built-in dark theme ('light' | 'dark')
++pane.accent = '#ff0080'   // sets --tiao-accent
+ ```
+ 
++Theme and accent are also editable from the Pane Settings panel (gear icon or right-click), and both persist to `localStorage` when the pane has an `id`.
++
+ ## React
+ 
+ ```tsx
+@@ -117,14 +123,19 @@ if (import.meta.env.DEV) {
+ import { addFpsGraph } from '@tiao/plugin-fps'
+ import { registerBezierPlugin } from '@tiao/plugin-bezier'
+ import { registerRadioGridPlugin } from '@tiao/plugin-radio-grid'
++import { registerMediaPlugin, type MediaValue } from '@tiao/plugin-media'
+ 
+ addFpsGraph(pane)
+ registerBezierPlugin()
+ pane.addBinding(params, 'easing', { view: 'bezier' })          // [x1, y1, x2, y2]
+ registerRadioGridPlugin()
+ pane.addBinding(params, 'mode', { view: 'radiogrid', options: { Line: 'line', Scatter: 'scatter' } })
++registerMediaPlugin()
++pane.addBinding(params, 'texture', { view: 'media' })          // MediaValue
+ ```
+ 
++The media input takes a png/jpeg/webp image or mp4/webm video via drag & drop or click-to-browse. The bound value becomes the loaded `HTMLImageElement` or `HTMLVideoElement` (`null` when empty) — both are valid WebGL `TexImageSource`s; for WebGPU pass images through `createImageBitmap` and videos through `importExternalTexture`. Videos autoplay muted on loop, so re-uploading the element each frame gives animated textures.
++
+ ### Writing your own
+ 
+ A plugin claims a `(value, options)` pair and renders a view around a reactive `Value`:
+diff --git a/apps/playground/package.json b/apps/playground/package.json
+index c02395a..7454dab 100644
+--- a/apps/playground/package.json
++++ b/apps/playground/package.json
+@@ -13,7 +13,9 @@
+     "@tiao/core": "workspace:^",
+     "@tiao/export-pane": "workspace:^",
+     "@tiao/plugin-bezier": "workspace:^",
++    "@tiao/plugin-camera": "workspace:^",
+     "@tiao/plugin-fps": "workspace:^",
++    "@tiao/plugin-media": "workspace:^",
+     "@tiao/plugin-radio-grid": "workspace:^",
+     "@tiao/react": "workspace:^",
+     "react": "^18.3.1",
+diff --git a/apps/playground/src/App.tsx b/apps/playground/src/App.tsx
+index 61faead..961677d 100644
+--- a/apps/playground/src/App.tsx
++++ b/apps/playground/src/App.tsx
+@@ -1,23 +1,33 @@
+ import { useEffect, useRef } from 'react'
+ import { createExportPane } from '@tiao/export-pane'
+ import { registerBezierPlugin } from '@tiao/plugin-bezier'
++import { registerCameraPlugin } from '@tiao/plugin-camera'
+ import { addFpsGraph } from '@tiao/plugin-fps'
++import { registerMediaPlugin, type MediaValue } from '@tiao/plugin-media'
+ import { registerRadioGridPlugin } from '@tiao/plugin-radio-grid'
+-import { button, monitor, useControls } from '@tiao/react'
++import { button, buttonGroup, monitor, useControls } from '@tiao/react'
+ import { startScene, type SceneHandle, type SceneParams } from './scene'
+ import type { Pane } from '@tiao/core'
+ 
+ registerRadioGridPlugin()
+ registerBezierPlugin()
++registerCameraPlugin()
++registerMediaPlugin()
+ 
+ /** Contributes motion controls to the default pane from one component... */
+ function useMotionControls() {
+-  return useControls('Motion', {
++  const controls = useControls('Motion', {
+     running: true,
+     speed: { value: 1, min: 0, max: 4, step: 0.01 },
++    presets: buttonGroup({
++      '0.5x': () => controls.$set({ speed: 0.5 }),
++      '1x': () => controls.$set({ speed: 1 }),
++      '2x': () => controls.$set({ speed: 2 }),
++    }),
+     mode: { value: 'orbit', view: 'radiogrid', options: { Orbit: 'orbit', Wave: 'wave' }, columns: 2 },
+     center: { value: { x: 0, y: 0 }, x: { min: -1, max: 1, step: 0.01 }, y: { min: -1, max: 1, step: 0.01 } },
+   })
++  return controls
+ }
+ 
+ /** ...while a sibling component adds a Look folder to the same pane. */
+@@ -27,7 +37,9 @@ function useLookControls(scene: React.RefObject<SceneHandle | null>) {
+     size: { value: 2.5, min: 0.5, max: 10, step: 0.1 },
+     color: '#7dd3fc',
+     trail: { value: 0.12, min: 0.01, max: 1, step: 0.01 },
+-    fps: monitor(() => scene.current?.fps() ?? 0, { view: 'graph', min: 0, max: 120 }),
++    // drop an image/video to replace the dots with a sprite drawn per particle
++    sprite: { value: null as MediaValue, view: 'media' },
++    fps: monitor(() => scene.current?.fps() ?? 0, { view: 'graph', min: 0, max: 120, unit: 'FPS' }),
+     reset: button(() => localStorage.clear(), 'Clear saved pane state'),
+   })
+ }
+@@ -49,6 +61,7 @@ export function App() {
+     size: look.size,
+     color: look.color,
+     trail: look.trail,
++    sprite: look.sprite,
+   }
+ 
+   // scene lifecycle
+@@ -107,22 +120,47 @@ function buildKitchenSink(pane: Pane): Pane {
+     enabled: true,
+     blend: 'multiply',
+     tint: '#ff8800',
++    fade: '#22d3ee',
+     glow: 'rgba(120, 200, 255, 0.5)',
++    sky: 'hsl(200, 80%, 60%)',
++    warm: { h: 30, s: 90, v: 95 },
+     lch: 'oklch(0.7 0.15 200)',
+     offset: { x: 0.2, y: -0.3 },
+     rotation: { x: 0, y: 0, z: 0 },
+     easing: [0.25, 0.1, 0.25, 1] as [number, number, number, number],
++    flen: 55,
++    fnumber: 1.8,
+     quality: 'medium',
++    texture: null as MediaValue,
+     time: 0,
+   }
+   setInterval(() => {
+     params.time = performance.now() / 1000
+   }, 50)
+ 
+-  addFpsGraph(pane, { label: 'fps' })
++  // one labeled two-column graph, one full-width label-less graph
++  addFpsGraph(pane, { label: 'FPS' })
++  addFpsGraph(pane)
+ 
+   const basics = pane.addFolder({ title: 'Basics' })
+   basics.addBinding(params, 'exposure', { min: 0, max: 1, step: 0.01 })
++  basics.addButtonGroup({
++    label: 'presets',
++    buttons: {
++      Low: () => {
++        params.exposure = 0.2
++        pane.refresh()
++      },
++      Mid: () => {
++        params.exposure = 0.6
++        pane.refresh()
++      },
++      High: () => {
++        params.exposure = 1
++        pane.refresh()
++      },
++    },
++  })
+   basics.addBinding(params, 'iterations', { min: 1, max: 64, step: 1 })
+   basics.addBinding(params, 'seed')
+   basics.addBinding(params, 'label')
+@@ -134,10 +172,14 @@ function buildKitchenSink(pane: Pane): Pane {
+ 
+   const color = pane.addFolder({ title: 'Color', collapsible: false })
+   color.addBinding(params, 'tint')
++  color.addBinding(params, 'fade', { label: 'fade (opt-in a)', color: { alpha: true } })
+   color.addBinding(params, 'glow', { label: 'glow (alpha)' })
++  color.addBinding(params, 'sky', { label: 'hsl' })
++  color.addBinding(params, 'warm', { label: 'hsv object' })
+   color.addBinding(params, 'lch', { label: 'oklch' })
++  color.addSeparator()
+ 
+-  const vectors = pane.addFolder({ title: 'Vectors' })
++  const vectors = pane.addFolder({ title: 'Vectors', color: '#fb923c' })
+   vectors.addBinding(params, 'offset', {
+     x: { min: -1, max: 1, step: 0.01 },
+     y: { min: -1, max: 1, step: 0.01 },
+@@ -147,6 +189,25 @@ function buildKitchenSink(pane: Pane): Pane {
+   const deeper = nested.addFolder({ title: 'Deeper' })
+   deeper.addBinding(params, 'iterations', { min: 1, max: 64, step: 1, label: 'depth demo' })
+ 
++  const camera = pane.addFolder({ title: 'Camera', expanded: false })
++  camera.addBinding(params, 'flen', { view: 'cameraring', series: 0, label: 'flen (0)' })
++  camera.addBinding(params, 'flen', {
++    view: 'cameraring',
++    series: 1,
++    label: 'flen (1)',
++    unit: { ticks: 10, pixels: 40, value: 0.2 },
++    min: 1,
++    step: 0.02,
++  })
++  camera.addBinding(params, 'flen', { view: 'cameraring', series: 2, label: 'flen (2)' })
++  camera.addBinding(params, 'flen', { view: 'cameraring', wide: true, label: 'flen (wide)' })
++  camera.addBinding(params, 'fnumber', {
++    view: 'camerawheel',
++    label: 'f-number',
++    amount: 0.01,
++    min: 0,
++  })
++
+   const plugins = pane.addFolder({ title: 'Plugins', expanded: false })
+   plugins.addBinding(params, 'easing', { view: 'bezier' })
+   plugins.addBinding(params, 'quality', {
+@@ -154,23 +215,23 @@ function buildKitchenSink(pane: Pane): Pane {
+     options: { Low: 'low', Medium: 'medium', High: 'high' },
+     columns: 3,
+   })
++  plugins
++    .addBinding(params, 'texture', { view: 'media' })
++    .on('change', (ev) => console.log('texture source:', ev.value))
+ 
+-  const tabs = pane.addTab({ pages: [{ title: 'Monitor' }, { title: 'Theme' }] })
++  // theme + accent live in the pane settings menu (gear / right-click)
++  const tabs = pane.addTab({ pages: [{ title: 'Monitor' }, { title: 'Info' }] })
+   tabs.pages[0]!.addBinding(params, 'time', { readonly: true })
+-  tabs.pages[0]!.addBinding(params, 'time', { readonly: true, view: 'graph', label: 'time graph' })
+-
+-  const themes = { theme: 'light' }
+-  tabs.pages[1]!.addBinding(themes, 'theme', {
+-    view: 'radiogrid',
+-    options: { Light: 'light', Dark: 'dark' },
+-    columns: 2,
+-  })
+-  tabs.pages[1]!.addBinding({ accent: '#1a1a1a' }, 'accent').on('change', (ev) => {
+-    pane.applyTheme({ accent: String(ev.value) })
+-  })
+-  pane.on('change', () => {
+-    pane.element.classList.toggle('tiao-theme-dark', themes.theme === 'dark')
++  tabs.pages[0]!.addBinding(params, 'time', { readonly: true, view: 'graph', label: 'time graph', unit: 's' })
++  // bufferSize on a plain monitor renders a mini scrollable console of the last N values
++  tabs.pages[0]!.addBinding(params, 'time', {
++    readonly: true,
++    label: 'time log',
++    bufferSize: 10,
++    interval: 500,
++    format: (v: number) => v.toFixed(2),
+   })
++  tabs.pages[1]!.addBinding({ note: 'right-click for settings' }, 'note', { readonly: true })
+ 
+   return pane
+ }
+diff --git a/apps/playground/src/scene.ts b/apps/playground/src/scene.ts
+index eee906f..4d7ce7b 100644
+--- a/apps/playground/src/scene.ts
++++ b/apps/playground/src/scene.ts
+@@ -1,3 +1,5 @@
++import type { MediaValue } from '@tiao/plugin-media'
++
+ export interface SceneParams {
+   speed: number
+   count: number
+@@ -7,6 +9,8 @@ export interface SceneParams {
+   center: { x: number; y: number }
+   mode: 'orbit' | 'wave'
+   running: boolean
++  /** uploaded image/video drawn as the particle sprite (dots when null) */
++  sprite: MediaValue
+ }
+ 
+ export interface SceneHandle {
+@@ -48,6 +52,13 @@ export function startScene(canvas: HTMLCanvasElement, getParams: () => ScenePara
+     const cy = h / 2 + p.center.y * h * 0.4
+     ctx.fillStyle = p.color
+ 
++    // uploaded media becomes the particle sprite — the same element a WebGL/
++    // WebGPU scene would upload as a texture each frame
++    const sprite = p.sprite
++    const spriteReady =
++      sprite !== null &&
++      (sprite instanceof HTMLImageElement ? sprite.naturalWidth > 0 : sprite.videoWidth > 0)
++
+     for (let i = 0; i < p.count; i++) {
+       const a = (i / p.count) * Math.PI * 2
+       let x: number
+@@ -60,9 +71,15 @@ export function startScene(canvas: HTMLCanvasElement, getParams: () => ScenePara
+         x = (i / p.count) * w
+         y = cy + Math.sin(a * 3 + t * 2) * h * 0.2 * Math.sin(t * 0.5 + i * 0.05)
+       }
+-      ctx.beginPath()
+-      ctx.arc(x, y, p.size * devicePixelRatio, 0, Math.PI * 2)
+-      ctx.fill()
++      const radius = p.size * devicePixelRatio
++      if (spriteReady) {
++        const s = radius * 4
++        ctx.drawImage(sprite, x - s / 2, y - s / 2, s, s)
++      } else {
++        ctx.beginPath()
++        ctx.arc(x, y, radius, 0, Math.PI * 2)
++        ctx.fill()
++      }
+     }
+   }
+   raf = requestAnimationFrame(frame)
+diff --git a/packages/core/src/blade.ts b/packages/core/src/blade.ts
+index 5cf0651..84f82b9 100644
+--- a/packages/core/src/blade.ts
++++ b/packages/core/src/blade.ts
+@@ -10,6 +10,24 @@ export interface BladeHost {
+   registry: PluginRegistry
+ }
+ 
++/**
++ * When a click lands outside a focused pane input, the pane blurs it on
++ * pointerdown (see Pane). If that click lands on the same row, its later
++ * `click` must not immediately re-activate the input we just deselected.
++ */
++let lastPointerBlurAt = 0
++let lastPointerBlurRow: Element | null = null
++
++/** internal: called by the Pane right before it blurs an input from a pointerdown */
++export function markPointerBlur(row: Element | null): void {
++  lastPointerBlurAt = Date.now()
++  lastPointerBlurRow = row
++}
++
++function clickFollowsPointerBlur(row: Element): boolean {
++  return lastPointerBlurRow === row && Date.now() - lastPointerBlurAt < 400
++}
++
+ export interface TiaoChangeEvent<T = unknown> {
+   value: T
+   last: boolean
+@@ -48,6 +66,18 @@ export abstract class Item {
+     this.element.classList.toggle('tiao-disabled', v)
+   }
+ 
++  /** internal: hide/show against a search query; returns whether this item matched */
++  applySearch(query: string): boolean {
++    const match = query === '' || this.searchText().toLowerCase().includes(query)
++    this.element.classList.toggle('tiao-search-miss', !match)
++    return match
++  }
++
++  /** text a search query matches against (labels, titles, ...) */
++  protected searchText(): string {
++    return ''
++  }
++
+   dispose(): void {
+     if (this.disposed) return
+     this.disposed = true
+@@ -94,7 +124,13 @@ export abstract class Container extends Item {
+     return api
+   }
+ 
+-  addFolder(params: { title: string; expanded?: boolean; collapsible?: boolean }): FolderApi {
++  addFolder(params: {
++    title: string
++    expanded?: boolean
++    collapsible?: boolean
++    /** tints the folder title; caret and depth line get softer mixes of it */
++    color?: string
++  }): FolderApi {
+     const api = new FolderApi(this.host, params)
+     this.attach(api)
+     return api
+@@ -106,6 +142,12 @@ export abstract class Container extends Item {
+     return api
+   }
+ 
++  addButtonGroup(params: { label?: string; buttons: Record<string, () => void> }): ButtonGroupApi {
++    const api = new ButtonGroupApi(this.host, params)
++    this.attach(api)
++    return api
++  }
++
+   addTab(params: { pages: { title: string }[] }): TabApi {
+     const api = new TabApi(this.host, params)
+     this.attach(api)
+@@ -135,12 +177,37 @@ export abstract class Container extends Item {
+       this.children.push(item)
+       this.rack.append(item.element)
+     }
++    if (item instanceof FolderApi) item.updateDepth()
++    this.notifyStructure()
+   }
+ 
+   /** internal: remove bookkeeping only (called from Item.dispose) */
+   detach(item: Item): void {
+     const i = this.children.indexOf(item)
+     if (i >= 0) this.children.splice(i, 1)
++    this.notifyStructure()
++  }
++
++  /** internal: bubbles child add/remove to the root (the Pane renumbers sections) */
++  notifyStructure(): void {
++    this.parent?.notifyStructure()
++  }
++
++  /**
++   * A container matches when its own title matches (whole subtree stays
++   * visible) or when any descendant matches (folder shown, forced open so the
++   * hits are reachable).
++   */
++  override applySearch(query: string): boolean {
++    const titleMatch = query === '' || this.searchText().toLowerCase().includes(query)
++    let childMatch = false
++    for (const child of this.children) {
++      if (child.applySearch(titleMatch ? '' : query)) childMatch = true
++    }
++    const match = titleMatch || childMatch
++    this.element.classList.toggle('tiao-search-miss', !match)
++    this.element.classList.toggle('tiao-search-open', query !== '' && childMatch && !titleMatch)
++    return match
+   }
+ 
+   /** re-read all bindings in this subtree from their targets */
+@@ -212,11 +279,14 @@ export class BindingApi<T> extends Item {
+       )
+     }
+ 
+-    // clicking the label area activates the control (focus input, open picker, ...)
++    // clicking the row outside the concrete control activates it (focus input, open picker, ...)
+     if (view.activate && !view.full) {
+       this.element.classList.add('tiao-row-activate')
+       const onRowClick = (e: MouseEvent) => {
+-        if ((e.target as Element | null)?.closest?.('.tiao-control')) return
++        const target = e.target as Node | null
++        if (target && view.element.contains(target)) return
++        // this click just deselected this row's input; don't immediately focus it again
++        if (clickFollowsPointerBlur(this.element)) return
+         view.activate?.()
+       }
+       this.element.addEventListener('click', onRowClick)
+@@ -255,6 +325,10 @@ export class BindingApi<T> extends Item {
+     if (this.labelEl) this.labelEl.textContent = v
+   }
+ 
++  protected override searchText(): string {
++    return `${this.label} ${this.key}`
++  }
++
+   on(name: 'change', fn: (ev: TiaoChangeEvent<T>) => void): () => void {
+     return this.bindingEmitter.on(name, fn)
+   }
+@@ -279,10 +353,12 @@ export class ButtonApi extends Item {
+   readonly element: HTMLElement
+   private buttonEmitter = new Emitter<ButtonEvents>()
+   private buttonEl: HTMLButtonElement
++  private labelText: string
+ 
+   constructor(host: BladeHost, params: { title: string; label?: string }) {
+     super()
+     void host
++    this.labelText = params.label ?? ''
+     this.buttonEl = h('button', 'tiao-button', params.title)
+     this.buttonEl.type = 'button'
+     const onClick = () => {
+@@ -303,6 +379,10 @@ export class ButtonApi extends Item {
+     this.buttonEl.textContent = v
+   }
+ 
++  protected override searchText(): string {
++    return `${this.title} ${this.labelText}`
++  }
++
+   on(name: 'click', fn: (ev: { target: ButtonApi }) => void): () => void {
+     return this.buttonEmitter.on(name, fn)
+   }
+@@ -313,6 +393,37 @@ export class ButtonApi extends Item {
+   }
+ }
+ 
++/** A row of equally-styled action buttons, each with its own callback. */
++export class ButtonGroupApi extends Item {
++  readonly element: HTMLElement
++  private titles: string[]
++
++  constructor(host: BladeHost, params: { label?: string; buttons: Record<string, () => void> }) {
++    super()
++    void host
++    this.titles = Object.keys(params.buttons)
++    const group = h('div', 'tiao-btngroup')
++    for (const [title, onClick] of Object.entries(params.buttons)) {
++      const btn = h('button', 'tiao-button', title)
++      btn.type = 'button'
++      const handler = () => {
++        if (!this.disabled) onClick()
++      }
++      btn.addEventListener('click', handler)
++      this.disposers.push(() => btn.removeEventListener('click', handler))
++      group.append(btn)
++    }
++    this.element = params.label
++      ? h('div', 'tiao-row', h('div', 'tiao-label', params.label), h('div', 'tiao-control', group))
++      : h('div', 'tiao-row tiao-row-full', group)
++  }
++
++  protected override searchText(): string {
++    const label = this.element.querySelector('.tiao-label')?.textContent ?? ''
++    return `${label} ${this.titles.join(' ')}`
++  }
++}
++
+ export class SeparatorApi extends Item {
+   readonly element: HTMLElement
+ 
+@@ -350,7 +461,10 @@ export class FolderApi extends Container {
+ 
+   private collapsible: boolean
+ 
+-  constructor(host: BladeHost, params: { title: string; expanded?: boolean; collapsible?: boolean }) {
++  constructor(
++    host: BladeHost,
++    params: { title: string; expanded?: boolean; collapsible?: boolean; color?: string },
++  ) {
+     super(host)
+     this.collapsible = params.collapsible ?? true
+     this._expanded = this.collapsible ? params.expanded ?? true : true
+@@ -358,13 +472,21 @@ export class FolderApi extends Container {
+     this.headerEl = h(
+       'button',
+       'tiao-folder-header',
+-      h('span', 'tiao-folder-index'),
++      icon('triangle'),
+       h('span', 'tiao-folder-title', params.title),
+-      icon('chevron'),
+     )
+     this.headerEl.type = 'button'
+-    const body = h('div', 'tiao-folder-body', h('div', 'tiao-folder-clip', this.rack))
++    // the depth line doubles as a collapse control (keyboard users have the header)
++    const lineEl = h('button', 'tiao-folder-line')
++    lineEl.type = 'button'
++    lineEl.tabIndex = -1
++    lineEl.setAttribute('aria-hidden', 'true')
++    const body = h('div', 'tiao-folder-body', h('div', 'tiao-folder-clip', this.rack), lineEl)
+     this.element = h('div', 'tiao-folder', this.headerEl, body)
++    if (params.color) {
++      this.element.classList.add('tiao-folder-colored')
++      this.element.style.setProperty('--tiao-folder-color', params.color)
++    }
+     this.applyExpanded()
+ 
+     if (this.collapsible) {
+@@ -372,7 +494,11 @@ export class FolderApi extends Container {
+         this.expanded = !this.expanded
+       }
+       this.headerEl.addEventListener('click', onClick)
+-      this.disposers.push(() => this.headerEl.removeEventListener('click', onClick))
++      lineEl.addEventListener('click', onClick)
++      this.disposers.push(() => {
++        this.headerEl.removeEventListener('click', onClick)
++        lineEl.removeEventListener('click', onClick)
++      })
+     } else {
+       this.element.classList.add('tiao-folder-static')
+       this.headerEl.tabIndex = -1
+@@ -387,6 +513,20 @@ export class FolderApi extends Container {
+     if (el) el.textContent = v
+   }
+ 
++  /** internal: show/clear the section number before the title (pane "Numbers" setting) */
++  setSectionIndex(index: string | null): void {
++    let el = this.headerEl.querySelector('.tiao-folder-index')
++    if (index === null) {
++      el?.remove()
++      return
++    }
++    if (!el) {
++      el = h('span', 'tiao-folder-index')
++      this.headerEl.querySelector('.tiao-folder-title')?.before(el)
++    }
++    el.textContent = index
++  }
++
+   get expanded(): boolean {
+     return this._expanded
+   }
+@@ -396,6 +536,23 @@ export class FolderApi extends Container {
+     this.applyExpanded()
+   }
+ 
++  protected override searchText(): string {
++    return this.title
++  }
++
++  /** internal: exposes the folder nesting depth to CSS so control columns
++      stay aligned across indent levels (see .tiao-label) */
++  updateDepth(): void {
++    let depth = 1
++    for (let p = this.parent; p; p = p.parent) {
++      if (p instanceof FolderApi) depth++
++    }
++    this.rack.style.setProperty('--tiao-depth', String(depth))
++    for (const child of this.children) {
++      if (child instanceof FolderApi) child.updateDepth()
++    }
++  }
++
+   private applyExpanded(): void {
+     this.element.classList.toggle('tiao-expanded', this._expanded)
+     this.headerEl.setAttribute('aria-expanded', String(this._expanded))
+@@ -411,6 +568,10 @@ export class TabPageApi extends Container {
+     this.rack = h('div', 'tiao-rack')
+     this.element = h('div', 'tiao-tab-page', this.rack)
+   }
++
++  protected override searchText(): string {
++    return this.title
++  }
+ }
+ 
+ export class TabApi extends Item {
+@@ -463,6 +624,14 @@ export class TabApi extends Item {
+     for (const p of this.pages) p.refresh()
+   }
+ 
++  /** the tab strip stays visible while any page holds a match */
++  override applySearch(query: string): boolean {
++    let match = false
++    for (const p of this.pages) if (p.applySearch(query)) match = true
++    this.element.classList.toggle('tiao-search-miss', !match)
++    return match
++  }
++
+   private applySelection(): void {
+     this.pages.forEach((p, i) => {
+       p.element.classList.toggle('tiao-selected', i === this._selectedIndex)
+diff --git a/packages/core/src/controls/color-model.ts b/packages/core/src/controls/color-model.ts
+index 7f4825d..c0a130a 100644
+--- a/packages/core/src/controls/color-model.ts
++++ b/packages/core/src/controls/color-model.ts
+@@ -13,8 +13,16 @@ export type ColorFormat =
+   | 'hex-alpha' // '#rrggbbaa'
+   | 'rgb-string' // 'rgb(r, g, b)'
+   | 'rgba-string'
++  | 'hsl-string' // 'hsl(h, s%, l%)'
++  | 'hsla-string'
++  | 'hsv-string' // 'hsv(h, s%, v%)' (tweakpane-style, not CSS)
++  | 'hsva-string'
+   | 'object' // {r,g,b}
+   | 'object-alpha' // {r,g,b,a}
++  | 'object-hsl' // {h,s,l} with s/l 0-100
++  | 'object-hsl-alpha'
++  | 'object-hsv' // {h,s,v} with s/v 0-100
++  | 'object-hsv-alpha'
+   | 'number' // 0xrrggbb
+   | 'oklch' // 'oklch(L C H)'
+   | 'oklch-alpha' // 'oklch(L C H / a)'
+@@ -28,6 +36,8 @@ export interface ParsedColor {
+ 
+ const HEX_RE = /^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i
+ const RGB_RE = /^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*(?:,\s*([\d.]+)\s*)?\)$/i
++const HSL_RE =
++  /^(hsla?|hsva?)\(\s*(-?[\d.]+)(?:deg)?\s*[, ]\s*([\d.]+)%?\s*[, ]\s*([\d.]+)%?\s*(?:[,/]\s*([\d.]+)(%)?\s*)?\)$/i
+ const OK_RE =
+   /^(oklch|oklab)\(\s*(-?[\d.]+)(%)?\s+(-?[\d.]+)%?\s+(-?[\d.]+)(?:deg)?\s*(?:\/\s*(-?[\d.]+)(%)?\s*)?\)$/i
+ 
+@@ -51,6 +61,21 @@ export function parseColor(value: unknown): ParsedColor | null {
+       format: hasAlpha ? 'object-alpha' : 'object',
+     }
+   }
++  // {h,s,l} / {h,s,v} objects with s/l/v in 0-100 (tweakpane conventions)
++  if (isRecord(value) && typeof value['h'] === 'number' && typeof value['s'] === 'number') {
++    const hasAlpha = typeof value['a'] === 'number'
++    const a = hasAlpha ? (value['a'] as number) : 1
++    const hue = value['h'] as number
++    const s = (value['s'] as number) / 100
++    if (typeof value['l'] === 'number') {
++      const { r, g, b } = hslToRgb(hue, s, (value['l'] as number) / 100)
++      return { rgba: { r, g, b, a }, format: hasAlpha ? 'object-hsl-alpha' : 'object-hsl' }
++    }
++    if (typeof value['v'] === 'number') {
++      const { r, g, b } = hsvToRgb(hue, s, (value['v'] as number) / 100)
++      return { rgba: { r, g, b, a }, format: hasAlpha ? 'object-hsv-alpha' : 'object-hsv' }
++    }
++  }
+   return null
+ }
+ 
+@@ -88,6 +113,20 @@ function parseColorString(s: string): ParsedColor | null {
+       format: a !== undefined ? 'rgba-string' : 'rgb-string',
+     }
+   }
++  const hs = HSL_RE.exec(str)
++  if (hs) {
++    const [, fn, hRaw, sRaw, thirdRaw, aRaw, aPct] = hs
++    const isHsv = (fn as string).toLowerCase().startsWith('hsv')
++    const hue = ((Number(hRaw) % 360) + 360) % 360
++    const s = clamp(Number(sRaw) / 100, 0, 1)
++    const third = clamp(Number(thirdRaw) / 100, 0, 1)
++    const a = aRaw !== undefined ? clamp(Number(aRaw) / (aPct ? 100 : 1), 0, 1) : 1
++    const { r, g, b } = isHsv ? hsvToRgb(hue, s, third) : hslToRgb(hue, s, third)
++    const base: ColorFormat = isHsv
++      ? aRaw !== undefined ? 'hsva-string' : 'hsv-string'
++      : aRaw !== undefined ? 'hsla-string' : 'hsl-string'
++    return { rgba: { r, g, b, a }, format: base }
++  }
+   const ok = OK_RE.exec(str)
+   if (ok) {
+     const [, fn, lRaw, lPct, second, third, aRaw, aPct] = ok
+@@ -121,10 +160,34 @@ export function serializeColor(rgba: Rgba, format: ColorFormat): unknown {
+       return `rgb(${r}, ${g}, ${b})`
+     case 'rgba-string':
+       return `rgba(${r}, ${g}, ${b}, ${round2(a)})`
++    case 'hsl-string':
++    case 'hsla-string': {
++      const { h: hh, s, l } = rgbToHsl(rgba.r, rgba.g, rgba.b)
++      const body = `${Math.round(hh)}, ${Math.round(s * 100)}%, ${Math.round(l * 100)}%`
++      return format === 'hsla-string' ? `hsla(${body}, ${round2(a)})` : `hsl(${body})`
++    }
++    case 'hsv-string':
++    case 'hsva-string': {
++      const { h: hh, s, v } = rgbToHsv(rgba.r, rgba.g, rgba.b)
++      const body = `${Math.round(hh)}, ${Math.round(s * 100)}%, ${Math.round(v * 100)}%`
++      return format === 'hsva-string' ? `hsva(${body}, ${round2(a)})` : `hsv(${body})`
++    }
+     case 'object':
+       return { r, g, b }
+     case 'object-alpha':
+       return { r, g, b, a: round2(a) }
++    case 'object-hsl':
++    case 'object-hsl-alpha': {
++      const { h: hh, s, l } = rgbToHsl(rgba.r, rgba.g, rgba.b)
++      const base = { h: Math.round(hh), s: Math.round(s * 100), l: Math.round(l * 100) }
++      return format === 'object-hsl-alpha' ? { ...base, a: round2(a) } : base
++    }
++    case 'object-hsv':
++    case 'object-hsv-alpha': {
++      const { h: hh, s, v } = rgbToHsv(rgba.r, rgba.g, rgba.b)
++      const base = { h: Math.round(hh), s: Math.round(s * 100), v: Math.round(v * 100) }
++      return format === 'object-hsv-alpha' ? { ...base, a: round2(a) } : base
++    }
+     case 'number':
+       return (r << 16) | (g << 8) | b
+     case 'oklch':
+@@ -153,7 +216,11 @@ export function formatHasAlpha(format: ColorFormat): boolean {
+   return (
+     format === 'hex-alpha' ||
+     format === 'rgba-string' ||
++    format === 'hsla-string' ||
++    format === 'hsva-string' ||
+     format === 'object-alpha' ||
++    format === 'object-hsl-alpha' ||
++    format === 'object-hsv-alpha' ||
+     format === 'oklch-alpha' ||
+     format === 'oklab-alpha'
+   )
+@@ -161,7 +228,7 @@ export function formatHasAlpha(format: ColorFormat): boolean {
+ 
+ /** true when the format serializes to a string (drives the row text field) */
+ export function formatIsString(format: ColorFormat): boolean {
+-  return format !== 'object' && format !== 'object-alpha' && format !== 'number'
++  return format !== 'number' && !format.startsWith('object')
+ }
+ 
+ export function toCss(rgba: Rgba): string {
+@@ -298,6 +365,20 @@ export function rgbToHsv(r: number, g: number, b: number): Hsv {
+   return { h, s: max === 0 ? 0 : d / max, v: max }
+ }
+ 
++/** h 0-360, s/l 0-1 */
++export function rgbToHsl(r: number, g: number, b: number): { h: number; s: number; l: number } {
++  const { h, s: sv, v } = rgbToHsv(r, g, b)
++  const l = v * (1 - sv / 2)
++  const s = l === 0 || l === 1 ? 0 : (v - l) / Math.min(l, 1 - l)
++  return { h, s, l }
++}
++
++export function hslToRgb(h: number, s: number, l: number): { r: number; g: number; b: number } {
++  const v = l + s * Math.min(l, 1 - l)
++  const sv = v === 0 ? 0 : 2 * (1 - l / v)
++  return hsvToRgb(h, sv, v)
++}
++
+ export function hsvToRgb(h: number, s: number, v: number): { r: number; g: number; b: number } {
+   const c = v * s
+   const x = c * (1 - Math.abs(((h / 60) % 2) - 1))
+diff --git a/packages/core/src/controls/color.ts b/packages/core/src/controls/color.ts
+index 17436a7..9f172b3 100644
+--- a/packages/core/src/controls/color.ts
++++ b/packages/core/src/controls/color.ts
+@@ -22,8 +22,10 @@ import type { InputPlugin, PluginContext } from '../plugin'
+ /**
+  * Color input: swatch + format-aware text field, with a floating picker popup
+  * (SV area, hue bar, optional alpha bar) like tweakpane.
+- * Accepts '#hex', 'rgb()/rgba()', 'oklch()/oklab()' strings, {r,g,b(,a)} objects
+- * and 0xffffff numbers; writes back in the same format.
++ * Accepts '#hex', 'rgb()/rgba()', 'hsl()/hsla()', 'hsv()/hsva()',
++ * 'oklch()/oklab()' strings, {r,g,b(,a)} / {h,s,l(,a)} / {h,s,v(,a)} objects
++ * and 0xffffff numbers; writes back in the same format. Alpha is enabled via
++ * `color: { alpha: true }` or inferred from the initial value's format.
+  */
+ export const colorInputPlugin: InputPlugin<unknown> = {
+   id: 'color',
+@@ -42,18 +44,22 @@ export const colorInputPlugin: InputPlugin<unknown> = {
+   },
+ }
+ 
+-type DisplayFamily = 'hex' | 'rgb' | 'oklch' | 'oklab'
++type DisplayFamily = 'hex' | 'rgb' | 'hsl' | 'hsv' | 'oklch' | 'oklab'
+ 
+ const FAMILIES: Array<{ id: DisplayFamily; label: string }> = [
+   { id: 'hex', label: 'Hex' },
+   { id: 'rgb', label: 'RGB' },
++  { id: 'hsl', label: 'HSL' },
++  { id: 'hsv', label: 'HSV' },
+   { id: 'oklch', label: 'OKLCH' },
+   { id: 'oklab', label: 'OKLAB' },
+ ]
+ 
+ function familyOf(format: ColorFormat): DisplayFamily {
+-  if (format.startsWith('oklch')) return 'oklch'
+-  if (format.startsWith('oklab')) return 'oklab'
++  if (format.includes('oklch')) return 'oklch'
++  if (format.includes('oklab')) return 'oklab'
++  if (format.includes('hsv')) return 'hsv'
++  if (format.includes('hsl')) return 'hsl'
+   if (format.startsWith('rgb')) return 'rgb'
+   return 'hex'
+ }
+@@ -64,6 +70,10 @@ function displayFormat(family: DisplayFamily, alpha: boolean): ColorFormat {
+       return alpha ? 'hex-alpha' : 'hex'
+     case 'rgb':
+       return alpha ? 'rgba-string' : 'rgb-string'
++    case 'hsl':
++      return alpha ? 'hsla-string' : 'hsl-string'
++    case 'hsv':
++      return alpha ? 'hsva-string' : 'hsv-string'
+     case 'oklch':
+       return alpha ? 'oklch-alpha' : 'oklch'
+     case 'oklab':
+@@ -148,9 +158,11 @@ function createColorView(ctx: PluginContext<unknown>) {
+   }
+ 
+   // format dropdown + matching text field
+-  // oklab renders identically to oklch in the picker, so it's only offered
+-  // to bindings that already use it
+-  const families = FAMILIES.filter((f) => f.id !== 'oklab' || family === 'oklab')
++  // oklab (renders like oklch) and hsv (not a CSS notation) are only offered
++  // to bindings that already use them
++  const families = FAMILIES.filter(
++    (f) => (f.id !== 'oklab' && f.id !== 'hsv') || family === f.id,
++  )
+   const modeSelect = h('select', 'tiao-select')
+   for (const f of families) {
+     const opt = ctx.document.createElement('option')
+diff --git a/packages/core/src/controls/monitor.ts b/packages/core/src/controls/monitor.ts
+index 94fecfd..192143d 100644
+--- a/packages/core/src/controls/monitor.ts
++++ b/packages/core/src/controls/monitor.ts
+@@ -2,7 +2,7 @@ import { h } from '../dom'
+ import { formatNumber } from '../util'
+ import type { MonitorPlugin, PluginContext } from '../plugin'
+ 
+-/** Readonly text display for any value. */
++/** Readonly text display for any value; bufferSize > 1 turns it into a log. */
+ export const textMonitorPlugin: MonitorPlugin<unknown> = {
+   id: 'text',
+   type: 'monitor',
+@@ -11,6 +11,9 @@ export const textMonitorPlugin: MonitorPlugin<unknown> = {
+   },
+   create(ctx) {
+     const format = (ctx.options.format as ((v: unknown) => string) | undefined) ?? defaultFormat
++    const bufferSize = typeof ctx.options['bufferSize'] === 'number' ? ctx.options['bufferSize'] : 1
++    if (bufferSize > 1) return { element: createLog(ctx, bufferSize, format) }
++
+     const el = h('div', 'tiao-monitor-text', format(ctx.value.get()))
+     ctx.onDispose(
+       ctx.value.subscribe((v) => {
+@@ -22,6 +25,33 @@ export const textMonitorPlugin: MonitorPlugin<unknown> = {
+   },
+ }
+ 
++const DEFAULT_LOG_ROWS = 3
++
++/**
++ * Mini scrollable console (tweakpane bufferSize behavior): keeps the last
++ * `bufferSize` values as lines, newest at the bottom, pinned to the tail
++ * unless the user scrolled up to read history.
++ */
++function createLog(
++  ctx: PluginContext<unknown>,
++  bufferSize: number,
++  format: (v: unknown) => string,
++): HTMLElement {
++  const rows = typeof ctx.options['rows'] === 'number' ? ctx.options['rows'] : DEFAULT_LOG_ROWS
++  const el = h('div', 'tiao-monitor-log')
++  el.style.setProperty('--tiao-log-rows', String(rows))
++
++  const push = (v: unknown) => {
++    const stick = el.scrollTop + el.clientHeight >= el.scrollHeight - 2
++    el.append(h('div', 'tiao-monitor-log-line', format(v)))
++    while (el.childElementCount > bufferSize) el.firstElementChild?.remove()
++    if (stick) el.scrollTop = el.scrollHeight
++  }
++  push(ctx.value.get())
++  ctx.onDispose(ctx.value.subscribe(push))
++  return el
++}
++
+ function defaultFormat(v: unknown): string {
+   if (typeof v === 'number') return formatNumber(v)
+   if (typeof v === 'string') return v
+@@ -46,7 +76,10 @@ export function createGraph(ctx: PluginContext<number>): HTMLElement {
+   const bufferSize = (ctx.options['bufferSize'] as number | undefined) ?? DEFAULT_BUFFER
+   const buffer: number[] = []
+   const canvas = h('canvas', 'tiao-graph-canvas')
+-  const valueEl = h('span', 'tiao-graph-value')
++  const numberEl = h('span', 'tiao-graph-number')
++  // unit (e.g. "s", "FPS") renders after the number in a subtler color
++  const unit = typeof ctx.options['unit'] === 'string' ? ctx.options['unit'] : ''
++  const valueEl = h('span', 'tiao-graph-value', numberEl, unit ? h('span', 'tiao-graph-unit', unit) : null)
+   const el = h('div', 'tiao-graph', canvas, valueEl)
+ 
+   const explicitMin = ctx.options.min
+@@ -104,7 +137,7 @@ export function createGraph(ctx: PluginContext<number>): HTMLElement {
+     ctx.value.subscribe((v) => {
+       buffer.push(v)
+       if (buffer.length > bufferSize) buffer.splice(0, buffer.length - bufferSize)
+-      valueEl.textContent = format(v)
++      numberEl.textContent = format(v)
+       draw()
+     }),
+   )
+diff --git a/packages/core/src/controls/point.ts b/packages/core/src/controls/point.ts
+index 4983cbb..5e1094c 100644
+--- a/packages/core/src/controls/point.ts
++++ b/packages/core/src/controls/point.ts
+@@ -79,9 +79,10 @@ export const pointInputPlugin: InputPlugin<PointValue> = {
+       const onClick = () => popup.toggle()
+       toggle.addEventListener('click', onClick)
+       ctx.onDispose(() => toggle.removeEventListener('click', onClick))
+-    } else {
+-      root.append(fields)
++      // clicking the row label opens the pad editor
++      return { element: root, activate: () => popup.toggle() }
+     }
++    root.append(fields)
+     return { element: root }
+   },
+ }
+diff --git a/packages/core/src/controls/scrubber.ts b/packages/core/src/controls/scrubber.ts
+index 463ce21..3da7e47 100644
+--- a/packages/core/src/controls/scrubber.ts
++++ b/packages/core/src/controls/scrubber.ts
+@@ -30,10 +30,39 @@ export function createScrubber(
+   input.inputMode = 'decimal'
+   input.readOnly = true
+   input.value = format(get())
+-  // left grip dots signal draggability; tick ruler shows while scrubbing
++  // left grip dots signal draggability
+   const grip = h('div', 'tiao-scrub-grip')
+-  const guide = h('div', 'tiao-scrub-guide')
+-  const wrap = h('div', 'tiao-scrub', input, grip, guide)
++  const wrap = h('div', 'tiao-scrub', input, grip)
++
++  // full-screen tick ruler while scrubbing: aligned with the input but spanning
++  // the whole viewport, so the drag direction reads even outside the pane
++  let overlay: HTMLElement | null = null
++  let overlayGuide: HTMLElement | null = null
++  let overlayCenter = 0
++  const showOverlay = () => {
++    if (overlay) return
++    const doc = input.ownerDocument
++    const rect = input.getBoundingClientRect()
++    overlayCenter = rect.left + rect.width / 2
++    overlayGuide = h('div', 'tiao-drag-overlay-guide')
++    overlayGuide.style.top = `${rect.bottom - 6}px`
++    const marker = h('div', 'tiao-drag-overlay-marker')
++    marker.style.left = `${overlayCenter}px`
++    marker.style.top = `${rect.bottom - 8}px`
++    overlay = h('div', 'tiao-drag-overlay', overlayGuide, marker)
++    // the overlay lives on <body>, outside the pane's CSS variable scope
++    const cs = doc.defaultView?.getComputedStyle(input)
++    if (cs) {
++      overlay.style.setProperty('--tiao-fg-dim', cs.getPropertyValue('--tiao-fg-dim'))
++      overlay.style.setProperty('--tiao-accent', cs.getPropertyValue('--tiao-accent'))
++    }
++    doc.body.append(overlay)
++  }
++  const hideOverlay = () => {
++    overlay?.remove()
++    overlay = null
++    overlayGuide = null
++  }
+ 
+   const constrain = (v: number): number => {
+     const snapped = snap(v, step)
+@@ -52,6 +81,15 @@ export function createScrubber(
+     }, 0)
+   }
+ 
++  const collapseSelection = () => {
++    try {
++      const end = input.value.length
++      input.setSelectionRange(end, end)
++    } catch {
++      /* selection ranges are best-effort for text-like inputs */
++    }
++  }
++
+   let dragBase = 0
+   const disposeDrag = draggable(input, {
+     onStart: () => {
+@@ -59,12 +97,12 @@ export function createScrubber(
+     },
+     onMove: (s) => {
+       if (!s.moved || !input.readOnly) return
+-      wrap.classList.add('tiao-scrubbing')
+-      guide.style.backgroundPositionX = `calc(50% + ${s.dx}px)`
++      showOverlay()
++      if (overlayGuide) overlayGuide.style.backgroundPositionX = `${overlayCenter + s.dx}px`
+       set(constrain(dragBase + s.dx * scale), false)
+     },
+     onEnd: (s) => {
+-      wrap.classList.remove('tiao-scrubbing')
++      hideOverlay()
+       if (!input.readOnly) return
+       if (s.moved) {
+         set(constrain(dragBase + s.dx * scale), true)
+@@ -77,10 +115,12 @@ export function createScrubber(
+ 
+   const commitText = () => {
+     if (input.readOnly) return
++    collapseSelection()
+     const parsed = parseNumberInput(input.value)
+     if (parsed !== null) set(constrain(parsed), true)
+     input.readOnly = true
+     input.value = format(get())
++    collapseSelection()
+   }
+   const onKeyDown = (e: KeyboardEvent) => {
+     if (input.readOnly) {
+@@ -95,6 +135,7 @@ export function createScrubber(
+     if (e.key === 'Escape') {
+       input.readOnly = true
+       input.value = format(get())
++      collapseSelection()
+     }
+   }
+   input.addEventListener('blur', commitText)
+@@ -108,6 +149,7 @@ export function createScrubber(
+     element: wrap,
+     activate: enterEdit,
+     dispose: () => {
++      hideOverlay()
+       disposeDrag()
+       input.removeEventListener('blur', commitText)
+       input.removeEventListener('keydown', onKeyDown)
+diff --git a/packages/core/src/core.test.ts b/packages/core/src/core.test.ts
+index 98950a1..2cb1452 100644
+--- a/packages/core/src/core.test.ts
++++ b/packages/core/src/core.test.ts
+@@ -195,6 +195,191 @@ describe('Pane registry and chrome', () => {
+     pane.dispose()
+   })
+ 
++  it('clamps free positions and re-clamps on window resize', () => {
++    const pane = new Pane()
++    Object.defineProperty(pane.element, 'offsetWidth', { value: 300, configurable: true })
++    Object.defineProperty(pane.element, 'offsetHeight', { value: 200, configurable: true })
++
++    // jsdom viewport defaults to 1024x768
++    pane.moveTo(5000, -50)
++    expect(pane.element.style.left).toBe('724px')
++    expect(pane.element.style.top).toBe('0px')
++
++    // shrink the window; the free-positioned pane must move back inside
++    pane.element.getBoundingClientRect = () =>
++      ({ left: 724, top: 0, width: 300, height: 200 } as DOMRect)
++    const originalWidth = window.innerWidth
++    Object.defineProperty(window, 'innerWidth', { value: 600, configurable: true })
++    window.dispatchEvent(new Event('resize'))
++    expect(pane.element.style.left).toBe('300px')
++    Object.defineProperty(window, 'innerWidth', { value: originalWidth, configurable: true })
++    pane.dispose()
++  })
++
++  it('resizes via edge handles, clamps, and persists the result', () => {
++    const pane = new Pane({ id: 'rsz' })
++    pane.element.getBoundingClientRect = () =>
++      ({ left: 100, top: 0, width: 280, height: 400 } as DOMRect)
++
++    const drag = (edge: string, dx: number, dy: number) => {
++      const handle = pane.element.querySelector(`.tiao-resize-${edge}`) as HTMLElement
++      handle.dispatchEvent(new MouseEvent('pointerdown', { button: 0, clientX: 0, clientY: 0 }))
++      handle.dispatchEvent(new MouseEvent('pointermove', { clientX: dx, clientY: dy }))
++      handle.dispatchEvent(new MouseEvent('pointerup', { clientX: dx, clientY: dy }))
++    }
++
++    drag('right', 60, 0)
++    expect(pane.element.style.width).toBe('340px')
++
++    // dragging the left edge keeps the right edge pinned for free-positioned panes
++    pane.moveTo(100, 0)
++    drag('left', -40, 0)
++    expect(pane.element.style.width).toBe('320px')
++    expect(pane.element.style.left).toBe('60px')
++
++    drag('bottom', 0, 100)
++    expect(pane.element.style.getPropertyValue('--tiao-max-height')).toBe('500px')
++
++    // width clamps to its maximum
++    drag('right', 5000, 0)
++    expect(pane.element.style.width).toBe('640px')
++
++    const saved = JSON.parse(localStorage.getItem('tiao:rsz')!)
++    expect(saved.w).toBe(640)
++    expect(saved.hMax).toBe(500)
++    pane.dispose()
++  })
++
++  it('restores persisted width and max-height', () => {
++    localStorage.setItem('tiao:rsz2', JSON.stringify({ w: 350, hMax: 480 }))
++    const pane = new Pane({ id: 'rsz2' })
++    expect(pane.element.style.width).toBe('350px')
++    expect(pane.element.style.getPropertyValue('--tiao-max-height')).toBe('480px')
++    pane.dispose()
++  })
++
++  it('exposes folder nesting depth to CSS for column alignment', () => {
++    const pane = new Pane()
++    const outer = pane.addFolder({ title: 'outer' })
++    const inner = outer.addFolder({ title: 'inner' })
++    const rackDepth = (el: Element) =>
++      (el.querySelector(':scope > .tiao-folder-body > .tiao-folder-clip > .tiao-rack') as HTMLElement)
++        .style.getPropertyValue('--tiao-depth')
++    expect(rackDepth(outer.element)).toBe('1')
++    expect(rackDepth(inner.element)).toBe('2')
++    pane.dispose()
++  })
++
++  it('renders a subtle unit label next to graph readouts', () => {
++    const params = { time: 1.5 }
++    const pane = new Pane()
++    const binding = pane.addBinding(params, 'time', { readonly: true, view: 'graph', unit: 's' })
++    const unit = binding.element.querySelector('.tiao-graph-unit')
++    expect(unit?.textContent).toBe('s')
++    pane.dispose()
++  })
++
++  it('renders button groups as equal siblings with independent callbacks', () => {
++    const pane = new Pane()
++    const onHalf = vi.fn()
++    const onFull = vi.fn()
++    const group = pane.addButtonGroup({
++      label: 'zoom',
++      buttons: { '0.5x': onHalf, '1x': onFull },
++    })
++    const buttons = group.element.querySelectorAll<HTMLButtonElement>('.tiao-btngroup .tiao-button')
++    expect(buttons).toHaveLength(2)
++    expect(group.element.querySelector('.tiao-label')?.textContent).toBe('zoom')
++    buttons[0]!.click()
++    expect(onHalf).toHaveBeenCalledTimes(1)
++    expect(onFull).not.toHaveBeenCalled()
++
++    group.disabled = true
++    buttons[1]!.click()
++    expect(onFull).not.toHaveBeenCalled()
++    pane.dispose()
++  })
++
++  it('unlabeled button groups take the full row', () => {
++    const pane = new Pane()
++    const group = pane.addButtonGroup({ buttons: { a: () => {}, b: () => {} } })
++    expect(group.element.classList.contains('tiao-row-full')).toBe(true)
++    pane.dispose()
++  })
++
++  it('search icon toggles the filter row and filters bindings by label', () => {
++    const params = { speed: 1, color: '#fff', gravity: 9.8 }
++    const pane = new Pane()
++    const speed = pane.addBinding(params, 'speed')
++    const color = pane.addBinding(params, 'color')
++    const folder = pane.addFolder({ title: 'Physics', expanded: false })
++    const gravity = folder.addBinding(params, 'gravity')
++
++    const searchBtn = pane.element.querySelector('.tiao-pane-search') as HTMLButtonElement
++    searchBtn.click()
++    expect(pane.searchOpen).toBe(true)
++    const input = pane.element.querySelector('.tiao-search-input') as HTMLInputElement
++
++    input.value = 'grav'
++    input.dispatchEvent(new Event('input'))
++    expect(speed.element.classList.contains('tiao-search-miss')).toBe(true)
++    expect(color.element.classList.contains('tiao-search-miss')).toBe(true)
++    expect(gravity.element.classList.contains('tiao-search-miss')).toBe(false)
++    // the collapsed folder holding the match is forced open
++    expect(folder.element.classList.contains('tiao-search-miss')).toBe(false)
++    expect(folder.element.classList.contains('tiao-search-open')).toBe(true)
++
++    // a folder title match keeps its whole subtree visible
++    input.value = 'physics'
++    input.dispatchEvent(new Event('input'))
++    expect(folder.element.classList.contains('tiao-search-miss')).toBe(false)
++    expect(gravity.element.classList.contains('tiao-search-miss')).toBe(false)
++    expect(speed.element.classList.contains('tiao-search-miss')).toBe(true)
++
++    // closing the search clears the filter
++    pane.searchOpen = false
++    expect(speed.element.classList.contains('tiao-search-miss')).toBe(false)
++    expect(folder.element.classList.contains('tiao-search-open')).toBe(false)
++    expect(input.value).toBe('')
++    pane.dispose()
++  })
++
++  it('folder headers lead with the caret and have no index counter', () => {
++    const pane = new Pane()
++    const folder = pane.addFolder({ title: 'Section' })
++    const header = folder.element.querySelector('.tiao-folder-header')!
++    expect(header.firstElementChild?.classList.contains('tiao-icon-triangle')).toBe(true)
++    expect(header.querySelector('.tiao-folder-index')).toBeNull()
++    pane.dispose()
++  })
++
++  it('folders accept a color that tints title, caret, and depth line', () => {
++    const pane = new Pane()
++    const folder = pane.addFolder({ title: 'Tinted', color: '#fb923c' })
++    expect(folder.element.classList.contains('tiao-folder-colored')).toBe(true)
++    expect(folder.element.style.getPropertyValue('--tiao-folder-color')).toBe('#fb923c')
++    const plain = pane.addFolder({ title: 'Plain' })
++    expect(plain.element.classList.contains('tiao-folder-colored')).toBe(false)
++    pane.dispose()
++  })
++
++  it('clicking the depth line collapses the folder; static folders ignore it', () => {
++    const pane = new Pane()
++    const folder = pane.addFolder({ title: 'Collapsible' })
++    const line = folder.element.querySelector('.tiao-folder-line') as HTMLButtonElement
++    expect(folder.expanded).toBe(true)
++    line.click()
++    expect(folder.expanded).toBe(false)
++
++    const fixed = pane.addFolder({ title: 'Fixed', collapsible: false })
++    const fixedLine = fixed.element.querySelector('.tiao-folder-line') as HTMLButtonElement
++    fixedLine.click()
++    expect(fixed.expanded).toBe(true)
++    // the caret stays visible on static folders
++    expect(fixed.element.querySelector('.tiao-folder-header .tiao-icon-triangle')).not.toBeNull()
++    pane.dispose()
++  })
++
+   it('collapsible: false folders stay expanded and ignore header clicks', () => {
+     const pane = new Pane()
+     const folder = pane.addFolder({ title: 'Fixed', collapsible: false })
+@@ -218,13 +403,123 @@ describe('Pane registry and chrome', () => {
+     expect(document.activeElement).toBe(pane.element.querySelector('.tiao-text-input'))
+ 
+     rows[1]?.querySelector('.tiao-label')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+-    expect(pane.element.querySelector('.tiao-color-picker')?.classList.contains('tiao-open')).toBe(true)
++    expect(pane.element.querySelector('.tiao-color-picker.tiao-open')).not.toBeNull()
+ 
+     rows[2]?.querySelector('.tiao-label')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+     expect(params.on).toBe(true)
+     pane.dispose()
+   })
+ 
++  it('clicking the empty control column activates short controls once', () => {
++    const params = { on: false }
++    const pane = new Pane()
++    const binding = pane.addBinding(params, 'on')
++    const control = binding.element.querySelector('.tiao-control') as HTMLElement
++    const button = binding.element.querySelector('.tiao-check') as HTMLButtonElement
++
++    control.dispatchEvent(new MouseEvent('click', { bubbles: true }))
++    expect(params.on).toBe(true)
++
++    button.dispatchEvent(new MouseEvent('click', { bubbles: true }))
++    expect(params.on).toBe(false)
++    pane.dispose()
++  })
++
++  it('outside pointerdown blurs and deselects number inputs without typing', () => {
++    const params = { seed: 12 }
++    const pane = new Pane()
++    const binding = pane.addBinding(params, 'seed')
++    const label = binding.element.querySelector('.tiao-label') as HTMLElement
++    const input = binding.element.querySelector('.tiao-num-input') as HTMLInputElement
++
++    label.dispatchEvent(new MouseEvent('click', { bubbles: true }))
++    expect(document.activeElement).toBe(input)
++    expect(input.readOnly).toBe(false)
++
++    document.body.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }))
++    expect(document.activeElement).not.toBe(input)
++    expect(input.readOnly).toBe(true)
++    expect(input.selectionStart).toBe(input.value.length)
++    expect(input.selectionEnd).toBe(input.value.length)
++    pane.dispose()
++  })
++
++  it('outside pointerdown blurs and deselects number inputs after clicking the value', () => {
++    const params = { seed: 42 }
++    const pane = new Pane()
++    const binding = pane.addBinding(params, 'seed')
++    const input = binding.element.querySelector('.tiao-num-input') as HTMLInputElement
++
++    input.dispatchEvent(new MouseEvent('pointerdown', { button: 0, bubbles: true }))
++    input.dispatchEvent(new MouseEvent('pointerup', { button: 0, bubbles: true }))
++    expect(document.activeElement).toBe(input)
++    expect(input.readOnly).toBe(false)
++    expect(input.selectionStart).toBe(0)
++    expect(input.selectionEnd).toBe(input.value.length)
++
++    document.body.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }))
++    expect(document.activeElement).not.toBe(input)
++    expect(input.readOnly).toBe(true)
++    expect(input.selectionStart).toBe(input.value.length)
++    expect(input.selectionEnd).toBe(input.value.length)
++    pane.dispose()
++  })
++
++  it('number input blur collapses the highlighted value selection', () => {
++    const params = { seed: 42 }
++    const pane = new Pane()
++    const binding = pane.addBinding(params, 'seed')
++    const input = binding.element.querySelector('.tiao-num-input') as HTMLInputElement
++
++    input.dispatchEvent(new MouseEvent('pointerdown', { button: 0, bubbles: true }))
++    input.dispatchEvent(new MouseEvent('pointerup', { button: 0, bubbles: true }))
++    expect(input.selectionStart).toBe(0)
++    expect(input.selectionEnd).toBe(input.value.length)
++
++    input.dispatchEvent(new FocusEvent('blur'))
++    expect(input.readOnly).toBe(true)
++    expect(input.selectionStart).toBe(input.value.length)
++    expect(input.selectionEnd).toBe(input.value.length)
++    pane.dispose()
++  })
++
++  it('clicking another row in the same pane blurs the active input and activates that row', () => {
++    const params = { seed: 12, on: false }
++    const pane = new Pane()
++    const seed = pane.addBinding(params, 'seed')
++    const on = pane.addBinding(params, 'on')
++    const seedLabel = seed.element.querySelector('.tiao-label') as HTMLElement
++    const seedInput = seed.element.querySelector('.tiao-num-input') as HTMLInputElement
++    const onLabel = on.element.querySelector('.tiao-label') as HTMLElement
++
++    seedLabel.dispatchEvent(new MouseEvent('click', { bubbles: true }))
++    expect(document.activeElement).toBe(seedInput)
++
++    onLabel.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }))
++    onLabel.dispatchEvent(new MouseEvent('click', { bubbles: true }))
++    expect(document.activeElement).not.toBe(seedInput)
++    expect(seedInput.readOnly).toBe(true)
++    expect(params.on).toBe(true)
++    pane.dispose()
++  })
++
++  it('clicking the active input row outside the input deselects without reactivating it', () => {
++    const params = { seed: 12 }
++    const pane = new Pane()
++    const binding = pane.addBinding(params, 'seed')
++    const label = binding.element.querySelector('.tiao-label') as HTMLElement
++    const input = binding.element.querySelector('.tiao-num-input') as HTMLInputElement
++
++    label.dispatchEvent(new MouseEvent('click', { bubbles: true }))
++    expect(document.activeElement).toBe(input)
++
++    label.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }))
++    label.dispatchEvent(new MouseEvent('click', { bubbles: true }))
++    expect(document.activeElement).not.toBe(input)
++    expect(input.readOnly).toBe(true)
++    pane.dispose()
++  })
++
+   it('only oklab bindings get the OKLAB dropdown entry', () => {
+     const params = { a: '#ff8800', b: 'oklab(0.7 0.05 -0.05)' }
+     const pane = new Pane()
+@@ -232,8 +527,8 @@ describe('Pane registry and chrome', () => {
+     pane.addBinding(params, 'b')
+     const selects = pane.element.querySelectorAll('.tiao-color-mode .tiao-select')
+     const values = (s: Element) => [...s.querySelectorAll('option')].map((o) => o.value)
+-    expect(values(selects[0]!)).toEqual(['hex', 'rgb', 'oklch'])
+-    expect(values(selects[1]!)).toEqual(['hex', 'rgb', 'oklch', 'oklab'])
++    expect(values(selects[0]!)).toEqual(['hex', 'rgb', 'hsl', 'oklch'])
++    expect(values(selects[1]!)).toEqual(['hex', 'rgb', 'hsl', 'oklch', 'oklab'])
+     pane.dispose()
+   })
+ 
+@@ -266,13 +561,15 @@ describe('Pane registry and chrome', () => {
+     pane.dispose()
+   })
+ 
+-  it('gear opens the settings menu with a draggable toggle and 8 anchor cells', () => {
++  it('gear opens the settings menu with a draggable toggle and 9 anchor cells', () => {
+     const pane = new Pane()
+     const gear = pane.element.querySelector('.tiao-pane-gear') as HTMLButtonElement
+     gear.click()
+     const menu = pane.element.querySelector('.tiao-pane-menu.tiao-open')!
+     expect(menu).not.toBeNull()
+-    expect(menu.querySelectorAll('.tiao-anchor-cell')).toHaveLength(8)
++    // no title bar on the settings menu
++    expect(menu.querySelector('.tiao-pane-menu-title')).toBeNull()
++    expect(menu.querySelectorAll('.tiao-anchor-cell')).toHaveLength(9)
+ 
+     const dragToggle = menu.querySelector('.tiao-check') as HTMLButtonElement
+     expect(pane.draggable).toBe(true)
+@@ -287,7 +584,7 @@ describe('Pane registry and chrome', () => {
+     const menu = pane.element.querySelector('.tiao-pane-menu.tiao-open')!
+     expect(menu).not.toBeNull()
+ 
+-    const bottomCenter = menu.querySelectorAll('.tiao-anchor-cell')[6] as HTMLButtonElement
++    const bottomCenter = menu.querySelectorAll('.tiao-anchor-cell')[7] as HTMLButtonElement
+     expect(bottomCenter.title).toBe('bottom center')
+     bottomCenter.click()
+     expect(pane.anchor).toBe('bottom-center')
+@@ -301,6 +598,84 @@ describe('Pane registry and chrome', () => {
+     revived.dispose()
+   })
+ 
++  it('supports the center anchor from the middle grid cell', () => {
++    const pane = new Pane()
++    pane.element.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))
++    const menu = pane.element.querySelector('.tiao-pane-menu.tiao-open')!
++    const center = menu.querySelectorAll('.tiao-anchor-cell')[4] as HTMLButtonElement
++    expect(center.title).toBe('center')
++    center.click()
++    expect(pane.anchor).toBe('center')
++    expect(pane.element.style.left).toBe('50%')
++    expect(pane.element.style.top).toBe('50%')
++    expect(pane.element.style.transform).toBe('translate(-50%, -50%)')
++    pane.dispose()
++  })
++
++  it('menu theme select switches light/dark and persists per pane id', () => {
++    const pane = new Pane({ id: 'themed' })
++    pane.element.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))
++    const menu = pane.element.querySelector('.tiao-pane-menu.tiao-open')!
++    // the settings menu is a real embedded pane, so theme is a select binding
++    const select = menu.querySelector('.tiao-select') as HTMLSelectElement
++    expect(pane.theme).toBe('light')
++
++    select.value = '1'
++    select.dispatchEvent(new Event('change'))
++    expect(pane.theme).toBe('dark')
++    expect(pane.element.classList.contains('tiao-theme-dark')).toBe(true)
++    pane.dispose()
++
++    const revived = new Pane({ id: 'themed' })
++    expect(revived.theme).toBe('dark')
++    revived.dispose()
++  })
++
++  it('menu "Numbers" toggle prepends nesting-aware section indexes to folder titles', () => {
++    const pane = new Pane({ id: 'numbered' })
++    const a = pane.addFolder({ title: 'Alpha' })
++    const a1 = a.addFolder({ title: 'Inner' })
++    const b = pane.addFolder({ title: 'Beta' })
++
++    pane.numbers = true
++    const indexOf = (f: { element: Element }) =>
++      f.element.querySelector('.tiao-folder-index')?.textContent
++    expect(indexOf(a)).toBe('1')
++    expect(indexOf(a1)).toBe('1.1')
++    expect(indexOf(b)).toBe('2')
++
++    // late additions are renumbered automatically
++    const a2 = a.addFolder({ title: 'Later' })
++    expect(indexOf(a2)).toBe('1.2')
++
++    pane.numbers = false
++    expect(indexOf(a)).toBeUndefined()
++    pane.dispose()
++
++    // persists per pane id
++    localStorage.setItem('tiao:numbered2', JSON.stringify({ numbers: true }))
++    const revived = new Pane({ id: 'numbered2' })
++    const f = revived.addFolder({ title: 'Only' })
++    expect(indexOf(f)).toBe('1')
++    revived.dispose()
++  })
++
++  it('menu accent color writes --tiao-accent and persists per pane id', () => {
++    const pane = new Pane({ id: 'accented' })
++    pane.element.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))
++    const menu = pane.element.querySelector('.tiao-pane-menu.tiao-open')!
++    const text = menu.querySelector('.tiao-color-text') as HTMLInputElement
++    text.value = '#ff0080'
++    text.dispatchEvent(new Event('blur'))
++    expect(pane.element.style.getPropertyValue('--tiao-accent')).toBe('#ff0080')
++    expect(pane.accent).toBe('#ff0080')
++    pane.dispose()
++
++    const revived = new Pane({ id: 'accented' })
++    expect(revived.element.style.getPropertyValue('--tiao-accent')).toBe('#ff0080')
++    revived.dispose()
++  })
++
+   it('moveTo clears the anchor', () => {
+     const pane = new Pane({ anchor: 'top-right' })
+     expect(pane.anchor).toBe('top-right')
+diff --git a/packages/core/src/dom.ts b/packages/core/src/dom.ts
+index 1a7bb72..caa7648 100644
+--- a/packages/core/src/dom.ts
++++ b/packages/core/src/dom.ts
+@@ -16,7 +16,7 @@ export function h<K extends keyof HTMLElementTagNameMap>(
+ 
+ const SVG_NS = 'http://www.w3.org/2000/svg'
+ 
+-export function icon(name: 'chevron' | 'check' | 'plus'): SVGSVGElement {
++export function icon(name: 'chevron' | 'check' | 'plus' | 'triangle'): SVGSVGElement {
+   const svg = document.createElementNS(SVG_NS, 'svg')
+   svg.setAttribute('viewBox', '0 0 12 12')
+   svg.setAttribute('class', `tiao-icon tiao-icon-${name}`)
+@@ -26,33 +26,28 @@ export function icon(name: 'chevron' | 'check' | 'plus'): SVGSVGElement {
+     chevron: 'M3.5 4.5 L6 7.5 L8.5 4.5',
+     check: 'M2.5 6.5 L5 9 L9.5 3.5',
+     plus: 'M6 2.5 V9.5 M2.5 6 H9.5',
++    // leva-style filled collapse caret, pointing down; the glyph is centered
++    // in the viewBox so rotating it while collapsed keeps it optically aligned
++    triangle: 'M3.2 4.25 L8.8 4.25 L6 7.75 Z',
+   }[name]
+   path.setAttribute('d', d)
+-  path.setAttribute('fill', 'none')
++  // the caret is a filled shape; a thin same-color stroke rounds its corners
++  path.setAttribute('fill', name === 'triangle' ? 'currentColor' : 'none')
+   path.setAttribute('stroke', 'currentColor')
+-  path.setAttribute('stroke-width', '1.5')
++  path.setAttribute('stroke-width', name === 'triangle' ? '1' : '1.5')
+   path.setAttribute('stroke-linecap', 'round')
+   path.setAttribute('stroke-linejoin', 'round')
+   svg.append(path)
+   return svg
+ }
+ 
+-/** Lucide "settings" gear (ISC licensed path data, embedded to stay zero-dep). */
+-export function gearIcon(): SVGSVGElement {
++/** 24px lucide-style icon shell; shapes get stroked with currentColor */
++function lucideIcon(name: string, shapes: SVGElement[]): SVGSVGElement {
+   const svg = document.createElementNS(SVG_NS, 'svg')
+   svg.setAttribute('viewBox', '0 0 24 24')
+-  svg.setAttribute('class', 'tiao-icon tiao-icon-gear')
++  svg.setAttribute('class', `tiao-icon tiao-icon-${name}`)
+   svg.setAttribute('aria-hidden', 'true')
+-  const path = document.createElementNS(SVG_NS, 'path')
+-  path.setAttribute(
+-    'd',
+-    'M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z',
+-  )
+-  const circle = document.createElementNS(SVG_NS, 'circle')
+-  circle.setAttribute('cx', '12')
+-  circle.setAttribute('cy', '12')
+-  circle.setAttribute('r', '3')
+-  for (const el of [path, circle]) {
++  for (const el of shapes) {
+     el.setAttribute('fill', 'none')
+     el.setAttribute('stroke', 'currentColor')
+     el.setAttribute('stroke-width', '2')
+@@ -63,6 +58,35 @@ export function gearIcon(): SVGSVGElement {
+   return svg
+ }
+ 
++function svgPath(d: string): SVGPathElement {
++  const path = document.createElementNS(SVG_NS, 'path')
++  path.setAttribute('d', d)
++  return path
++}
++
++function svgCircle(cx: number, cy: number, r: number): SVGCircleElement {
++  const circle = document.createElementNS(SVG_NS, 'circle')
++  circle.setAttribute('cx', String(cx))
++  circle.setAttribute('cy', String(cy))
++  circle.setAttribute('r', String(r))
++  return circle
++}
++
++/** Lucide "settings" gear (ISC licensed path data, embedded to stay zero-dep). */
++export function gearIcon(): SVGSVGElement {
++  return lucideIcon('gear', [
++    svgPath(
++      'M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z',
++    ),
++    svgCircle(12, 12, 3),
++  ])
++}
++
++/** Lucide "search" (ISC licensed path data, embedded to stay zero-dep). */
++export function searchIcon(): SVGSVGElement {
++  return lucideIcon('search', [svgCircle(11, 11, 8), svgPath('m21 21-4.3-4.3')])
++}
++
+ export interface DragState {
+   dx: number
+   dy: number
+diff --git a/packages/core/src/index.ts b/packages/core/src/index.ts
+index ed19548..d79444b 100644
+--- a/packages/core/src/index.ts
++++ b/packages/core/src/index.ts
+@@ -1,9 +1,10 @@
+ export { Pane } from './pane'
+-export type { Anchor, PaneOptions } from './pane'
++export type { Anchor, PaneOptions, PaneTheme } from './pane'
+ export {
+   BindingApi,
+   BladeApi,
+   ButtonApi,
++  ButtonGroupApi,
+   Container,
+   FolderApi,
+   Item,
+@@ -26,7 +27,7 @@ export type {
+ export { Value } from './value'
+ export type { ValueListener, ValueMeta } from './value'
+ export { onTick, onInterval } from './ticker'
+-export { h, icon, gearIcon, draggable } from './dom'
++export { h, icon, gearIcon, searchIcon, draggable } from './dom'
+ export type { DragState, DragHandlers } from './dom'
+ export { clamp, mapRange, snap, formatNumber } from './util'
+ export { createGraph } from './controls/monitor'
+diff --git a/packages/core/src/pane-menu.ts b/packages/core/src/pane-menu.ts
+index efd3269..18e3c16 100644
+--- a/packages/core/src/pane-menu.ts
++++ b/packages/core/src/pane-menu.ts
+@@ -1,93 +1,66 @@
+ import { h } from './dom'
+-import type { Anchor } from './pane'
++import type { Anchor, Pane, PaneOptions, PaneTheme } from './pane'
+ 
+ export interface PaneMenuHost {
+   element: HTMLElement
+   document: Document
++  /** factory injected by the Pane to avoid a module cycle */
++  createPane(options: PaneOptions): Pane
+   getDraggable(): boolean
+   setDraggable(v: boolean): void
+   getAnchor(): Anchor | null
+   setAnchor(anchor: Anchor): void
++  getTheme(): PaneTheme
++  setTheme(theme: PaneTheme): void
++  getAccent(): string
++  setAccent(accent: string): void
++  getNumbers(): boolean
++  setNumbers(v: boolean): void
+   onDispose(fn: () => void): void
+ }
+ 
+-/** 3x3 layout: corners + side centers, empty middle. */
+-const ANCHOR_GRID: (Anchor | null)[] = [
++/** 3x3 layout mirroring the window: corners, side centers, and center. */
++const ANCHOR_GRID: Anchor[] = [
+   'top-left',
+   'top-center',
+   'top-right',
+   'left-center',
+-  null,
++  'center',
+   'right-center',
+   'bottom-left',
+   'bottom-center',
+   'bottom-right',
+ ]
+ 
++/** quick accent swatches, loosely based on syntax-highlighting palettes */
++const ACCENT_PALETTE = [
++  '#f87171',
++  '#fb923c',
++  '#facc15',
++  '#a3e635',
++  '#22d3ee',
++  '#60a5fa',
++  '#a78bfa',
++  '#f472b6',
++]
++
+ /**
+- * Pane settings menu: draggable toggle + anchor grid.
+- * Opens beside the pane (gear click or right-click).
++ * Pane settings menu: a real embedded Pane, so every row is a regular binding
++ * with the standard components and row behaviors (label click toggles/opens).
++ * Opens beside the pane (gear or right-click); built lazily on first open.
+  */
+ export function createPaneMenu(host: PaneMenuHost): { toggle(): void; close(): void } {
+   const doc = host.document
+-
+-  const dragCheck = h('button', 'tiao-check')
+-  dragCheck.type = 'button'
+-  dragCheck.setAttribute('role', 'switch')
+-  const dragRow = h('div', 'tiao-pane-menu-row', h('span', 'tiao-label', 'Draggable'), dragCheck)
+-
+-  const grid = h('div', 'tiao-anchor-grid')
+-  const anchorButtons = new Map<Anchor, HTMLButtonElement>()
+-  for (const anchor of ANCHOR_GRID) {
+-    if (!anchor) {
+-      grid.append(h('span', 'tiao-anchor-spacer'))
+-      continue
+-    }
+-    const btn = h('button', 'tiao-anchor-cell')
+-    btn.type = 'button'
+-    btn.title = anchor.replace('-', ' ')
+-    const onClick = () => {
+-      host.setAnchor(anchor)
+-      render()
+-    }
+-    btn.addEventListener('click', onClick)
+-    host.onDispose(() => btn.removeEventListener('click', onClick))
+-    anchorButtons.set(anchor, btn)
+-    grid.append(btn)
+-  }
+-
+-  const menu = h(
+-    'div',
+-    'tiao-pane-menu',
+-    dragRow,
+-    h('div', 'tiao-pane-menu-label', 'Anchor'),
+-    grid,
+-  )
+-  host.element.append(menu)
+-
+-  const render = () => {
+-    const draggable = host.getDraggable()
+-    dragCheck.classList.toggle('tiao-checked', draggable)
+-    dragCheck.setAttribute('aria-checked', String(draggable))
+-    const current = host.getAnchor()
+-    for (const [anchor, btn] of anchorButtons) {
+-      btn.classList.toggle('tiao-selected', anchor === current)
+-    }
+-  }
+-
+-  const onDragToggle = () => {
+-    host.setDraggable(!host.getDraggable())
+-    render()
+-  }
+-  dragCheck.addEventListener('click', onDragToggle)
+-  host.onDispose(() => dragCheck.removeEventListener('click', onDragToggle))
++  let built: { shell: HTMLElement; refresh: () => void } | null = null
+ 
+   let open = false
+   const onOutside = (e: PointerEvent) => {
+     const target = e.target as Element | null
+     // the trigger's own click handler toggles; closing here would re-open
+     if (target?.closest?.('[data-tiao-menu-trigger]')) return
+-    if (!menu.contains(e.target as Node)) close()
++    // picker popups may render outside the menu node
++    if (target?.closest?.('.tiao-popup')) return
++    if (built && !built.shell.contains(e.target as Node)) close()
+   }
+   const onKey = (e: KeyboardEvent) => {
+     if (e.key === 'Escape') close()
+@@ -95,14 +68,15 @@ export function createPaneMenu(host: PaneMenuHost): { toggle(): void; close(): v
+ 
+   const openMenu = () => {
+     open = true
+-    render()
+-    menu.classList.add('tiao-open')
++    built ??= buildMenu(host)
++    built.refresh()
++    built.shell.classList.add('tiao-open')
+     // open to whichever side of the pane has room
+     const rect = host.element.getBoundingClientRect()
+-    const menuWidth = menu.offsetWidth || 140
++    const menuWidth = built.shell.offsetWidth || 190
+     const viewportWidth = doc.defaultView?.innerWidth ?? Infinity
+     const fitsRight = rect.right + menuWidth + 12 <= viewportWidth
+-    menu.classList.toggle('tiao-menu-left', !fitsRight)
++    built.shell.classList.toggle('tiao-menu-left', !fitsRight)
+     // capture phase so clicks inside other panes still close it
+     doc.addEventListener('pointerdown', onOutside, true)
+     doc.addEventListener('keydown', onKey)
+@@ -110,7 +84,7 @@ export function createPaneMenu(host: PaneMenuHost): { toggle(): void; close(): v
+   const close = () => {
+     if (!open) return
+     open = false
+-    menu.classList.remove('tiao-open')
++    built?.shell.classList.remove('tiao-open')
+     doc.removeEventListener('pointerdown', onOutside, true)
+     doc.removeEventListener('keydown', onKey)
+   }
+@@ -121,3 +95,110 @@ export function createPaneMenu(host: PaneMenuHost): { toggle(): void; close(): v
+     close,
+   }
+ }
++
++function buildMenu(host: PaneMenuHost): { shell: HTMLElement; refresh: () => void } {
++  const shell = h('div', 'tiao-pane-menu')
++  host.element.append(shell)
++
++  const settings = {
++    draggable: host.getDraggable(),
++    theme: host.getTheme(),
++    accent: host.getAccent(),
++    numbers: host.getNumbers(),
++  }
++  const menuPane = host.createPane({ container: shell, menu: false, storage: false })
++  host.onDispose(() => menuPane.dispose())
++
++  // the embedded pane re-declares the theme variables, so its chrome has to
++  // track the host's theme and accent explicitly
++  const syncChrome = () => {
++    menuPane.theme = host.getTheme()
++    menuPane.applyTheme({ accent: host.getAccent() })
++  }
++
++  const dragBinding = menuPane.addBinding(settings, 'draggable', { label: 'Draggable' })
++  dragBinding.on('change', (ev) => host.setDraggable(Boolean(ev.value)))
++
++  const numbersBinding = menuPane.addBinding(settings, 'numbers', { label: 'Numbers' })
++  numbersBinding.on('change', (ev) => host.setNumbers(Boolean(ev.value)))
++
++  menuPane.addSeparator()
++
++  const themeBinding = menuPane.addBinding(settings, 'theme', {
++    label: 'Theme',
++    options: { Light: 'light', Dark: 'dark' },
++  })
++  themeBinding.on('change', (ev) => {
++    host.setTheme(ev.value)
++    syncChrome()
++  })
++
++  const accentBinding = menuPane.addBinding(settings, 'accent', { label: 'Accent' })
++  accentBinding.on('change', (ev) => {
++    host.setAccent(String(ev.value))
++    syncChrome()
++  })
++
++  // accent palette: blank-labeled row so swatches sit in the control column
++  const palette = h('div', 'tiao-btngroup tiao-accent-palette')
++  for (const color of ACCENT_PALETTE) {
++    const btn = h('button', 'tiao-accent-swatch')
++    btn.type = 'button'
++    btn.title = color
++    btn.style.background = color
++    const onClick = () => {
++      host.setAccent(color)
++      settings.accent = color
++      accentBinding.refresh()
++      syncChrome()
++    }
++    btn.addEventListener('click', onClick)
++    host.onDispose(() => btn.removeEventListener('click', onClick))
++    palette.append(btn)
++  }
++  menuPane.rack.append(
++    h('div', 'tiao-row', h('div', 'tiao-label'), h('div', 'tiao-control', palette)),
++  )
++
++  // anchor: 3x3 button grid in a standard row
++  const grid = h('div', 'tiao-anchor-grid')
++  const anchorButtons = new Map<Anchor, HTMLButtonElement>()
++  for (const anchor of ANCHOR_GRID) {
++    const btn = h('button', 'tiao-anchor-cell')
++    btn.type = 'button'
++    btn.title = anchor.replace('-', ' ')
++    const onClick = () => {
++      host.setAnchor(anchor)
++      renderAnchors()
++    }
++    btn.addEventListener('click', onClick)
++    host.onDispose(() => btn.removeEventListener('click', onClick))
++    anchorButtons.set(anchor, btn)
++    grid.append(btn)
++  }
++  menuPane.rack.append(
++    h('div', 'tiao-row', h('div', 'tiao-label', 'Anchor'), h('div', 'tiao-control', grid)),
++  )
++
++  const renderAnchors = () => {
++    const current = host.getAnchor()
++    for (const [anchor, btn] of anchorButtons) {
++      btn.classList.toggle('tiao-selected', anchor === current)
++    }
++  }
++
++  const refresh = () => {
++    settings.draggable = host.getDraggable()
++    settings.theme = host.getTheme()
++    settings.accent = host.getAccent()
++    settings.numbers = host.getNumbers()
++    dragBinding.refresh()
++    themeBinding.refresh()
++    accentBinding.refresh()
++    numbersBinding.refresh()
++    renderAnchors()
++    syncChrome()
++  }
++
++  return { shell, refresh }
++}
+diff --git a/packages/core/src/pane.ts b/packages/core/src/pane.ts
+index 50d80c3..dd5aa6c 100644
+--- a/packages/core/src/pane.ts
++++ b/packages/core/src/pane.ts
+@@ -1,15 +1,18 @@
+-import { Container, type BladeHost } from './blade'
++import { Container, FolderApi, TabApi, markPointerBlur, type BladeHost } from './blade'
+ import { ensureBuiltins } from './controls/index'
+-import { draggable, gearIcon, h, icon } from './dom'
++import { installCaret } from './controls/caret'
++import { draggable, gearIcon, h, icon, searchIcon } from './dom'
+ import { createPaneMenu } from './pane-menu'
+ import { PluginRegistry, globalRegistry, type TiaoPlugin } from './plugin'
+ import { injectStyles } from './styles'
++import { clamp } from './util'
+ 
+ export type Anchor =
+   | 'top-left'
+   | 'top-center'
+   | 'top-right'
+   | 'left-center'
++  | 'center'
+   | 'right-center'
+   | 'bottom-left'
+   | 'bottom-center'
+@@ -38,6 +41,8 @@ export interface PaneOptions {
+   theme?: Record<string, string>
+   width?: number
+   document?: Document
++  /** internal: set false to omit the settings menu (used by the menu's own pane) */
++  menu?: boolean
+ }
+ 
+ /** explicit `undefined` clears a key on save (JSON.stringify drops it) */
+@@ -47,8 +52,26 @@ interface PersistedState {
+   expanded?: boolean | undefined
+   anchor?: Anchor | undefined
+   draggable?: boolean | undefined
++  theme?: PaneTheme | undefined
++  accent?: string | undefined
++  /** width / max-height set by edge-resizing */
++  w?: number | undefined
++  hMax?: number | undefined
++  /** section numbering on folder titles */
++  numbers?: boolean | undefined
+ }
+ 
++export type PaneTheme = 'light' | 'dark'
++
++/** default --tiao-accent, used when the computed style is unavailable (e.g. jsdom) */
++const DEFAULT_ACCENT = '#3478f6'
++
++/** edge-resize bounds */
++const MIN_WIDTH = 200
++const MAX_WIDTH = 640
++const MIN_HEIGHT = 120
++const MAX_HEIGHT = 2000
++
+ const panes = new Map<string, Pane>()
+ 
+ /** shared stacking counter so the last-interacted floating pane wins */
+@@ -58,10 +81,14 @@ export class Pane extends Container {
+   readonly element: HTMLElement
+   readonly rack: HTMLElement
+   private titlebar: HTMLElement
++  private searchbar: HTMLElement
++  private searchInput: HTMLInputElement
+   private _expanded: boolean
+   private _draggable: boolean
++  private _numbers = false
+   private _anchor: Anchor | null = null
+   private margin: number
++  private readonly doc: Document
+   private readonly floating: boolean
+   private options: PaneOptions
+   private paneRegistry: PluginRegistry
+@@ -79,6 +106,7 @@ export class Pane extends Container {
+     super(host)
+     this.options = options
+     this.paneRegistry = registry
++    this.doc = doc
+     this._expanded = options.expanded ?? true
+     this.floating = !options.container
+     this._draggable = this.floating && (options.draggable ?? true)
+@@ -87,20 +115,32 @@ export class Pane extends Container {
+     injectStyles(doc)
+ 
+     this.rack = h('div', 'tiao-rack')
+-    const gear = h('button', 'tiao-pane-gear', gearIcon())
++    const gear = h('button', 'tiao-titlebar-btn tiao-pane-gear', gearIcon())
+     gear.type = 'button'
+     gear.title = 'Pane settings'
+     gear.setAttribute('data-tiao-menu-trigger', '')
++    const searchBtn = h('button', 'tiao-titlebar-btn tiao-pane-search', searchIcon())
++    searchBtn.type = 'button'
++    searchBtn.title = 'Search'
+     const collapseButton = h(
+       'button',
+       'tiao-titlebar-main',
++      icon('triangle'),
+       h('span', 'tiao-pane-title', options.title ?? ''),
+-      icon('chevron'),
+     )
+     collapseButton.type = 'button'
+-    this.titlebar = h('div', 'tiao-titlebar', gear, collapseButton)
++    this.titlebar = h(
++      'div',
++      'tiao-titlebar',
++      collapseButton,
++      h('div', 'tiao-titlebar-actions', searchBtn, gear),
++    )
++    this.searchInput = h('input', 'tiao-search-input')
++    this.searchInput.type = 'search'
++    this.searchInput.placeholder = 'Search'
++    this.searchbar = h('div', 'tiao-searchbar', this.searchInput)
+     const body = h('div', 'tiao-pane-body', h('div', 'tiao-pane-clip', this.rack))
+-    this.element = h('div', 'tiao-pane', this.titlebar, body)
++    this.element = h('div', 'tiao-pane', this.titlebar, this.searchbar, body)
+ 
+     if (this.floating) {
+       this.element.classList.add('tiao-floating')
+@@ -114,8 +154,15 @@ export class Pane extends Container {
+ 
+     // restore persisted state before first paint
+     const persisted = this.loadState()
++    if (persisted?.w !== undefined) this.element.style.width = `${persisted.w}px`
++    if (persisted?.hMax !== undefined) {
++      this.element.style.setProperty('--tiao-max-height', `${persisted.hMax}px`)
++    }
+     if (persisted?.expanded !== undefined) this._expanded = persisted.expanded
++    if (persisted?.theme) this.applyThemeMode(persisted.theme)
++    if (persisted?.accent) this.applyTheme({ accent: persisted.accent })
+     if (persisted?.draggable !== undefined && this.floating) this._draggable = persisted.draggable
++    if (persisted?.numbers !== undefined) this._numbers = persisted.numbers
+     if (this.floating) {
+       if (persisted?.x !== undefined && persisted?.y !== undefined) {
+         this.moveTo(persisted.x, persisted.y)
+@@ -128,16 +175,39 @@ export class Pane extends Container {
+     this.applyDraggable()
+     this.hidden = options.hidden ?? false
+ 
+-    // collapse on any titlebar click except the gear (and not right after a drag)
++    // collapse on any titlebar click except the action buttons (and not right after a drag)
+     let dragged = false
+     const onTitlebarClick = (e: MouseEvent) => {
+       if (dragged) return
+-      if ((e.target as Element | null)?.closest?.('[data-tiao-menu-trigger]')) return
++      if ((e.target as Element | null)?.closest?.('.tiao-titlebar-btn')) return
+       this.expanded = !this.expanded
+     }
+     this.titlebar.addEventListener('click', onTitlebarClick)
+     this.disposers.push(() => this.titlebar.removeEventListener('click', onTitlebarClick))
+ 
++    // search: icon toggles an input row under the titlebar; typing filters rows
++    const onSearchToggle = () => {
++      this.searchOpen = !this.searchOpen
++    }
++    searchBtn.addEventListener('click', onSearchToggle)
++    const onSearchInput = () => {
++      this.expanded = true
++      this.filter(this.searchInput.value)
++    }
++    this.searchInput.addEventListener('input', onSearchInput)
++    const onSearchKey = (e: KeyboardEvent) => {
++      if (e.key === 'Escape') {
++        e.stopPropagation()
++        this.searchOpen = false
++      }
++    }
++    this.searchInput.addEventListener('keydown', onSearchKey)
++    this.disposers.push(() => {
++      searchBtn.removeEventListener('click', onSearchToggle)
++      this.searchInput.removeEventListener('input', onSearchInput)
++      this.searchInput.removeEventListener('keydown', onSearchKey)
++    })
++
+     if (this.floating) {
+       const bringToFront = () => {
+         if (this.element.style.zIndex !== String(zTop)) {
+@@ -154,8 +224,8 @@ export class Pane extends Container {
+       let baseY = 0
+       this.disposers.push(
+         draggable(this.titlebar, {
+-          // pointer capture would swallow the gear's click
+-          filter: (e) => !(e.target as Element | null)?.closest?.('[data-tiao-menu-trigger]'),
++          // pointer capture would swallow the action buttons' clicks
++          filter: (e) => !(e.target as Element | null)?.closest?.('.tiao-titlebar-btn'),
+           onStart: () => {
+             const rect = this.element.getBoundingClientRect()
+             baseX = rect.left
+@@ -169,7 +239,9 @@ export class Pane extends Container {
+           },
+           onEnd: (s) => {
+             if (this._draggable && s.moved) {
+-              this.saveState({ x: baseX + s.dx, y: baseY + s.dy, anchor: undefined })
++              // persist the clamped position applied by moveTo, not the raw drag
++              const rect = this.element.getBoundingClientRect()
++              this.saveState({ x: rect.left, y: rect.top, anchor: undefined })
+             }
+             // let the click handler observe `dragged`, then reset
+             setTimeout(() => {
+@@ -180,33 +252,88 @@ export class Pane extends Container {
+       )
+     }
+ 
++    if (this.floating) this.installResizeHandles()
++
+     // settings menu: gear click or right-click anywhere on the pane
+-    const menu = createPaneMenu({
+-      element: this.element,
+-      document: doc,
+-      getDraggable: () => this._draggable,
+-      setDraggable: (v) => {
+-        this.draggable = v
+-      },
+-      getAnchor: () => this._anchor,
+-      setAnchor: (anchor) => {
+-        this.anchor = anchor
+-      },
+-      onDispose: (fn) => this.disposers.push(fn),
+-    })
+-    const onGearClick = () => menu.toggle()
+-    gear.addEventListener('click', onGearClick)
+-    const onContextMenu = (e: MouseEvent) => {
+-      e.preventDefault()
+-      // right-clicking the open menu itself shouldn't toggle it closed
+-      if ((e.target as Element | null)?.closest?.('.tiao-pane-menu')) return
+-      menu.toggle()
++    if (options.menu !== false) {
++      const menu = createPaneMenu({
++        element: this.element,
++        document: doc,
++        createPane: (o) => new Pane(o),
++        getDraggable: () => this._draggable,
++        setDraggable: (v) => {
++          this.draggable = v
++        },
++        getAnchor: () => this._anchor,
++        setAnchor: (anchor) => {
++          this.anchor = anchor
++        },
++        getTheme: () => this.theme,
++        setTheme: (theme) => {
++          this.theme = theme
++        },
++        getAccent: () => this.accent,
++        setAccent: (accent) => {
++          this.accent = accent
++        },
++        getNumbers: () => this._numbers,
++        setNumbers: (v) => {
++          this.numbers = v
++        },
++        onDispose: (fn) => this.disposers.push(fn),
++      })
++      const onGearClick = () => menu.toggle()
++      gear.addEventListener('click', onGearClick)
++      const onContextMenu = (e: MouseEvent) => {
++        e.preventDefault()
++        // right-clicking the open menu itself shouldn't toggle it closed
++        if ((e.target as Element | null)?.closest?.('.tiao-pane-menu')) return
++        menu.toggle()
++      }
++      this.element.addEventListener('contextmenu', onContextMenu)
++      this.disposers.push(() => {
++        gear.removeEventListener('click', onGearClick)
++        this.element.removeEventListener('contextmenu', onContextMenu)
++      })
++    }
++
++    // clicking anywhere outside a focused pane input deselects/commits it,
++    // even when the click target swallows focus changes (e.g. canvases)
++    const collapseInputSelection = (input: HTMLInputElement) => {
++      try {
++        const end = input.value.length
++        input.setSelectionRange(end, end)
++      } catch {
++        /* some input types do not support selection ranges */
++      }
++    }
++    const onDocPointerDown = (e: PointerEvent) => {
++      const active = doc.activeElement
++      if (!(active instanceof HTMLInputElement) || !this.element.contains(active)) return
++      const target = e.target as Node | null
++      if (target && (active === target || active.contains(target))) return
++      const activeRow = active.closest('.tiao-row')
++      const targetRow = target instanceof Element ? target.closest('.tiao-row') : null
++      collapseInputSelection(active)
++      markPointerBlur(targetRow === activeRow ? activeRow : null)
++      active.blur()
++      collapseInputSelection(active)
++    }
++    doc.addEventListener('pointerdown', onDocPointerDown, true)
++    this.disposers.push(() => doc.removeEventListener('pointerdown', onDocPointerDown, true))
++
++    // wider custom caret over focused inputs (the native bar is easy to miss)
++    this.disposers.push(installCaret(this.element, doc))
++
++    // free-positioned panes must stay inside the window when it shrinks
++    if (this.floating) {
++      const win = doc.defaultView
++      if (win) {
++        const onResize = () => this.clampToViewport()
++        win.addEventListener('resize', onResize)
++        this.disposers.push(() => win.removeEventListener('resize', onResize))
++      }
+     }
+-    this.element.addEventListener('contextmenu', onContextMenu)
+-    this.disposers.push(() => {
+-      gear.removeEventListener('click', onGearClick)
+-      this.element.removeEventListener('contextmenu', onContextMenu)
+-    })
+ 
+     if (options.toggleKey) {
+       const onKey = (e: KeyboardEvent) => {
+@@ -220,6 +347,8 @@ export class Pane extends Container {
+     }
+ 
+     ;(options.container ?? doc.body).append(this.element)
++    // a persisted free position may be off-screen on a smaller window
++    this.clampToViewport()
+ 
+     if (options.id) {
+       panes.set(options.id, this)
+@@ -261,6 +390,38 @@ export class Pane extends Container {
+     this.saveState({ draggable: v })
+   }
+ 
++  /** section numbering: prepends "1", "1.2", "2.1.1"-style indexes to folder titles */
++  get numbers(): boolean {
++    return this._numbers
++  }
++  set numbers(v: boolean) {
++    if (this._numbers === v) return
++    this._numbers = v
++    this.renumber()
++    this.saveState({ numbers: v })
++  }
++
++  /** re-index folder titles whenever the tree changes while numbering is on */
++  override notifyStructure(): void {
++    if (this._numbers) this.renumber()
++  }
++
++  private renumber(): void {
++    const walk = (container: Container, prefix: string) => {
++      let n = 0
++      for (const child of container.children) {
++        if (child instanceof FolderApi) {
++          const index = this._numbers ? `${prefix}${++n}` : null
++          child.setSectionIndex(index)
++          walk(child, index === null ? '' : `${index}.`)
++        } else if (child instanceof TabApi) {
++          for (const page of child.pages) walk(page, prefix)
++        }
++      }
++    }
++    walk(this, '')
++  }
++
+   /** current anchor; null when the pane has been dragged to a free position */
+   get anchor(): Anchor | null {
+     return this._anchor
+@@ -272,6 +433,51 @@ export class Pane extends Container {
+     this.saveState({ anchor, x: undefined, y: undefined })
+   }
+ 
++  get theme(): PaneTheme {
++    return this.element.classList.contains('tiao-theme-dark') ? 'dark' : 'light'
++  }
++  set theme(v: PaneTheme) {
++    this.applyThemeMode(v)
++    this.saveState({ theme: v })
++  }
++
++  /** current --tiao-accent (inline override, else the themed default) */
++  get accent(): string {
++    const inline = this.element.style.getPropertyValue('--tiao-accent').trim()
++    if (inline) return inline
++    const win = this.doc.defaultView
++    const computed = win?.getComputedStyle(this.element).getPropertyValue('--tiao-accent').trim()
++    return computed || DEFAULT_ACCENT
++  }
++  set accent(v: string) {
++    this.applyTheme({ accent: v })
++    this.saveState({ accent: v })
++  }
++
++  get searchOpen(): boolean {
++    return this.searchbar.classList.contains('tiao-open')
++  }
++  set searchOpen(v: boolean) {
++    if (this.searchOpen === v) return
++    this.searchbar.classList.toggle('tiao-open', v)
++    this.element.classList.toggle('tiao-search-on', v)
++    if (v) {
++      this.expanded = true
++      this.searchInput.focus()
++    } else {
++      this.searchInput.value = ''
++      this.searchInput.blur()
++      this.filter('')
++    }
++  }
++
++  /** show only items whose label/title matches; '' clears the filter */
++  filter(query: string): void {
++    const q = query.trim().toLowerCase()
++    this.element.classList.toggle('tiao-searching', q !== '')
++    for (const child of this.children) child.applySearch(q)
++  }
++
+   /** register a plugin for this pane only */
+   registerPlugin(plugin: TiaoPlugin): void {
+     this.paneRegistry.register(plugin)
+@@ -285,6 +491,11 @@ export class Pane extends Container {
+ 
+   moveTo(x: number, y: number): void {
+     this._anchor = null
++    const win = this.doc.defaultView
++    const w = this.element.offsetWidth
++    const h = this.element.offsetHeight
++    if (win && w) x = clamp(x, 0, Math.max(0, win.innerWidth - w))
++    if (win && h) y = clamp(y, 0, Math.max(0, win.innerHeight - h))
+     const s = this.element.style
+     s.left = `${x}px`
+     s.top = `${y}px`
+@@ -293,6 +504,68 @@ export class Pane extends Container {
+     s.transform = 'none'
+   }
+ 
++  /** invisible strips along the left/right/bottom edges; dragging them resizes the pane */
++  private installResizeHandles(): void {
++    const edges = ['left', 'right', 'bottom', 'bottom-left', 'bottom-right'] as const
++    for (const edge of edges) {
++      const handle = h('div', `tiao-resize tiao-resize-${edge}`)
++      this.element.append(handle)
++      const horiz: 'left' | 'right' | null =
++        edge === 'bottom' ? null : edge.includes('left') ? 'left' : 'right'
++      const vert = edge.startsWith('bottom')
++      let baseW = 0
++      let baseH = 0
++      let baseLeft = 0
++      const apply = (dx: number, dy: number, last: boolean) => {
++        const patch: PersistedState = {}
++        if (horiz) {
++          const w = clamp(baseW + (horiz === 'left' ? -dx : dx), MIN_WIDTH, MAX_WIDTH)
++          this.element.style.width = `${w}px`
++          // free-positioned panes keep the right edge pinned while the left is dragged
++          // (anchored panes already pin their edges via anchor positioning)
++          if (horiz === 'left' && !this._anchor) {
++            this.element.style.left = `${baseLeft + (baseW - w)}px`
++          }
++          patch.w = w
++        }
++        if (vert) {
++          const hMax = clamp(baseH + dy, MIN_HEIGHT, MAX_HEIGHT)
++          this.element.style.setProperty('--tiao-max-height', `${hMax}px`)
++          patch.hMax = hMax
++        }
++        if (last) this.saveState(patch)
++      }
++      this.disposers.push(
++        draggable(handle, {
++          onStart: () => {
++            const rect = this.element.getBoundingClientRect()
++            baseW = rect.width
++            baseH = rect.height
++            baseLeft = rect.left
++          },
++          onMove: (s) => {
++            if (s.moved) apply(s.dx, s.dy, false)
++          },
++          onEnd: (s) => {
++            if (s.moved) apply(s.dx, s.dy, true)
++          },
++        }),
++      )
++    }
++  }
++
++  /** re-clamp a free-positioned pane into the viewport (anchored panes track their edges) */
++  private clampToViewport(): void {
++    if (!this.floating || this._anchor) return
++    const win = this.doc.defaultView
++    if (!win) return
++    const rect = this.element.getBoundingClientRect()
++    if (!rect.width) return
++    const x = clamp(rect.left, 0, Math.max(0, win.innerWidth - rect.width))
++    const y = clamp(rect.top, 0, Math.max(0, win.innerHeight - rect.height))
++    if (x !== rect.left || y !== rect.top) this.moveTo(x, y)
++  }
++
+   private applyAnchor(): void {
+     const anchor = this._anchor
+     if (!anchor) return
+@@ -322,6 +595,11 @@ export class Pane extends Container {
+         s.top = '50%'
+         s.transform = 'translateY(-50%)'
+         break
++      case 'center':
++        s.left = '50%'
++        s.top = '50%'
++        s.transform = 'translate(-50%, -50%)'
++        break
+       case 'right-center':
+         s.right = m
+         s.top = '50%'
+@@ -347,6 +625,10 @@ export class Pane extends Container {
+     }
+   }
+ 
++  private applyThemeMode(theme: PaneTheme): void {
++    this.element.classList.toggle('tiao-theme-dark', theme === 'dark')
++  }
++
+   private applyDraggable(): void {
+     this.element.classList.toggle('tiao-draggable', this._draggable)
+   }
+diff --git a/packages/core/src/styles.css b/packages/core/src/styles.css
+index 9314e99..1ef21d6 100644
+--- a/packages/core/src/styles.css
++++ b/packages/core/src/styles.css
+@@ -15,26 +15,30 @@
+   /* ---- theme tokens ---- */
+   --tiao-bg: rgba(250, 250, 250, 0.95);
+   --tiao-fg: var(--tiao-neutral-900);
++  /* muted: value/label text sits one tick below headers in the hierarchy */
++  --tiao-fg-muted: var(--tiao-neutral-600);
+   --tiao-fg-dim: var(--tiao-neutral-400);
+   /* translucent interaction surfaces so controls read at any nesting depth */
+   --tiao-titlebar-bg: rgba(0, 0, 0, 0.05);
+-  /* nest-bg marks nested containers; hover sits one contrast step above it */
+-  --tiao-nest-bg: rgba(0, 0, 0, 0.045);
++  /* vertical guide marking folder nesting depth; active while hovered */
++  --tiao-depth-line: rgba(0, 0, 0, 0.09);
++  --tiao-depth-line-active: rgba(0, 0, 0, 0.3);
+   --tiao-hover: rgba(0, 0, 0, 0.08);
++  /* softer section-wide highlight, one contrast step below row hover */
++  --tiao-hover-soft: rgba(0, 0, 0, 0.04);
+   --tiao-hover-strong: rgba(0, 0, 0, 0.12);
+   --tiao-surface: rgba(0, 0, 0, 0.04);
+   --tiao-surface-hover: rgba(0, 0, 0, 0.08);
+   --tiao-button-bg: rgba(0, 0, 0, 0.07);
+   --tiao-button-bg-hover: rgba(0, 0, 0, 0.11);
+   --tiao-fill: rgba(0, 0, 0, 0.08);
+-  --tiao-accent: #3478f6;
+-  --tiao-accent-fg: #ffffff;
++  --tiao-accent: #84cc16;
++  --tiao-accent-fg: #1a2e05;
+   --tiao-border: rgba(0, 0, 0, 0.07);
+-  --tiao-nest-border: rgba(0, 0, 0, 0.06);
+-  --tiao-radius: 10px;
+-  --tiao-radius-sm: 5px;
++  --tiao-radius: 7px;
++  --tiao-radius-sm: 4px;
+   --tiao-width: 280px;
+-  /* gutter aligns folder-header text with row labels (rack 2 + row 2 + label 6) */
++  /* folder-header inset and chevron gap; keeps header titles aligned with row labels */
+   --tiao-gutter: 4px;
+   --tiao-max-height: 500px;
+   --tiao-font:
+@@ -67,20 +71,22 @@
+ .tiao-pane.tiao-theme-dark {
+   --tiao-bg: rgba(23, 23, 23, 0.95);
+   --tiao-fg: var(--tiao-neutral-100);
++  --tiao-fg-muted: var(--tiao-neutral-300);
+   --tiao-fg-dim: var(--tiao-neutral-500);
+   --tiao-titlebar-bg: rgba(255, 255, 255, 0.06);
+-  --tiao-nest-bg: rgba(255, 255, 255, 0.05);
++  --tiao-depth-line: rgba(255, 255, 255, 0.11);
++  --tiao-depth-line-active: rgba(255, 255, 255, 0.34);
+   --tiao-hover: rgba(255, 255, 255, 0.09);
++  --tiao-hover-soft: rgba(255, 255, 255, 0.045);
+   --tiao-hover-strong: rgba(255, 255, 255, 0.14);
+   --tiao-surface: rgba(255, 255, 255, 0.055);
+   --tiao-surface-hover: rgba(255, 255, 255, 0.1);
+   --tiao-button-bg: rgba(255, 255, 255, 0.08);
+   --tiao-button-bg-hover: rgba(255, 255, 255, 0.13);
+   --tiao-fill: rgba(255, 255, 255, 0.11);
+-  --tiao-accent: #4c8dff;
+-  --tiao-accent-fg: #ffffff;
++  --tiao-accent: #a3e635;
++  --tiao-accent-fg: #1a2e05;
+   --tiao-border: rgba(255, 255, 255, 0.08);
+-  --tiao-nest-border: rgba(255, 255, 255, 0.07);
+ }
+ 
+ .tiao-pane *,
+@@ -121,6 +127,28 @@
+ }
+ .tiao-pane input {
+   outline: none;
++  caret-color: var(--tiao-accent);
++}
++/* custom 2px caret drawn over focused pane inputs (the native bar is too
++   thin to notice); the native caret is hidden while this one is active */
++.tiao-caret {
++  position: absolute;
++  z-index: 200;
++  width: 2px;
++  border-radius: 1px;
++  background: var(--tiao-accent);
++  pointer-events: none;
++  animation: tiao-caret-blink 1s steps(2, jump-none) infinite;
++}
++@keyframes tiao-caret-blink {
++  50% {
++    opacity: 0;
++  }
++}
++/* the accent theme color carries into text highlights inside inputs */
++.tiao-pane input::selection {
++  background: var(--tiao-accent);
++  color: var(--tiao-accent-fg);
+ }
+ 
+ .tiao-icon {
+@@ -129,11 +157,13 @@
+   flex: none;
+ }
+ 
+-/* values and row labels are monospace; headers and buttons keep the UI font */
++/* values and row labels are monospace and one tick less primary than headers,
++   so section titles carry the hierarchy */
+ .tiao-pane :where(.tiao-label, .tiao-num-input, .tiao-text-input, .tiao-select,
+     .tiao-color-text, .tiao-monitor-text, .tiao-graph-value) {
+   font-family: var(--tiao-font-mono);
+   font-size: var(--tiao-font-size-mono);
++  color: var(--tiao-fg-muted);
+ }
+ 
+ /* ---- pane chrome ---- */
+@@ -144,11 +174,13 @@
+   width: 100%;
+   height: 28px;
+   background: var(--tiao-titlebar-bg);
++  border-bottom: 1px solid var(--tiao-border);
+   border-radius: var(--tiao-radius) var(--tiao-radius) 0 0;
+   transition: background 0.12s ease;
+ }
+ .tiao-pane:not(.tiao-expanded) > .tiao-titlebar {
+   border-radius: var(--tiao-radius);
++  border-bottom-color: transparent;
+ }
+ .tiao-titlebar:hover {
+   background: var(--tiao-hover-strong);
+@@ -160,11 +192,45 @@
+ .tiao-draggable > .tiao-titlebar:active {
+   cursor: grabbing;
+ }
+-.tiao-pane-gear {
++.tiao-titlebar-main {
++  flex: 1;
++  display: flex;
++  align-items: center;
++  gap: 6px;
++  height: 100%;
++  padding: 0 6px 0 8px;
++  min-width: 0;
++}
++/* centered on the full titlebar width (the action icons would otherwise skew
++   it left); clicks pass through to the collapse button / icons underneath */
++.tiao-pane-title {
+   position: absolute;
+-  left: 6px;
++  left: 50%;
+   top: 50%;
+-  transform: translateY(-50%);
++  transform: translate(-50%, -50%);
++  max-width: calc(100% - 104px);
++  pointer-events: none;
++  text-align: center;
++  overflow: hidden;
++  text-overflow: ellipsis;
++  white-space: nowrap;
++}
++.tiao-titlebar .tiao-icon-triangle {
++  color: var(--tiao-fg-dim);
++  transition: transform 0.18s ease;
++}
++.tiao-pane:not(.tiao-expanded) .tiao-titlebar .tiao-icon-triangle {
++  transform: rotate(-90deg);
++}
++/* action icons (search, gear) on the right; revealed on titlebar hover */
++.tiao-titlebar-actions {
++  display: flex;
++  align-items: center;
++  gap: 2px;
++  height: 100%;
++  padding-right: 6px;
++}
++.tiao-titlebar-btn {
+   width: 18px;
+   height: 18px;
+   display: flex;
+@@ -175,36 +241,48 @@
+   opacity: 0;
+   transition: opacity 0.12s ease, color 0.12s ease;
+ }
+-.tiao-titlebar:hover .tiao-pane-gear,
+-.tiao-pane-gear:focus-visible {
++.tiao-titlebar:hover .tiao-titlebar-btn,
++.tiao-titlebar-btn:focus-visible {
+   opacity: 1;
+ }
+-.tiao-pane-gear:hover {
++.tiao-titlebar-btn:hover {
+   color: var(--tiao-fg);
+ }
+-.tiao-titlebar-main {
+-  flex: 1;
++/* keep the search icon visible while the search row is open */
++.tiao-search-on .tiao-pane-search {
++  opacity: 1;
++  color: var(--tiao-accent);
++}
++
++/* ---- search row ---- */
++.tiao-searchbar {
+   display: flex;
+   align-items: center;
+-  gap: 6px;
+-  height: 100%;
+-  padding: 0 8px 0 28px;
+-  font-weight: 600;
+-  min-width: 0;
++  height: 0;
++  overflow: hidden;
++  padding: 0 4px;
++  transition: height 0.15s ease;
+ }
+-.tiao-pane-title {
++.tiao-searchbar.tiao-open {
++  height: 28px;
++}
++.tiao-search-input {
++  appearance: none;
++  -webkit-appearance: none;
+   flex: 1;
+-  text-align: center;
+-  overflow: hidden;
+-  text-overflow: ellipsis;
+-  white-space: nowrap;
++  min-width: 0;
++  height: 20px;
++  padding: 0 6px;
++  border-radius: var(--tiao-radius-sm);
++  background: var(--tiao-surface);
++  font-family: var(--tiao-font-mono);
++  font-size: var(--tiao-font-size-mono);
+ }
+-.tiao-titlebar .tiao-icon-chevron {
++.tiao-search-input::placeholder {
+   color: var(--tiao-fg-dim);
+-  transition: transform 0.18s ease;
+ }
+-.tiao-pane:not(.tiao-expanded) .tiao-titlebar .tiao-icon-chevron {
+-  transform: rotate(-90deg);
++.tiao-search-input::-webkit-search-cancel-button {
++  display: none;
+ }
+ 
+ .tiao-pane-body,
+@@ -222,12 +300,19 @@
+   overflow: hidden;
+   min-height: 0;
+ }
++/* scrollbar is hidden so overflow never changes the content width */
+ .tiao-pane > .tiao-pane-body > .tiao-pane-clip {
+   max-height: calc(var(--tiao-max-height) - 28px);
+   overflow-y: auto;
+   overscroll-behavior: contain;
+-  scrollbar-width: thin;
+-  scrollbar-color: var(--tiao-fill) transparent;
++  scrollbar-width: none;
++}
++.tiao-pane > .tiao-pane-body > .tiao-pane-clip::-webkit-scrollbar {
++  display: none;
++}
++/* floating panes never grow past the window height either */
++.tiao-pane.tiao-floating > .tiao-pane-body > .tiao-pane-clip {
++  max-height: min(calc(var(--tiao-max-height) - 28px), calc(100dvh - 44px));
+ }
+ .tiao-pane > .tiao-pane-body > .tiao-pane-clip > .tiao-rack {
+   padding: 1px 2px 2px;
+@@ -270,10 +355,13 @@
+   cursor: pointer;
+ }
+ .tiao-label {
+-  /* labelled rows split exactly in half so control columns align across rows */
+-  flex: 0 0 calc(50% - 6px);
++  /* labelled rows split exactly in half so control columns align across rows.
++     each folder level indents the row by 12px; shrinking the label by an
++     extra 6px/level (50% of the narrower row already absorbs the other half)
++     keeps control columns identical across nesting depths. --tiao-depth is
++     set on folder racks from JS. */
++  flex: 0 0 calc(50% - 6px - var(--tiao-depth, 0) * 6px);
+   padding-left: 6px;
+-  color: var(--tiao-fg);
+   overflow: hidden;
+   text-overflow: ellipsis;
+   white-space: nowrap;
+@@ -289,90 +377,123 @@
+   width: 100%;
+ }
+ 
++/* inset from the edges so sections get some breathing room */
+ .tiao-separator {
+   height: 1px;
+-  margin: 4px 0;
++  margin: 4px 8px;
+   background: var(--tiao-border);
+ }
+ 
+-/* ---- folders: translucent nested surface (compounds naturally with depth) ---- */
++/* ---- folders: chevron-led headers, children indented behind a depth line ---- */
+ .tiao-folder {
+   margin-top: 2px;
+-  border-radius: calc(var(--tiao-radius-sm) + 2px);
+-  background: var(--tiao-nest-bg);
+-  box-shadow: inset 0 0 0 1px var(--tiao-nest-border);
++  border-radius: var(--tiao-radius-sm);
++  transition: background 0.12s ease;
++}
++/* hovering a collapse control (header or depth line) highlights the whole
++   section; the folder box already carries the rack's 2px inset */
++.tiao-folder:not(.tiao-folder-static):has(> .tiao-folder-header:hover),
++.tiao-folder:not(.tiao-folder-static):has(> .tiao-folder-body > .tiao-folder-line:hover) {
++  background: var(--tiao-hover-soft);
+ }
+ .tiao-folder-header {
+   position: relative;
+   display: flex;
+   align-items: center;
+-  gap: 6px;
++  gap: var(--tiao-gutter);
+   width: 100%;
+   height: 24px;
+-  /* gutter + label inset, so header text lines up with row labels below */
+-  padding: 0 calc(var(--tiao-gutter) + 6px);
++  padding: 0 6px 0 var(--tiao-gutter);
+   text-align: left;
+-  border-radius: calc(var(--tiao-radius-sm) + 2px);
+-}
+-.tiao-folder-header::before {
+-  content: '';
+-  position: absolute;
+-  inset: 2px;
+   border-radius: var(--tiao-radius-sm);
+-  background: transparent;
+-  transition: background 0.12s ease;
+-  pointer-events: none;
+-}
+-/* expanded folders keep the hover surface on their header for contrast */
+-.tiao-folder-header:hover::before,
+-.tiao-folder.tiao-expanded > .tiao-folder-header::before {
+-  background: var(--tiao-hover);
+-}
+-.tiao-folder.tiao-expanded > .tiao-folder-header:hover::before {
+-  background: var(--tiao-hover-strong);
+-}
+-.tiao-folder-header > * {
+-  position: relative;
+ }
+-/* non-collapsible sections: plain header, no chevron, no click affordance */
++/* non-collapsible sections: same caret, but no click affordance */
+ .tiao-folder-static > .tiao-folder-header {
+   cursor: default;
+ }
+-.tiao-folder-static > .tiao-folder-header .tiao-icon-chevron {
+-  display: none;
+-}
+-.tiao-folder-static.tiao-expanded > .tiao-folder-header:hover::before {
+-  background: var(--tiao-hover);
+-}
+-/* hierarchical section numbers: 1, 1.1, 1.1.1 (racks scope the counter) */
+-.tiao-rack {
+-  counter-reset: tiao-section;
+-}
+-.tiao-folder {
+-  counter-increment: tiao-section;
+-}
+-.tiao-folder-index {
+-  color: var(--tiao-fg-dim);
+-  font-variant-numeric: tabular-nums;
+-}
+-.tiao-folder-index::before {
+-  content: counters(tiao-section, '.');
+-}
+ .tiao-folder-title {
+   flex: 1;
+   overflow: hidden;
+   text-overflow: ellipsis;
+   white-space: nowrap;
+ }
+-.tiao-folder-header .tiao-icon-chevron {
++/* optional section number ("1.2"), subtler than the title */
++.tiao-folder-index {
++  color: var(--tiao-fg-dim);
++  font-weight: 400;
++  font-variant-numeric: tabular-nums;
++}
++.tiao-folder-header .tiao-icon-triangle {
++  position: relative;
++  top: -1px;
+   color: var(--tiao-fg-dim);
+   transition: transform 0.18s ease;
+ }
+-.tiao-folder:not(.tiao-expanded) > .tiao-folder-header .tiao-icon-chevron {
++.tiao-folder:not(.tiao-expanded) > .tiao-folder-header .tiao-icon-triangle {
+   transform: rotate(-90deg);
+ }
++/* clickable depth line under the caret: the hit area is a slim button, the
++   visible line is inset from the body edges so it clears the hover pills */
++.tiao-folder-body {
++  position: relative;
++}
++.tiao-folder-line {
++  position: absolute;
++  /* hit area centered on the line, under the caret (header gutter 4 + half icon 6) */
++  left: 4px;
++  top: 2px;
++  bottom: 4px;
++  width: 10px;
++  cursor: pointer;
++}
++.tiao-folder-line::before {
++  content: '';
++  position: absolute;
++  left: 5px;
++  top: 2px;
++  bottom: 2px;
++  width: 1px;
++  border-radius: 1px;
++  background: var(--tiao-depth-line);
++  transition: background 0.12s ease;
++}
++.tiao-folder:hover > .tiao-folder-body > .tiao-folder-line::before {
++  background: var(--tiao-depth-line-active);
++}
++.tiao-folder-line:hover::before {
++  background: var(--tiao-accent);
++}
++.tiao-folder-static > .tiao-folder-body > .tiao-folder-line {
++  pointer-events: none;
++}
++/* colored folders: title takes the color; caret and depth line take softer mixes */
++.tiao-folder-colored > .tiao-folder-header .tiao-folder-title {
++  color: var(--tiao-folder-color);
++}
++.tiao-folder-colored > .tiao-folder-header .tiao-folder-index {
++  color: color-mix(in srgb, var(--tiao-folder-color) 55%, transparent);
++}
++.tiao-folder-colored > .tiao-folder-header .tiao-icon-triangle {
++  color: color-mix(in srgb, var(--tiao-folder-color) 65%, transparent);
++}
++.tiao-folder-colored > .tiao-folder-body > .tiao-folder-line::before {
++  background: color-mix(in srgb, var(--tiao-folder-color) 30%, transparent);
++}
++.tiao-folder-colored:hover > .tiao-folder-body > .tiao-folder-line::before {
++  background: color-mix(in srgb, var(--tiao-folder-color) 55%, transparent);
++}
++.tiao-folder-colored > .tiao-folder-body > .tiao-folder-line:hover::before {
++  background: var(--tiao-folder-color);
++}
++/* children indent past the depth line; label text lines up with the header
++   title. no right padding: nested control columns end flush with top-level
++   ones (the pane rack already provides the outer 2px inset) */
+ .tiao-folder > .tiao-folder-body > .tiao-folder-clip > .tiao-rack {
+-  padding: 0 2px 2px;
++  padding: 0 0 2px 12px;
++}
++/* nested row hover pills sit slightly inside the indent */
++.tiao-folder-clip > .tiao-rack > .tiao-row::before {
++  left: 2px;
+ }
+ 
+ /* ---- tabs ---- */
+@@ -406,14 +527,13 @@
+   display: block;
+ }
+ 
+-/* ---- buttons ---- */
++/* ---- buttons: UI font, unlike value fields ---- */
+ .tiao-button {
+-  height: var(--tiao-row-height);
++  /* slightly taller than value fields so labels get breathing room */
++  height: calc(var(--tiao-row-height) + 2px);
+   padding: 0 12px;
+   border-radius: var(--tiao-radius-sm);
+   background: var(--tiao-button-bg);
+-  font-family: var(--tiao-font-mono);
+-  font-size: var(--tiao-font-size-mono);
+   transition: background 0.12s ease;
+ }
+ .tiao-button:hover {
+@@ -423,6 +543,22 @@
+   transform: translateY(0.5px);
+ }
+ 
++/* ---- button groups: equal-width siblings sharing one row ---- */
++.tiao-btngroup {
++  display: flex;
++  gap: 2px;
++  width: 100%;
++  min-width: 0;
++}
++.tiao-btngroup .tiao-button {
++  flex: 1;
++  min-width: 0;
++  padding: 0 4px;
++  overflow: hidden;
++  text-overflow: ellipsis;
++  white-space: nowrap;
++}
++
+ /* ---- number: compact fill slider + number field in the control column ---- */
+ .tiao-number {
+   display: flex;
+@@ -475,18 +611,23 @@
+   width: 100%;
+   min-width: 0;
+ }
+-/* left grip dots advertise horizontal draggability (hidden while editing) */
++/* left grip bar advertises horizontal draggability (hidden while editing) */
+ .tiao-scrub-grip {
+   position: absolute;
+-  left: 4px;
++  left: 5px;
+   top: 50%;
+   transform: translateY(-50%);
+-  width: 6px;
++  width: 2px;
+   height: 11px;
++  border-radius: 1px;
+   pointer-events: none;
+-  background-image: radial-gradient(circle, var(--tiao-fg-dim) 0.9px, transparent 1px);
+-  background-size: 3px 3px;
++  background: var(--tiao-fg-dim);
+   opacity: 0.8;
++  transition: background 0.12s ease;
++}
++.tiao-row:hover .tiao-scrub-grip {
++  background: var(--tiao-accent);
++  opacity: 1;
+ }
+ .tiao-scrub .tiao-num-input:read-write + .tiao-scrub-grip {
+   display: none;
+@@ -495,35 +636,52 @@
+ .tiao-number .tiao-slider-num .tiao-scrub-grip {
+   display: none;
+ }
+-/* tick ruler revealed while dragging; background-position scrolls with dx */
+-.tiao-scrub-guide {
++/* full-screen tick ruler shown while scrubbing: it sits on <body> so the
++   ruler bleeds off the pane and the resize cursor holds across the screen.
++   color variables are copied inline from the pane at drag start. */
++.tiao-drag-overlay {
++  position: fixed;
++  inset: 0;
++  z-index: 2147483647;
++  cursor: ew-resize;
++}
++.tiao-drag-overlay-guide {
+   position: absolute;
+-  left: 4px;
+-  right: 4px;
+-  bottom: 2px;
++  left: 0;
++  right: 0;
+   height: 4px;
+-  opacity: 0;
+   pointer-events: none;
+   background-image: repeating-linear-gradient(
+     90deg,
+     var(--tiao-fg-dim) 0 1px,
+     transparent 1px 5px
+   );
+-  background-position-x: 50%;
+-  transition: opacity 0.1s ease;
++  opacity: 0.6;
+ }
+-.tiao-scrub-guide::after {
+-  content: '';
++.tiao-drag-overlay-marker {
+   position: absolute;
+-  left: 50%;
+-  top: -2px;
+-  bottom: 0;
+   width: 2px;
++  height: 6px;
+   margin-left: -1px;
++  pointer-events: none;
+   background: var(--tiao-accent);
+ }
+-.tiao-scrub.tiao-scrubbing .tiao-scrub-guide {
+-  opacity: 0.7;
++/* directional arrows flanking the origin marker */
++.tiao-drag-overlay-marker::before,
++.tiao-drag-overlay-marker::after {
++  content: '';
++  position: absolute;
++  top: 50%;
++  transform: translateY(-50%);
++  border: 4px solid transparent;
++}
++.tiao-drag-overlay-marker::before {
++  left: -11px;
++  border-right-color: var(--tiao-accent);
++}
++.tiao-drag-overlay-marker::after {
++  right: -11px;
++  border-left-color: var(--tiao-accent);
+ }
+ .tiao-num-input {
+   width: 100%;
+@@ -609,7 +767,7 @@
+   pointer-events: none;
+ }
+ 
+-/* ---- pane settings menu ---- */
++/* ---- pane settings menu: a real embedded Pane beside the host pane ---- */
+ .tiao-pane-menu {
+   position: absolute;
+   top: 4px;
+@@ -617,11 +775,10 @@
+   z-index: 100;
+   display: none;
+   flex-direction: column;
+-  gap: 4px;
+-  width: 132px;
+-  padding: 8px;
++  width: 190px;
++  padding: 4px;
+   background: var(--tiao-bg);
+-  border-radius: calc(var(--tiao-radius-sm) + 2px);
++  border-radius: var(--tiao-radius);
+   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.22), 0 0 0 1px var(--tiao-border);
+ }
+ .tiao-pane-menu.tiao-open {
+@@ -631,47 +788,50 @@
+   left: auto;
+   right: calc(100% + 6px);
+ }
+-.tiao-pane-menu-row {
+-  display: flex;
+-  align-items: center;
+-  justify-content: space-between;
+-  gap: 6px;
+-  min-height: 18px;
++/* the embedded settings pane inherits the shell's chrome */
++.tiao-pane-menu > .tiao-pane {
++  width: 100%;
++  background: transparent;
++  box-shadow: none;
++  backdrop-filter: none;
++  -webkit-backdrop-filter: none;
+ }
+-.tiao-pane-menu-label {
+-  color: var(--tiao-fg-dim);
+-  font-weight: 500;
+-  margin-top: 2px;
++.tiao-pane-menu > .tiao-pane > .tiao-titlebar {
++  display: none;
++}
++/* swatch group in the control column, under the accent row */
++.tiao-accent-palette {
++  padding: 2px 0;
++}
++.tiao-accent-swatch {
++  flex: 1;
++  aspect-ratio: 1;
++  border-radius: 3px;
++  box-shadow: inset 0 0 0 1px var(--tiao-border);
++  transition: filter 0.1s ease;
+ }
++.tiao-accent-swatch:hover {
++  filter: brightness(1.12);
++}
++/* 3x3 button grid (tweakpane-style), one cell per anchor position */
+ .tiao-anchor-grid {
+   display: grid;
+   grid-template-columns: repeat(3, 1fr);
+-  gap: 3px;
++  gap: 2px;
++  width: 100%;
+ }
+ .tiao-anchor-cell {
+-  height: 22px;
+-  border-radius: 4px;
+-  background: var(--tiao-surface);
+-  position: relative;
++  height: 14px;
++  border-radius: 3px;
++  background: var(--tiao-button-bg);
+   transition: background 0.12s ease;
+ }
+ .tiao-anchor-cell:hover {
+-  background: var(--tiao-surface-hover);
+-}
+-.tiao-anchor-cell::after {
+-  content: '';
+-  position: absolute;
+-  inset: 7px;
+-  border-radius: 2px;
+-  background: var(--tiao-fg-dim);
+-  transition: background 0.12s ease;
++  background: var(--tiao-button-bg-hover);
+ }
+ .tiao-anchor-cell.tiao-selected {
+   background: var(--tiao-accent);
+ }
+-.tiao-anchor-cell.tiao-selected::after {
+-  background: var(--tiao-accent-fg);
+-}
+ 
+ /* ---- popups (color picker, xy pad) ---- */
+ .tiao-popup {
+@@ -832,14 +992,21 @@
+   height: 18px;
+   flex: none;
+   border-radius: var(--tiao-radius-sm);
+-  background: var(--tiao-surface);
+-  color: var(--tiao-fg-dim);
++  /* inverted by default: prominent gray chip (like the slider fill), so the
++     affordance reads without hovering */
++  background: var(--tiao-fill);
++  color: var(--tiao-fg-muted);
+   transition: background 0.12s ease, color 0.12s ease;
+ }
+ .tiao-point-pad-toggle:hover {
+-  background: var(--tiao-surface-hover);
++  background: var(--tiao-hover-strong);
+   color: var(--tiao-fg);
+ }
++/* hovering anywhere on the row lights the pad toggle up in accent */
++.tiao-row:hover .tiao-point-pad-toggle {
++  background: var(--tiao-accent);
++  color: var(--tiao-accent-fg);
++}
+ .tiao-point-pad-toggle .tiao-icon {
+   width: 10px;
+   height: 10px;
+@@ -847,16 +1014,12 @@
+ .tiao-point-pad-popup {
+   width: 148px;
+ }
++/* plain surface: the x/y axis elements are the only guide lines */
+ .tiao-point-pad {
+   position: relative;
+   height: 136px;
+   border-radius: var(--tiao-radius-sm);
+   background: var(--tiao-surface);
+-  background-image:
+-    linear-gradient(var(--tiao-border) 1px, transparent 1px),
+-    linear-gradient(90deg, var(--tiao-border) 1px, transparent 1px);
+-  background-size: 17px 17px;
+-  background-position: center;
+   cursor: crosshair;
+   touch-action: none;
+ }
+@@ -930,6 +1093,86 @@
+   position: absolute;
+   top: 3px;
+   right: 6px;
+-  color: var(--tiao-fg);
+   font-variant-numeric: tabular-nums;
+ }
++.tiao-graph-unit {
++  margin-left: 0.25em;
++  color: var(--tiao-fg-dim);
++}
++/* labeled fps blade mirrors a standard two-column row */
++.tiao-fps {
++  display: flex;
++  align-items: center;
++  gap: 6px;
++  width: 100%;
++}
++
++/* ---- buffered log monitor: a mini scrollable console ---- */
++.tiao-monitor-log {
++  width: 100%;
++  line-height: 14px;
++  height: calc(var(--tiao-log-rows, 3) * 14px + 8px);
++  padding: 4px 6px;
++  border-radius: var(--tiao-radius-sm);
++  background: var(--tiao-surface);
++  box-shadow: inset 0 0 0 1px var(--tiao-border);
++  overflow-y: auto;
++  overscroll-behavior: contain;
++  font-family: var(--tiao-font-mono);
++  font-size: var(--tiao-font-size-mono);
++  color: var(--tiao-fg-muted);
++  font-variant-numeric: tabular-nums;
++}
++
++/* ---- edge resize: invisible strips straddling the pane edges ---- */
++.tiao-resize {
++  position: absolute;
++  z-index: 10;
++  touch-action: none;
++}
++.tiao-resize-left,
++.tiao-resize-right {
++  top: 8px;
++  bottom: 8px;
++  width: 7px;
++  cursor: ew-resize;
++}
++.tiao-resize-left {
++  left: -3px;
++}
++.tiao-resize-right {
++  right: -3px;
++}
++.tiao-resize-bottom {
++  left: 8px;
++  right: 8px;
++  bottom: -3px;
++  height: 7px;
++  cursor: ns-resize;
++}
++.tiao-resize-bottom-left,
++.tiao-resize-bottom-right {
++  bottom: -3px;
++  width: 11px;
++  height: 11px;
++}
++.tiao-resize-bottom-left {
++  left: -3px;
++  cursor: nesw-resize;
++}
++.tiao-resize-bottom-right {
++  right: -3px;
++  cursor: nwse-resize;
++}
++
++/* ---- search filtering (last: ties against folder collapse rules must lose to these) ---- */
++.tiao-search-miss {
++  display: none !important;
++}
++/* folders holding a match are forced open so the hits are reachable */
++.tiao-folder.tiao-search-open > .tiao-folder-body {
++  grid-template-rows: 1fr;
++}
++.tiao-folder.tiao-search-open > .tiao-folder-header .tiao-icon-triangle {
++  transform: none;
++}
+diff --git a/packages/plugin-bezier/src/index.ts b/packages/plugin-bezier/src/index.ts
+index a2e680e..8a2c1b7 100644
+--- a/packages/plugin-bezier/src/index.ts
++++ b/packages/plugin-bezier/src/index.ts
+@@ -1,4 +1,15 @@
+-import { clamp, createPopup, draggable, h, registerPlugin, type InputPlugin } from '@tiao/core'
++import {
++  clamp,
++  createPopup,
++  createScrubber,
++  draggable,
++  h,
++  icon,
++  mapRange,
++  registerPlugin,
++  Value,
++  type InputPlugin,
++} from '@tiao/core'
+ 
+ export type BezierValue = [number, number, number, number]
+ 
+@@ -7,16 +18,88 @@ function isBezier(v: unknown): v is BezierValue {
+ }
+ 
+ const SVG_NS = 'http://www.w3.org/2000/svg'
+-// y range extends beyond [0,1] so overshoot curves stay visible
+-const Y_MIN = -0.25
+-const Y_MAX = 1.25
+ 
+-const toX = (x: number) => x * 100
+-const toY = (y: number) => (1 - (y - Y_MIN) / (Y_MAX - Y_MIN)) * 100
++// visible y range: the graph keeps a 25% vertical margin above and below the
++// unit box so overshoot curves stay visible (matches tweakpane-essentials)
++const Y_MIN = -0.5
++const Y_MAX = 1.5
++
++const PREVIEW_TICKS = 24
++const PREVIEW_DELAY = 400
++const PREVIEW_DURATION = 1000
++
++const lerp = (a: number, b: number, t: number) => a + (b - a) * t
++
++/** point on the cubic bezier (0,0)-(x1,y1)-(x2,y2)-(1,1) at parameter t */
++function curvePoint(v: BezierValue, t: number): [number, number] {
++  const [x1, y1, x2, y2] = v
++  const x01 = lerp(0, x1, t)
++  const y01 = lerp(0, y1, t)
++  const x12 = lerp(x1, x2, t)
++  const y12 = lerp(y1, y2, t)
++  const x23 = lerp(x2, 1, t)
++  const y23 = lerp(y2, 1, t)
++  return [
++    lerp(lerp(x01, x12, t), lerp(x12, x23, t), t),
++    lerp(lerp(y01, y12, t), lerp(y12, y23, t), t),
++  ]
++}
++
++/** y for a given x (easing evaluation) via bisection on t */
++function curveY(v: BezierValue, x: number): number {
++  let dt = 0.25
++  let t = 0.5
++  let y = 0
++  for (let i = 0; i < 20; i++) {
++    const [tx, ty] = curvePoint(v, t)
++    t += dt * (tx < x ? 1 : -1)
++    y = ty
++    dt *= 0.5
++    if (Math.abs(x - tx) < 0.001) break
++  }
++  return y
++}
++
++/** popular preset eases: the CSS keywords plus the easings.net curves */
++const PRESETS: readonly [string, BezierValue][] = [
++  ['Linear', [0, 0, 1, 1]],
++  ['Ease', [0.25, 0.1, 0.25, 1]],
++  ['Ease In', [0.42, 0, 1, 1]],
++  ['Ease Out', [0, 0, 0.58, 1]],
++  ['Ease In Out', [0.42, 0, 0.58, 1]],
++  ['In Sine', [0.12, 0, 0.39, 0]],
++  ['Out Sine', [0.61, 1, 0.88, 1]],
++  ['In Out Sine', [0.37, 0, 0.63, 1]],
++  ['In Quad', [0.11, 0, 0.5, 0]],
++  ['Out Quad', [0.5, 1, 0.89, 1]],
++  ['In Out Quad', [0.45, 0, 0.55, 1]],
++  ['In Cubic', [0.32, 0, 0.67, 0]],
++  ['Out Cubic', [0.33, 1, 0.68, 1]],
++  ['In Out Cubic', [0.65, 0, 0.35, 1]],
++  ['In Expo', [0.7, 0, 0.84, 0]],
++  ['Out Expo', [0.16, 1, 0.3, 1]],
++  ['In Out Expo', [0.87, 0, 0.13, 1]],
++  ['In Back', [0.36, 0, 0.66, -0.56]],
++  ['Out Back', [0.34, 1.56, 0.64, 1]],
++  ['In Out Back', [0.68, -0.6, 0.32, 1.6]],
++]
++
++function presetIndexOf(v: BezierValue): number {
++  return PRESETS.findIndex(([, p]) => p.every((n, i) => Math.abs(n - (v[i] as number)) < 0.005))
++}
++
++/** shift-drag helper: snap the handle direction (from its endpoint) to 45deg steps */
++function lockAngle(ox: number, oy: number, x: number, y: number): { x: number; y: number } {
++  const d = Math.hypot(x - ox, y - oy)
++  const a = Math.atan2(y - oy, x - ox)
++  const la = (Math.round(a / (Math.PI / 4)) * Math.PI) / 4
++  return { x: ox + Math.cos(la) * d, y: oy + Math.sin(la) * d }
++}
+ 
+ /**
+- * Cubic-bezier easing editor (tweakpane-essentials style): a row with a curve
+- * preview and text field, expanding to a square editor popup. Usage:
++ * Cubic-bezier easing editor (tweakpane-essentials parity): a row with a curve
++ * preview and text field, expanding to an editor popup with a playback strip,
++ * draggable handles, and per-component number fields. Usage:
+  *   registerBezierPlugin()
+  *   pane.addBinding(params, 'easing', { view: 'bezier' })  // value: [x1, y1, x2, y2]
+  */
+@@ -30,7 +113,11 @@ export const bezierPlugin: InputPlugin<BezierValue> = {
+     ensureStyles(ctx.document)
+     const doc = ctx.document
+ 
+-    const el = <K extends keyof SVGElementTagNameMap>(tag: K, cls: string, parent: SVGElement) => {
++    const svgEl = <K extends keyof SVGElementTagNameMap>(
++      tag: K,
++      cls: string,
++      parent: Element,
++    ) => {
+       const node = doc.createElementNS(SVG_NS, tag)
+       node.setAttribute('class', cls)
+       parent.append(node)
+@@ -41,7 +128,7 @@ export const bezierPlugin: InputPlugin<BezierValue> = {
+     const previewSvg = doc.createElementNS(SVG_NS, 'svg')
+     previewSvg.setAttribute('viewBox', '0 0 24 24')
+     previewSvg.setAttribute('class', 'tiao-bezier-preview-svg')
+-    const previewCurve = el('path', 'tiao-bezier-preview-curve', previewSvg)
++    const previewCurve = svgEl('path', 'tiao-bezier-preview-curve', previewSvg)
+ 
+     const previewButton = h('button', 'tiao-bezier-preview', previewSvg)
+     previewButton.type = 'button'
+@@ -51,73 +138,178 @@ export const bezierPlugin: InputPlugin<BezierValue> = {
+     textInput.spellcheck = false
+     const root = h('div', 'tiao-bezier', previewButton, textInput)
+ 
+-    // --- popup: square editor ---
+-    const editorSvg = doc.createElementNS(SVG_NS, 'svg')
+-    editorSvg.setAttribute('viewBox', '0 0 100 100')
+-    editorSvg.setAttribute('class', 'tiao-bezier-svg')
+-    editorSvg.setAttribute('preserveAspectRatio', 'none')
+-
+-    // unit box with quarter grid; overshoot margin stays on the popup bg
+-    const unitBox = el('rect', 'tiao-bezier-unit', editorSvg)
+-    unitBox.setAttribute('x', '0')
+-    unitBox.setAttribute('width', '100')
+-    unitBox.setAttribute('y', String(toY(1)))
+-    unitBox.setAttribute('height', String(toY(0) - toY(1)))
+-    for (let i = 1; i < 4; i++) {
+-      const gx = el('line', 'tiao-bezier-guide', editorSvg)
+-      gx.setAttribute('x1', String(toX(i / 4)))
+-      gx.setAttribute('x2', String(toX(i / 4)))
+-      gx.setAttribute('y1', String(toY(0)))
+-      gx.setAttribute('y2', String(toY(1)))
+-      const gy = el('line', 'tiao-bezier-guide', editorSvg)
+-      gy.setAttribute('x1', '0')
+-      gy.setAttribute('x2', '100')
+-      gy.setAttribute('y1', String(toY(i / 4)))
+-      gy.setAttribute('y2', String(toY(i / 4)))
++    // --- editor: playback strip + graph (pixel-space svg + html handles) ---
++    const ticksSvg = doc.createElementNS(SVG_NS, 'svg')
++    ticksSvg.setAttribute('class', 'tiao-bezier-ticks')
++    const ticksPath = svgEl('path', 'tiao-bezier-tick', ticksSvg)
++    const marker = h('div', 'tiao-bezier-marker')
++    const strip = h('div', 'tiao-bezier-strip', ticksSvg, marker)
++
++    const graphSvg = doc.createElementNS(SVG_NS, 'svg')
++    graphSvg.setAttribute('class', 'tiao-bezier-graph-svg')
++    const guide = svgEl('path', 'tiao-bezier-guide', graphSvg)
++    const arm1 = svgEl('line', 'tiao-bezier-arm', graphSvg)
++    const arm2 = svgEl('line', 'tiao-bezier-arm', graphSvg)
++    const line = svgEl('polyline', 'tiao-bezier-curve', graphSvg)
++    const handles = [h('div', 'tiao-bezier-point'), h('div', 'tiao-bezier-point')] as const
++    const graph = h('div', 'tiao-bezier-graph', strip, graphSvg, handles[0], handles[1])
++    graph.tabIndex = 0
++
++    let selected: 0 | 1 = 0
++    const applySelection = () => {
++      handles[0].classList.toggle('tiao-selected', selected === 0)
++      handles[1].classList.toggle('tiao-selected', selected === 1)
++    }
++    applySelection()
++
++    // --- editor: per-component number fields under the graph ---
++    const fields = h('div', 'tiao-bezier-fields')
++    const axisValues: Value<number>[] = []
++    for (let i = 0; i < 4; i++) {
++      const isX = i % 2 === 0
++      const axisValue = new Value(ctx.value.get()[i] as number)
++      axisValues.push(axisValue)
++      const scrub = createScrubber(
++        axisValue,
++        () => ctx.value.get()[i] as number,
++        (v, last) => {
++          const next = [...ctx.value.get()] as BezierValue
++          next[i] = v
++          ctx.value.set(next, { source: 'ui', last })
++        },
++        isX ? { min: 0, max: 1, step: 0.01 } : { step: 0.01 },
++      )
++      scrub.element.title = `${isX ? 'x' : 'y'}${i < 2 ? 1 : 2}`
++      ctx.onDispose(scrub.dispose)
++      fields.append(scrub.element)
+     }
+ 
+-    const curve = el('path', 'tiao-bezier-curve', editorSvg)
+-    const arm1 = el('line', 'tiao-bezier-arm', editorSvg)
+-    const arm2 = el('line', 'tiao-bezier-arm', editorSvg)
+-    const end1 = el('circle', 'tiao-bezier-end', editorSvg)
+-    end1.setAttribute('r', '1.5')
+-    end1.setAttribute('cx', String(toX(0)))
+-    end1.setAttribute('cy', String(toY(0)))
+-    const end2 = el('circle', 'tiao-bezier-end', editorSvg)
+-    end2.setAttribute('r', '1.5')
+-    end2.setAttribute('cx', String(toX(1)))
+-    end2.setAttribute('cy', String(toY(1)))
+-    const handle1 = el('circle', 'tiao-bezier-handle', editorSvg)
+-    handle1.setAttribute('r', '2.5')
+-    const handle2 = el('circle', 'tiao-bezier-handle', editorSvg)
+-    handle2.setAttribute('r', '2.5')
+-
+-    const editor = h('div', 'tiao-bezier-editor', editorSvg)
++    // --- editor: preset dropdown ("Custom" + popular eases) ---
++    const presetSelect = h('select', 'tiao-select')
++    const customOption = doc.createElement('option')
++    customOption.value = ''
++    customOption.textContent = 'Custom'
++    presetSelect.append(customOption)
++    PRESETS.forEach(([name], i) => {
++      const opt = doc.createElement('option')
++      opt.value = String(i)
++      opt.textContent = name
++      presetSelect.append(opt)
++    })
++    const presetWrap = h('div', 'tiao-select-wrap tiao-bezier-presets', presetSelect, icon('chevron'))
++    const onPresetChange = () => {
++      const preset = PRESETS[Number(presetSelect.value)]
++      if (preset) ctx.value.set([...preset[1]], { source: 'ui', last: true })
++    }
++    presetSelect.addEventListener('change', onPresetChange)
++    ctx.onDispose(() => presetSelect.removeEventListener('change', onPresetChange))
++
++    const editor = h('div', 'tiao-bezier-editor', graph, presetWrap, fields)
+     const popup = createPopup(root, editor, ctx.onDispose)
+-    const onPreviewClick = () => popup.toggle()
+-    previewButton.addEventListener('click', onPreviewClick)
+-    ctx.onDispose(() => previewButton.removeEventListener('click', onPreviewClick))
+ 
+-    const render = (v: BezierValue) => {
++    // --- coordinate mapping (pixel space, 25% vertical margins) ---
++    const size = () => ({ w: graph.clientWidth, h: graph.clientHeight })
++    const valueToPos = (x: number, y: number) => {
++      const { w, h: gh } = size()
++      const vm = gh * 0.25
++      return { x: mapRange(x, 0, 1, 0, w), y: mapRange(y, 0, 1, gh - vm, vm) }
++    }
++    const posToValue = (px: number, py: number) => {
++      const { w, h: gh } = size()
++      const vm = gh * 0.25
++      return {
++        x: clamp(w === 0 ? 0 : px / w, 0, 1),
++        y: clamp(mapRange(py, gh - vm, vm, 0, 1), Y_MIN, Y_MAX),
++      }
++    }
++
++    // --- playback preview (tweakpane behavior: replay on every change) ---
++    let playing = false
++    let startTime = -1
++    const updateMarker = (progress: number) => {
++      marker.style.left = `${curveY(ctx.value.get(), clamp(progress, 0, 1)) * 100}%`
++    }
++    const onTimer = () => {
++      const dt = Date.now() - startTime
++      updateMarker(dt / PREVIEW_DURATION)
++      if (dt > PREVIEW_DURATION + PREVIEW_DELAY) stopPlayback()
++      if (playing) requestAnimationFrame(onTimer)
++    }
++    const stopPlayback = () => {
++      playing = false
++      marker.classList.remove('tiao-active')
++    }
++    const play = () => {
++      stopPlayback()
++      if (!popup.isOpen()) return
++      updateMarker(0)
++      marker.classList.add('tiao-active')
++      startTime = Date.now() + PREVIEW_DELAY
++      playing = true
++      requestAnimationFrame(onTimer)
++    }
++    ctx.onDispose(stopPlayback)
++    const onStripDown = (e: PointerEvent) => {
++      e.stopPropagation()
++      e.preventDefault()
++      play()
++    }
++    strip.addEventListener('pointerdown', onStripDown)
++    ctx.onDispose(() => strip.removeEventListener('pointerdown', onStripDown))
++
++    // --- rendering ---
++    const refresh = () => {
++      const v = ctx.value.get()
+       const [x1, y1, x2, y2] = v
+-      curve.setAttribute(
+-        'd',
+-        `M ${toX(0)} ${toY(0)} C ${toX(x1)} ${toY(y1)}, ${toX(x2)} ${toY(y2)}, ${toX(1)} ${toY(1)}`,
+-      )
+-      arm1.setAttribute('x1', String(toX(0)))
+-      arm1.setAttribute('y1', String(toY(0)))
+-      arm1.setAttribute('x2', String(toX(x1)))
+-      arm1.setAttribute('y2', String(toY(y1)))
+-      arm2.setAttribute('x1', String(toX(1)))
+-      arm2.setAttribute('y1', String(toY(1)))
+-      arm2.setAttribute('x2', String(toX(x2)))
+-      arm2.setAttribute('y2', String(toY(y2)))
+-      handle1.setAttribute('cx', String(toX(x1)))
+-      handle1.setAttribute('cy', String(toY(y1)))
+-      handle2.setAttribute('cx', String(toX(x2)))
+-      handle2.setAttribute('cy', String(toY(y2)))
+-
+-      // preview curve in a 24x24 box with 4px padding, y-flipped
++      const { w, h: gh } = size()
++      if (w > 0) {
++        graphSvg.setAttribute('viewBox', `0 0 ${w} ${gh}`)
++
++        // guides at y=0 and y=1
++        guide.setAttribute(
++          'd',
++          [0, 1]
++            .map((y) => {
++              const p1 = valueToPos(0, y)
++              const p2 = valueToPos(1, y)
++              return `M ${p1.x},${p1.y} L ${p2.x},${p2.y}`
++            })
++            .join(' '),
++        )
++
++        const points: string[] = []
++        for (let t = 0; t <= 1.0001; t += 0.05) {
++          const [cx, cy] = curvePoint(v, Math.min(t, 1))
++          const p = valueToPos(cx, cy)
++          points.push(`${p.x},${p.y}`)
++        }
++        line.setAttribute('points', points.join(' '))
++
++        for (const index of [0, 1] as const) {
++          const from = valueToPos(index, index)
++          const to = valueToPos(v[index * 2] as number, v[index * 2 + 1] as number)
++          const arm = index === 0 ? arm1 : arm2
++          arm.setAttribute('x1', String(from.x))
++          arm.setAttribute('y1', String(from.y))
++          arm.setAttribute('x2', String(to.x))
++          arm.setAttribute('y2', String(to.y))
++          const handle = handles[index]
++          handle.style.left = `${to.x}px`
++          handle.style.top = `${to.y}px`
++        }
++
++        // playback strip ticks, spaced by the eased value
++        const tw = ticksSvg.clientWidth
++        const th = ticksSvg.clientHeight
++        const ds: string[] = []
++        for (let i = 0; i < PREVIEW_TICKS; i++) {
++          const x = curveY(v, i / (PREVIEW_TICKS - 1)) * tw
++          ds.push(`M ${x},0 v${th}`)
++        }
++        ticksPath.setAttribute('d', ds.join(' '))
++      }
++
++      // row preview curve in a 24x24 box with 4px padding, y-flipped
+       const px = (x: number) => 4 + x * 16
+       const py = (y: number) => 20 - y * 16
+       previewCurve.setAttribute(
+@@ -127,21 +319,42 @@ export const bezierPlugin: InputPlugin<BezierValue> = {
+       if (doc.activeElement !== textInput) {
+         textInput.value = v.map((n) => round2(n)).join(', ')
+       }
++
++      const presetIndex = presetIndexOf(v)
++      presetSelect.value = presetIndex >= 0 ? String(presetIndex) : ''
+     }
+-    render(ctx.value.get())
+-    ctx.onDispose(ctx.value.subscribe(render))
+ 
+-    // text entry: four comma-separated numbers
++    const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(refresh) : null
++    ro?.observe(graph)
++    ctx.onDispose(() => ro?.disconnect())
++
++    refresh()
++    ctx.onDispose(
++      ctx.value.subscribe((v) => {
++        axisValues.forEach((av, i) => av.set(v[i] as number))
++        refresh()
++        play()
++      }),
++    )
++
++    const onPreviewClick = () => {
++      popup.toggle()
++      if (popup.isOpen()) {
++        refresh()
++        play()
++      }
++    }
++    previewButton.addEventListener('click', onPreviewClick)
++    ctx.onDispose(() => previewButton.removeEventListener('click', onPreviewClick))
++
++    // --- row text entry: four comma-separated numbers ---
+     const commitText = () => {
+       const nums = textInput.value.split(',').map((s) => Number(s.trim()))
+       if (nums.length === 4 && nums.every((n) => Number.isFinite(n))) {
+         const [x1, y1, x2, y2] = nums as BezierValue
+-        ctx.value.set(
+-          [clamp(x1, 0, 1), clamp(y1, Y_MIN, Y_MAX), clamp(x2, 0, 1), clamp(y2, Y_MIN, Y_MAX)],
+-          { source: 'ui', last: true },
+-        )
++        ctx.value.set([clamp(x1, 0, 1), y1, clamp(x2, 0, 1), y2], { source: 'ui', last: true })
+       } else {
+-        render(ctx.value.get())
++        refresh()
+       }
+     }
+     const onTextKey = (e: KeyboardEvent) => {
+@@ -154,33 +367,55 @@ export const bezierPlugin: InputPlugin<BezierValue> = {
+       textInput.removeEventListener('keydown', onTextKey)
+     })
+ 
+-    // one drag surface: grab whichever handle is closer
+-    const applyDrag = (index: 0 | 1, clientX: number, clientY: number, last: boolean) => {
+-      const rect = editorSvg.getBoundingClientRect()
+-      const x = clamp((clientX - rect.left) / rect.width, 0, 1)
+-      const y = Y_MAX - ((clientY - rect.top) / rect.height) * (Y_MAX - Y_MIN)
++    // --- graph drag: grab whichever handle is closer; shift locks 45deg angles ---
++    const applyDrag = (clientX: number, clientY: number, shift: boolean, last: boolean) => {
++      const rect = graph.getBoundingClientRect()
++      const vp = posToValue(clientX - rect.left, clientY - rect.top)
++      // angle-locking pivots on the handle's own endpoint: (0,0) or (1,1)
++      const p = shift ? lockAngle(selected, selected, vp.x, vp.y) : vp
+       const next = [...ctx.value.get()] as BezierValue
+-      next[index * 2] = round2(x)
+-      next[index * 2 + 1] = round2(clamp(y, Y_MIN, Y_MAX))
++      next[selected * 2] = round2(clamp(p.x, 0, 1))
++      next[selected * 2 + 1] = round2(clamp(p.y, Y_MIN, Y_MAX))
+       ctx.value.set(next, { source: 'ui', last })
+     }
+-    let active: 0 | 1 = 0
+     ctx.onDispose(
+-      draggable(editorSvg as unknown as HTMLElement, {
++      draggable(graph, {
+         onStart: (e) => {
+-          const rect = editorSvg.getBoundingClientRect()
+-          const px = (e.clientX - rect.left) / rect.width
+-          const py = Y_MAX - ((e.clientY - rect.top) / rect.height) * (Y_MAX - Y_MIN)
++          const rect = graph.getBoundingClientRect()
++          const px = e.clientX - rect.left
++          const py = e.clientY - rect.top
+           const [x1, y1, x2, y2] = ctx.value.get()
+-          active = Math.hypot(px - x1, py - y1) <= Math.hypot(px - x2, py - y2) ? 0 : 1
+-          applyDrag(active, e.clientX, e.clientY, false)
++          const p1 = valueToPos(x1, y1)
++          const p2 = valueToPos(x2, y2)
++          selected = Math.hypot(px - p1.x, py - p1.y) <= Math.hypot(px - p2.x, py - p2.y) ? 0 : 1
++          applySelection()
++          graph.focus()
++          applyDrag(e.clientX, e.clientY, e.shiftKey, false)
+         },
+-        onMove: (s) => applyDrag(active, s.x, s.y, false),
+-        onEnd: (s) => applyDrag(active, s.x, s.y, true),
++        onMove: (s, e) => applyDrag(s.x, s.y, e.shiftKey, false),
++        onEnd: (s, e) => applyDrag(s.x, s.y, e.shiftKey, true),
+       }),
+     )
+ 
+-    return { element: root }
++    // --- keyboard: arrows nudge the selected handle (shift x10, alt /10) ---
++    const onGraphKey = (e: KeyboardEvent) => {
++      const dx = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0
++      const dy = e.key === 'ArrowUp' ? 1 : e.key === 'ArrowDown' ? -1 : 0
++      if (dx === 0 && dy === 0) return
++      e.preventDefault()
++      const step = 0.01 * (e.shiftKey ? 10 : 1) * (e.altKey ? 0.1 : 1)
++      const next = [...ctx.value.get()] as BezierValue
++      next[selected * 2] = round2(clamp((next[selected * 2] as number) + dx * step, 0, 1))
++      next[selected * 2 + 1] = round2(
++        clamp((next[selected * 2 + 1] as number) + dy * step, Y_MIN, Y_MAX),
++      )
++      ctx.value.set(next, { source: 'ui', last: true })
++    }
++    graph.addEventListener('keydown', onGraphKey)
++    ctx.onDispose(() => graph.removeEventListener('keydown', onGraphKey))
++
++    // clicking the row label opens the editor (same as the preview button)
++    return { element: root, activate: onPreviewClick }
+   },
+ }
+ 
+@@ -201,7 +436,8 @@ const CSS = `
+   height: var(--tiao-row-height);
+   flex: none;
+   border-radius: var(--tiao-radius-sm);
+-  background: var(--tiao-surface);
++  /* inverted by default: prominent gray chip (like the slider fill) */
++  background: var(--tiao-fill);
+   color: var(--tiao-fg);
+   display: flex;
+   align-items: center;
+@@ -209,7 +445,11 @@ const CSS = `
+   transition: background 0.12s ease;
+ }
+ .tiao-bezier-preview:hover {
+-  background: var(--tiao-surface-hover);
++  background: var(--tiao-hover-strong);
++}
++/* hovering anywhere on the row draws the mini curve in accent */
++.tiao-row:hover .tiao-bezier-preview {
++  color: var(--tiao-accent);
+ }
+ .tiao-bezier-preview-svg {
+   width: 18px;
+@@ -225,42 +465,106 @@ const CSS = `
+   min-width: 0;
+   font-variant-numeric: tabular-nums;
+ }
+-.tiao-bezier-svg {
+-  width: 100%;
+-  aspect-ratio: 1;
++.tiao-bezier-editor {
++  width: 224px;
++}
++.tiao-bezier-graph {
++  position: relative;
++  height: 100px;
+   border-radius: var(--tiao-radius-sm);
+-  cursor: crosshair;
++  background: var(--tiao-surface);
++  overflow: hidden;
++  cursor: pointer;
+   touch-action: none;
+-  display: block;
+-  overflow: visible;
+ }
+-.tiao-bezier-unit {
+-  fill: var(--tiao-surface);
++.tiao-bezier-graph:focus-visible {
++  outline: 1.5px solid var(--tiao-accent);
++  outline-offset: 1px;
++}
++.tiao-bezier-graph-svg {
++  position: absolute;
++  inset: 0;
++  display: block;
++  width: 100%;
++  height: 100%;
+ }
+ .tiao-bezier-guide {
+-  stroke: var(--tiao-border);
+-  stroke-width: 1;
+-  vector-effect: non-scaling-stroke;
++  fill: none;
++  stroke: var(--tiao-fg);
++  stroke-dasharray: 1;
++  opacity: 0.1;
+ }
+ .tiao-bezier-curve {
+   fill: none;
+   stroke: var(--tiao-fg);
+-  stroke-width: 2;
+-  vector-effect: non-scaling-stroke;
++  stroke-width: 1.5;
+ }
+ .tiao-bezier-arm {
++  stroke: var(--tiao-fg);
++  stroke-dasharray: 1;
++  opacity: 0.5;
++}
++/* small circular handles, tweakpane-sized; the whole graph is the drag surface */
++.tiao-bezier-point {
++  position: absolute;
++  width: 4px;
++  height: 4px;
++  margin: -2px 0 0 -2px;
++  border: 1px solid var(--tiao-fg);
++  border-radius: 50%;
++  pointer-events: none;
++}
++.tiao-bezier-point.tiao-selected {
++  background: var(--tiao-accent);
++  border-color: var(--tiao-accent);
++}
++/* playback strip: eased tick marks + a marker dot that replays on change */
++.tiao-bezier-strip {
++  position: absolute;
++  left: 12px;
++  right: 12px;
++  top: 0;
++  /* border-box: 4px of tick height plus 4px padding above and below */
++  height: 12px;
++  padding: 4px 0;
++  cursor: pointer;
++  z-index: 1;
++}
++.tiao-bezier-ticks {
++  display: block;
++  width: 100%;
++  height: 100%;
++  overflow: visible;
++}
++.tiao-bezier-tick {
+   stroke: var(--tiao-fg-dim);
+-  stroke-width: 1;
+-  vector-effect: non-scaling-stroke;
++  opacity: 0.5;
++}
++.tiao-bezier-marker {
++  position: absolute;
++  top: 50%;
++  width: 4px;
++  height: 4px;
++  margin: -2px 0 0 -2px;
++  border-radius: 50%;
++  background: var(--tiao-fg);
++  opacity: 0;
++  transition: opacity 0.2s ease-out;
+ }
+-.tiao-bezier-end {
+-  fill: var(--tiao-fg-dim);
++.tiao-bezier-marker.tiao-active {
++  opacity: 1;
+ }
+-.tiao-bezier-handle {
+-  fill: var(--tiao-accent);
+-  stroke: var(--tiao-bg);
+-  stroke-width: 1;
+-  vector-effect: non-scaling-stroke;
++.tiao-bezier-presets {
++  margin-top: 6px;
++}
++.tiao-bezier-fields {
++  display: flex;
++  gap: 2px;
++  margin-top: 6px;
++}
++.tiao-bezier-fields .tiao-scrub {
++  flex: 1;
++  min-width: 0;
+ }
+ `
+ 
+diff --git a/packages/plugin-fps/src/index.ts b/packages/plugin-fps/src/index.ts
+index d502e8c..f94dd9b 100644
+--- a/packages/plugin-fps/src/index.ts
++++ b/packages/plugin-fps/src/index.ts
+@@ -25,6 +25,7 @@ export const fpsPlugin: BladePlugin = {
+   create(ctx) {
+     const sampleMs = typeof ctx.params['interval'] === 'number' ? ctx.params['interval'] : DEFAULT_SAMPLE_MS
+     const max = typeof ctx.params['max'] === 'number' ? ctx.params['max'] : 120
++    const bufferSize = typeof ctx.params['bufferSize'] === 'number' ? ctx.params['bufferSize'] : undefined
+     const value = new Value(0)
+ 
+     let frames = 0
+@@ -43,13 +44,20 @@ export const fpsPlugin: BladePlugin = {
+     const graph = createGraph({
+       document: ctx.document,
+       value,
+-      options: { min: 0, max, format: (v: number) => `${Math.round(v)} fps` },
++      options: {
++        min: 0,
++        max,
++        unit: 'FPS',
++        format: (v: number) => String(Math.round(v)),
++        ...(bufferSize !== undefined && { bufferSize }),
++      },
+       label: 'fps',
+       onDispose: ctx.onDispose,
+     })
++    // labeled: standard two-column row; label-less: full-width graph
+     const label = typeof ctx.params['label'] === 'string' ? ctx.params['label'] : null
+     const element = label
+-      ? h('div', 'tiao-fps', h('div', 'tiao-label', label), graph)
++      ? h('div', 'tiao-fps', h('div', 'tiao-label', label), h('div', 'tiao-control', graph))
+       : graph
+     return { element, full: true }
+   },
+@@ -65,7 +73,7 @@ export function registerFpsPlugin(): void {
+ 
+ export function addFpsGraph(
+   container: Container,
+-  params: { label?: string; interval?: number; max?: number } = {},
++  params: { label?: string; interval?: number; max?: number; bufferSize?: number } = {},
+ ) {
+   registerFpsPlugin()
+   return container.addBlade({ view: 'fps', ...params })
+diff --git a/packages/react/src/index.ts b/packages/react/src/index.ts
+index 675f400..569008d 100644
+--- a/packages/react/src/index.ts
++++ b/packages/react/src/index.ts
+@@ -1,8 +1,9 @@
+ export { useControls } from './useControls'
+ export type { ControlsResult } from './useControls'
+ export { usePane } from './usePane'
+-export { button, monitor } from './types'
++export { button, buttonGroup, monitor } from './types'
+ export type {
++  ButtonGroupItem,
+   ButtonItem,
+   InputDef,
+   MonitorItem,
+diff --git a/packages/react/src/manager.ts b/packages/react/src/manager.ts
+index a01b430..d85bc07 100644
+--- a/packages/react/src/manager.ts
++++ b/packages/react/src/manager.ts
+@@ -1,5 +1,5 @@
+ import { ControlStore } from './store'
+-import { isButton, isInputDef, isMonitor, itemValue, type Schema } from './types'
++import { isButton, isButtonGroup, isInputDef, isMonitor, itemValue, type Schema } from './types'
+ import type { BindingApi, Container, FolderApi, Pane, PaneOptions } from '@tiao/core'
+ 
+ type CoreModule = typeof import('@tiao/core')
+@@ -173,6 +173,15 @@ export class PaneManager {
+         continue
+       }
+ 
++      if (isButtonGroup(item)) {
++        const group = container.addButtonGroup({
++          label: item.label ?? name,
++          buttons: item.buttons,
++        })
++        reg.disposers.push(() => group.dispose())
++        continue
++      }
++
+       if (isMonitor(item)) {
+         const target: Record<string, unknown> = {}
+         Object.defineProperty(target, name, { get: item.get })
+diff --git a/packages/react/src/types.ts b/packages/react/src/types.ts
+index 56b3c6f..1a86c98 100644
+--- a/packages/react/src/types.ts
++++ b/packages/react/src/types.ts
+@@ -1,6 +1,7 @@
+ import type { BindingOptions, PaneOptions } from '@tiao/core'
+ 
+ export const BUTTON = Symbol('tiao.button')
++export const BUTTON_GROUP = Symbol('tiao.buttonGroup')
+ export const MONITOR = Symbol('tiao.monitor')
+ 
+ export interface ButtonItem {
+@@ -9,6 +10,12 @@ export interface ButtonItem {
+   onClick: () => void
+ }
+ 
++export interface ButtonGroupItem {
++  [BUTTON_GROUP]: true
++  buttons: Record<string, () => void>
++  label?: string | undefined
++}
++
+ export interface MonitorItem {
+   [MONITOR]: true
+   get: () => unknown
+@@ -19,18 +26,28 @@ export interface InputDef<T = unknown> extends BindingOptions {
+   value: T
+ }
+ 
+-export type SchemaItem = ButtonItem | MonitorItem | InputDef | number | string | boolean | object
++export type SchemaItem =
++  | ButtonItem
++  | ButtonGroupItem
++  | MonitorItem
++  | InputDef
++  | number
++  | string
++  | boolean
++  | object
+ 
+ export type Schema = Record<string, SchemaItem>
+ 
+ /** Extract the runtime value type of a schema item. */
+ export type SchemaValue<I> = I extends ButtonItem
+   ? never
+-  : I extends MonitorItem
++  : I extends ButtonGroupItem
+     ? never
+-    : I extends InputDef<infer T>
+-      ? T
+-      : I
++    : I extends MonitorItem
++      ? never
++      : I extends InputDef<infer T>
++        ? T
++        : I
+ 
+ export type SchemaValues<S extends Schema> = {
+   [K in keyof S as SchemaValue<S[K]> extends never ? never : K]: SchemaValue<S[K]>
+@@ -48,6 +65,14 @@ export function button(onClick: () => void, title?: string): ButtonItem {
+   return { [BUTTON]: true, onClick, title: title ?? '' }
+ }
+ 
++/** Schema helper: a row of equally-styled buttons, each with its own callback. */
++export function buttonGroup(
++  buttons: Record<string, () => void>,
++  label?: string,
++): ButtonGroupItem {
++  return { [BUTTON_GROUP]: true, buttons, label }
++}
++
+ /** Schema helper: a readonly monitor polling `get` (use view: 'graph' for a chart). */
+ export function monitor(get: () => unknown, options: BindingOptions = {}): MonitorItem {
+   return { [MONITOR]: true, get, options: { ...options, readonly: true } }
+@@ -57,6 +82,10 @@ export function isButton(item: SchemaItem): item is ButtonItem {
+   return typeof item === 'object' && item !== null && BUTTON in item
+ }
+ 
++export function isButtonGroup(item: SchemaItem): item is ButtonGroupItem {
++  return typeof item === 'object' && item !== null && BUTTON_GROUP in item
++}
++
+ export function isMonitor(item: SchemaItem): item is MonitorItem {
+   return typeof item === 'object' && item !== null && MONITOR in item
+ }
+diff --git a/packages/react/src/useControls.ts b/packages/react/src/useControls.ts
+index a06941a..ccc3327 100644
+--- a/packages/react/src/useControls.ts
++++ b/packages/react/src/useControls.ts
+@@ -3,6 +3,7 @@ import { isTiaoEnabled } from './config'
+ import { DEFAULT_PANE_ID, getManager, keyFor, type PaneManager } from './manager'
+ import {
+   isButton,
++  isButtonGroup,
+   isMonitor,
+   itemValue,
+   type Schema,
+@@ -51,7 +52,7 @@ export function useControls<S extends Schema>(
+ 
+     const folderPath = folder ? folder.split('.').filter(Boolean) : []
+     const valueKeys = Object.entries(schema)
+-      .filter(([, item]) => !isButton(item) && !isMonitor(item))
++      .filter(([, item]) => !isButton(item) && !isButtonGroup(item) && !isMonitor(item))
+       .map(([name, item]) => ({ name, key: keyFor(folderPath, name), initial: itemValue(item) }))
+ 
+     stable.current = {
+diff --git a/pnpm-lock.yaml b/pnpm-lock.yaml
+index 891fd84..134442b 100644
+--- a/pnpm-lock.yaml
++++ b/pnpm-lock.yaml
+@@ -29,9 +29,15 @@ importers:
+       '@tiao/plugin-bezier':
+         specifier: workspace:^
+         version: link:../../packages/plugin-bezier
++      '@tiao/plugin-camera':
++        specifier: workspace:^
++        version: link:../../packages/plugin-camera
+       '@tiao/plugin-fps':
+         specifier: workspace:^
+         version: link:../../packages/plugin-fps
++      '@tiao/plugin-media':
++        specifier: workspace:^
++        version: link:../../packages/plugin-media
+       '@tiao/plugin-radio-grid':
+         specifier: workspace:^
+         version: link:../../packages/plugin-radio-grid
+@@ -99,6 +105,19 @@ importers:
+         specifier: ^5.7.3
+         version: 5.9.3
+ 
++  packages/plugin-camera:
++    dependencies:
++      '@tiao/core':
++        specifier: workspace:^
++        version: link:../core
++    devDependencies:
++      tsup:
++        specifier: ^8.3.6
++        version: 8.5.1(postcss@8.5.16)(typescript@5.9.3)
++      typescript:
++        specifier: ^5.7.3
++        version: 5.9.3
++
+   packages/plugin-fps:
+     dependencies:
+       '@tiao/core':
+@@ -112,6 +131,19 @@ importers:
+         specifier: ^5.7.3
+         version: 5.9.3
+ 
++  packages/plugin-media:
++    dependencies:
++      '@tiao/core':
++        specifier: workspace:^
++        version: link:../core
++    devDependencies:
++      tsup:
++        specifier: ^8.3.6
++        version: 8.5.1(postcss@8.5.16)(typescript@5.9.3)
++      typescript:
++        specifier: ^5.7.3
++        version: 5.9.3
++
+   packages/plugin-radio-grid:
+     dependencies:
+       '@tiao/core':
+---COMMAND_SEPARATOR---
+---COMMAND_SEPARATOR---
+504f2f3 init

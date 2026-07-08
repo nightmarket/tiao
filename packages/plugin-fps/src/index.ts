@@ -25,6 +25,7 @@ export const fpsPlugin: BladePlugin = {
   create(ctx) {
     const sampleMs = typeof ctx.params['interval'] === 'number' ? ctx.params['interval'] : DEFAULT_SAMPLE_MS
     const max = typeof ctx.params['max'] === 'number' ? ctx.params['max'] : 120
+    const bufferSize = typeof ctx.params['bufferSize'] === 'number' ? ctx.params['bufferSize'] : undefined
     const value = new Value(0)
 
     let frames = 0
@@ -43,13 +44,20 @@ export const fpsPlugin: BladePlugin = {
     const graph = createGraph({
       document: ctx.document,
       value,
-      options: { min: 0, max, format: (v: number) => `${Math.round(v)} fps` },
+      options: {
+        min: 0,
+        max,
+        unit: 'FPS',
+        format: (v: number) => String(Math.round(v)),
+        ...(bufferSize !== undefined && { bufferSize }),
+      },
       label: 'fps',
       onDispose: ctx.onDispose,
     })
+    // labeled: standard two-column row; label-less: full-width graph
     const label = typeof ctx.params['label'] === 'string' ? ctx.params['label'] : null
     const element = label
-      ? h('div', 'tiao-fps', h('div', 'tiao-label', label), graph)
+      ? h('div', 'tiao-fps', h('div', 'tiao-label', label), h('div', 'tiao-control', graph))
       : graph
     return { element, full: true }
   },
@@ -65,7 +73,7 @@ export function registerFpsPlugin(): void {
 
 export function addFpsGraph(
   container: Container,
-  params: { label?: string; interval?: number; max?: number } = {},
+  params: { label?: string; interval?: number; max?: number; bufferSize?: number } = {},
 ) {
   registerFpsPlugin()
   return container.addBlade({ view: 'fps', ...params })
