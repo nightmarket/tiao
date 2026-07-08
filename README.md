@@ -1,0 +1,173 @@
+# tiao
+
+A themeable, draggable debug pane for tweaking parameters — tweakpane-style bindings with a modern look, a first-class React API, and a plug-and-play plugin system. Zero dependencies in core.
+
+| Package | What it is |
+| --- | --- |
+| `@tiao/core` | Vanilla TS pane: bindings, folders, tabs, monitors, theming, drag/anchor/hide |
+| `@tiao/react` | Leva-style hooks on top of core; UI lazy-loads and tree-shakes out of prod |
+| `@tiao/plugin-fps` | FPS graph blade |
+| `@tiao/plugin-bezier` | Cubic-bezier easing editor input |
+| `@tiao/plugin-radio-grid` | Segmented radio grid input |
+| `@tiao/export-pane` | Pre-configured pane that exports a canvas to PNG / WebM / MP4 |
+
+## Quick start (vanilla)
+
+```ts
+import { Pane } from '@tiao/core'
+
+const params = {
+  speed: 1,
+  enabled: true,
+  label: 'hello',
+  tint: '#ff8800',
+  offset: { x: 0, y: 0 },
+  blend: 'multiply',
+}
+
+const pane = new Pane({ title: 'Scene', anchor: 'top-right', toggleKey: '`' })
+
+pane.addBinding(params, 'speed', { min: 0, max: 4, step: 0.01 }) // fill slider
+pane.addBinding(params, 'enabled')                               // check toggle
+pane.addBinding(params, 'label')                                 // text input
+pane.addBinding(params, 'tint')                                  // color picker (auto-detected)
+pane.addBinding(params, 'accent')                                // 'oklch(0.7 0.15 200)' / 'oklab(...)' open a gamut-aware OKLCH picker
+pane.addBinding(params, 'offset', { x: { min: -1, max: 1 }, y: { min: -1, max: 1 } })
+pane.addBinding(params, 'blend', { options: { Multiply: 'multiply', Screen: 'screen' } })
+
+const folder = pane.addFolder({ title: 'Advanced', expanded: false }) // collapsible: false pins a section open
+folder.addBinding(stats, 'fps', { readonly: true, view: 'graph', min: 0, max: 120 })
+
+pane.addButton({ title: 'Reset' }).on('click', reset)
+pane.on('change', (ev) => console.log(ev.key, ev.value, ev.last))
+
+pane.dispose() // full cleanup
+```
+
+Styles are injected automatically on first pane creation. To manage CSS yourself (e.g. CSP without inline styles), `import '@tiao/core/styles.css'` instead — auto-injection detects it and no-ops.
+
+### Pane chrome
+
+- `anchor`: any corner or side center (`'top-left'`, `'top-center'`, `'right-center'`, ...), or `container: element` for inline panes
+- Hover the title bar for a gear icon (or right-click the pane) to open the settings menu: toggle dragging and jump between the 8 anchor positions
+- `draggable: true` (default for floating panes); drag position, anchor, and the draggable toggle persist to `localStorage` when the pane has an `id`
+- `toggleKey: '\`'` toggles visibility; `pane.hidden`, `pane.expanded` are settable
+- `maxHeight: 500` (default) caps the pane height; content scrolls when it overflows
+- Clicking a pane brings it above other overlapping panes
+- Multiple panes are independent; `new Pane({ id: 'export' })` registers it for `Pane.get('export')`
+
+### Theming
+
+All styling flows through CSS custom properties on `.tiao-pane` (`--tiao-bg`, `--tiao-accent`, `--tiao-radius`, `--tiao-surface`, ...):
+
+```ts
+new Pane({ theme: { accent: '#f0f', '--tiao-width': '320px' } })
+pane.element.classList.add('tiao-theme-dark') // built-in dark theme
+```
+
+## React
+
+```tsx
+import { useControls, button, monitor } from '@tiao/react'
+
+function ComponentA() {
+  // creates the default pane
+  const { speed, color } = useControls({
+    speed: { value: 1, min: 0, max: 2 },
+    color: '#f00',
+  })
+}
+
+function ComponentB() {
+  // adds a folder to the same pane from a different component
+  const { gravity } = useControls('Physics', { gravity: 9.8 })
+}
+
+function ComponentC() {
+  // a separate pane, anchored elsewhere
+  const values = useControls(
+    'Capture',
+    { fps: monitor(() => stats.fps, { view: 'graph' }), reset: button(() => reset()) },
+    { pane: { id: 'export', anchor: 'bottom-right' } },
+  )
+}
+```
+
+- Folder paths nest and merge: `useControls('Physics.Collisions', ...)` from any number of components lands in one folder; folders are ref-counted and survive sibling unmounts.
+- Re-renders are per-field via `useSyncExternalStore` — only consumers of a changed value update.
+- `$set({ key: value })` and `$get('key')` on the returned object for programmatic access.
+- `usePane(id)` returns the live `Pane` (or `null` before load) for plugins/custom blades.
+
+### Production builds
+
+`useControls` is enabled when `NODE_ENV !== 'production'` (override per-hook with `enabled`, or globally with `setTiaoEnabled`). When disabled, hooks return plain default values and none of the DOM/UI code loads — `@tiao/core` is behind a dynamic `import()`, so bundlers split it into a chunk that prod users never download.
+
+The vanilla equivalent:
+
+```ts
+if (import.meta.env.DEV) {
+  const { Pane } = await import('@tiao/core')
+  buildDebugPane(new Pane())
+}
+```
+
+## Plugins
+
+```ts
+import { addFpsGraph } from '@tiao/plugin-fps'
+import { registerBezierPlugin } from '@tiao/plugin-bezier'
+import { registerRadioGridPlugin } from '@tiao/plugin-radio-grid'
+
+addFpsGraph(pane)
+registerBezierPlugin()
+pane.addBinding(params, 'easing', { view: 'bezier' })          // [x1, y1, x2, y2]
+registerRadioGridPlugin()
+pane.addBinding(params, 'mode', { view: 'radiogrid', options: { Line: 'line', Scatter: 'scatter' } })
+```
+
+### Writing your own
+
+A plugin claims a `(value, options)` pair and renders a view around a reactive `Value`:
+
+```ts
+import { registerPlugin, type InputPlugin } from '@tiao/core'
+
+const starsPlugin: InputPlugin<number> = {
+  id: 'stars',
+  type: 'input', // 'input' | 'monitor' | 'blade'
+  accept: (value, options) => typeof value === 'number' && options.view === 'stars',
+  create(ctx) {
+    const el = document.createElement('div')
+    const render = (v: number) => (el.textContent = '★'.repeat(v))
+    render(ctx.value.get())
+    ctx.onDispose(ctx.value.subscribe(render))
+    // write with ctx.value.set(v, { source: 'ui', last: true })
+    return { element: el } // { full: true } to own the whole row
+  },
+}
+
+registerPlugin(starsPlugin)        // global
+pane.registerPlugin(starsPlugin)   // or per-pane
+```
+
+Registration is last-wins, so your plugin can override built-ins. Built-in controls use the exact same API.
+
+## Export pane
+
+```ts
+import { createExportPane } from '@tiao/export-pane'
+
+const pane = createExportPane({ target: canvas, filename: 'scene' })
+```
+
+Anchored bottom-right by default: PNG export with scale, WebM recording via `MediaRecorder`, and MP4 via WebCodecs + [mediabunny](https://mediabunny.dev) (lazy-loaded; the option hides itself where WebCodecs is unavailable).
+
+## Development
+
+```sh
+pnpm install
+pnpm build        # build all packages
+pnpm dev          # playground at localhost:5173
+pnpm test         # vitest
+pnpm typecheck
+```

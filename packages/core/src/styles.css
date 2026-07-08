@@ -1,0 +1,935 @@
+.tiao-pane {
+  /* ---- neutral scale (tailwind neutral) ---- */
+  --tiao-neutral-50: #fafafa;
+  --tiao-neutral-100: #f5f5f5;
+  --tiao-neutral-200: #e5e5e5;
+  --tiao-neutral-300: #d4d4d4;
+  --tiao-neutral-400: #a3a3a3;
+  --tiao-neutral-500: #737373;
+  --tiao-neutral-600: #525252;
+  --tiao-neutral-700: #404040;
+  --tiao-neutral-800: #262626;
+  --tiao-neutral-900: #171717;
+  --tiao-neutral-950: #0a0a0a;
+
+  /* ---- theme tokens ---- */
+  --tiao-bg: rgba(250, 250, 250, 0.95);
+  --tiao-fg: var(--tiao-neutral-900);
+  --tiao-fg-dim: var(--tiao-neutral-400);
+  /* translucent interaction surfaces so controls read at any nesting depth */
+  --tiao-titlebar-bg: rgba(0, 0, 0, 0.05);
+  /* nest-bg marks nested containers; hover sits one contrast step above it */
+  --tiao-nest-bg: rgba(0, 0, 0, 0.045);
+  --tiao-hover: rgba(0, 0, 0, 0.08);
+  --tiao-hover-strong: rgba(0, 0, 0, 0.12);
+  --tiao-surface: rgba(0, 0, 0, 0.04);
+  --tiao-surface-hover: rgba(0, 0, 0, 0.08);
+  --tiao-button-bg: rgba(0, 0, 0, 0.07);
+  --tiao-button-bg-hover: rgba(0, 0, 0, 0.11);
+  --tiao-fill: rgba(0, 0, 0, 0.08);
+  --tiao-accent: #3478f6;
+  --tiao-accent-fg: #ffffff;
+  --tiao-border: rgba(0, 0, 0, 0.07);
+  --tiao-nest-border: rgba(0, 0, 0, 0.06);
+  --tiao-radius: 10px;
+  --tiao-radius-sm: 5px;
+  --tiao-width: 280px;
+  /* gutter aligns folder-header text with row labels (rack 2 + row 2 + label 6) */
+  --tiao-gutter: 4px;
+  --tiao-max-height: 500px;
+  --tiao-font:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --tiao-font-mono:
+    ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+  --tiao-font-size: 11px;
+  --tiao-font-size-mono: 10px;
+  --tiao-row-height: 20px;
+  --tiao-shadow: 0 4px 24px rgba(0, 0, 0, 0.12), 0 0 0 1px var(--tiao-border);
+  /* the readout number is primary; the line itself stays quiet */
+  --tiao-graph-stroke: var(--tiao-fg-dim);
+
+  position: relative;
+  font-family: var(--tiao-font);
+  font-size: var(--tiao-font-size);
+  line-height: 1.35;
+  color: var(--tiao-fg);
+  background: var(--tiao-bg);
+  border-radius: var(--tiao-radius);
+  box-shadow: var(--tiao-shadow);
+  width: var(--tiao-width);
+  box-sizing: border-box;
+  user-select: none;
+  -webkit-user-select: none;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.tiao-pane.tiao-theme-dark {
+  --tiao-bg: rgba(23, 23, 23, 0.95);
+  --tiao-fg: var(--tiao-neutral-100);
+  --tiao-fg-dim: var(--tiao-neutral-500);
+  --tiao-titlebar-bg: rgba(255, 255, 255, 0.06);
+  --tiao-nest-bg: rgba(255, 255, 255, 0.05);
+  --tiao-hover: rgba(255, 255, 255, 0.09);
+  --tiao-hover-strong: rgba(255, 255, 255, 0.14);
+  --tiao-surface: rgba(255, 255, 255, 0.055);
+  --tiao-surface-hover: rgba(255, 255, 255, 0.1);
+  --tiao-button-bg: rgba(255, 255, 255, 0.08);
+  --tiao-button-bg-hover: rgba(255, 255, 255, 0.13);
+  --tiao-fill: rgba(255, 255, 255, 0.11);
+  --tiao-accent: #4c8dff;
+  --tiao-accent-fg: #ffffff;
+  --tiao-border: rgba(255, 255, 255, 0.08);
+  --tiao-nest-border: rgba(255, 255, 255, 0.07);
+}
+
+.tiao-pane *,
+.tiao-pane *::before,
+.tiao-pane *::after {
+  box-sizing: border-box;
+}
+
+.tiao-pane.tiao-floating {
+  position: fixed;
+  z-index: 9999;
+}
+
+.tiao-hidden {
+  display: none !important;
+}
+
+.tiao-disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+/* ---- reset (:where keeps specificity at zero so component classes win) ---- */
+.tiao-pane :where(button, input, select) {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+.tiao-pane :where(button) {
+  cursor: pointer;
+}
+.tiao-pane :where(button, select):focus-visible {
+  outline: 1.5px solid var(--tiao-accent);
+  outline-offset: 1px;
+}
+.tiao-pane input {
+  outline: none;
+}
+
+.tiao-icon {
+  width: 12px;
+  height: 12px;
+  flex: none;
+}
+
+/* values and row labels are monospace; headers and buttons keep the UI font */
+.tiao-pane :where(.tiao-label, .tiao-num-input, .tiao-text-input, .tiao-select,
+    .tiao-color-text, .tiao-monitor-text, .tiao-graph-value) {
+  font-family: var(--tiao-font-mono);
+  font-size: var(--tiao-font-size-mono);
+}
+
+/* ---- pane chrome ---- */
+.tiao-titlebar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 28px;
+  background: var(--tiao-titlebar-bg);
+  border-radius: var(--tiao-radius) var(--tiao-radius) 0 0;
+  transition: background 0.12s ease;
+}
+.tiao-pane:not(.tiao-expanded) > .tiao-titlebar {
+  border-radius: var(--tiao-radius);
+}
+.tiao-titlebar:hover {
+  background: var(--tiao-hover-strong);
+}
+.tiao-draggable > .tiao-titlebar {
+  cursor: grab;
+  touch-action: none;
+}
+.tiao-draggable > .tiao-titlebar:active {
+  cursor: grabbing;
+}
+.tiao-pane-gear {
+  position: absolute;
+  left: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  color: var(--tiao-fg-dim);
+  opacity: 0;
+  transition: opacity 0.12s ease, color 0.12s ease;
+}
+.tiao-titlebar:hover .tiao-pane-gear,
+.tiao-pane-gear:focus-visible {
+  opacity: 1;
+}
+.tiao-pane-gear:hover {
+  color: var(--tiao-fg);
+}
+.tiao-titlebar-main {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 100%;
+  padding: 0 8px 0 28px;
+  font-weight: 600;
+  min-width: 0;
+}
+.tiao-pane-title {
+  flex: 1;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tiao-titlebar .tiao-icon-chevron {
+  color: var(--tiao-fg-dim);
+  transition: transform 0.18s ease;
+}
+.tiao-pane:not(.tiao-expanded) .tiao-titlebar .tiao-icon-chevron {
+  transform: rotate(-90deg);
+}
+
+.tiao-pane-body,
+.tiao-folder-body {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 0.18s ease;
+}
+.tiao-pane:not(.tiao-expanded) > .tiao-pane-body,
+.tiao-folder:not(.tiao-expanded) > .tiao-folder-body {
+  grid-template-rows: 0fr;
+}
+.tiao-pane-clip,
+.tiao-folder-clip {
+  overflow: hidden;
+  min-height: 0;
+}
+.tiao-pane > .tiao-pane-body > .tiao-pane-clip {
+  max-height: calc(var(--tiao-max-height) - 28px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--tiao-fill) transparent;
+}
+.tiao-pane > .tiao-pane-body > .tiao-pane-clip > .tiao-rack {
+  padding: 1px 2px 2px;
+}
+
+/* ---- rack & rows ---- */
+.tiao-rack {
+  display: flex;
+  flex-direction: column;
+}
+/* rows carry 2px padding so the full-width hover surface never touches the
+   control edges (mirrors the header hover inset) */
+.tiao-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px;
+  min-height: calc(var(--tiao-row-height) + 4px);
+  border-radius: var(--tiao-radius-sm);
+}
+.tiao-row::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: var(--tiao-radius-sm);
+  background: transparent;
+  transition: background 0.12s ease;
+  pointer-events: none;
+}
+.tiao-row:hover::before {
+  background: var(--tiao-hover);
+}
+/* full-width blades and read-only monitors have nothing to activate */
+.tiao-row-full::before,
+.tiao-row-monitor::before {
+  display: none;
+}
+.tiao-row-activate {
+  cursor: pointer;
+}
+.tiao-label {
+  /* labelled rows split exactly in half so control columns align across rows */
+  flex: 0 0 calc(50% - 6px);
+  padding-left: 6px;
+  color: var(--tiao-fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tiao-control {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+}
+.tiao-row-full > * {
+  width: 100%;
+}
+
+.tiao-separator {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--tiao-border);
+}
+
+/* ---- folders: translucent nested surface (compounds naturally with depth) ---- */
+.tiao-folder {
+  margin-top: 2px;
+  border-radius: calc(var(--tiao-radius-sm) + 2px);
+  background: var(--tiao-nest-bg);
+  box-shadow: inset 0 0 0 1px var(--tiao-nest-border);
+}
+.tiao-folder-header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  height: 24px;
+  /* gutter + label inset, so header text lines up with row labels below */
+  padding: 0 calc(var(--tiao-gutter) + 6px);
+  text-align: left;
+  border-radius: calc(var(--tiao-radius-sm) + 2px);
+}
+.tiao-folder-header::before {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  border-radius: var(--tiao-radius-sm);
+  background: transparent;
+  transition: background 0.12s ease;
+  pointer-events: none;
+}
+/* expanded folders keep the hover surface on their header for contrast */
+.tiao-folder-header:hover::before,
+.tiao-folder.tiao-expanded > .tiao-folder-header::before {
+  background: var(--tiao-hover);
+}
+.tiao-folder.tiao-expanded > .tiao-folder-header:hover::before {
+  background: var(--tiao-hover-strong);
+}
+.tiao-folder-header > * {
+  position: relative;
+}
+/* non-collapsible sections: plain header, no chevron, no click affordance */
+.tiao-folder-static > .tiao-folder-header {
+  cursor: default;
+}
+.tiao-folder-static > .tiao-folder-header .tiao-icon-chevron {
+  display: none;
+}
+.tiao-folder-static.tiao-expanded > .tiao-folder-header:hover::before {
+  background: var(--tiao-hover);
+}
+/* hierarchical section numbers: 1, 1.1, 1.1.1 (racks scope the counter) */
+.tiao-rack {
+  counter-reset: tiao-section;
+}
+.tiao-folder {
+  counter-increment: tiao-section;
+}
+.tiao-folder-index {
+  color: var(--tiao-fg-dim);
+  font-variant-numeric: tabular-nums;
+}
+.tiao-folder-index::before {
+  content: counters(tiao-section, '.');
+}
+.tiao-folder-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tiao-folder-header .tiao-icon-chevron {
+  color: var(--tiao-fg-dim);
+  transition: transform 0.18s ease;
+}
+.tiao-folder:not(.tiao-expanded) > .tiao-folder-header .tiao-icon-chevron {
+  transform: rotate(-90deg);
+}
+.tiao-folder > .tiao-folder-body > .tiao-folder-clip > .tiao-rack {
+  padding: 0 2px 2px;
+}
+
+/* ---- tabs ---- */
+.tiao-tab-nav {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  background: var(--tiao-surface);
+  border-radius: var(--tiao-radius-sm);
+  margin: 3px 0 2px;
+}
+.tiao-tab-button {
+  flex: 1;
+  height: 20px;
+  border-radius: calc(var(--tiao-radius-sm) - 2px);
+  color: var(--tiao-fg-dim);
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.tiao-tab-button:hover {
+  color: var(--tiao-fg);
+}
+.tiao-tab-button.tiao-selected {
+  background: var(--tiao-bg);
+  color: var(--tiao-fg);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+.tiao-tab-page {
+  display: none;
+}
+.tiao-tab-page.tiao-selected {
+  display: block;
+}
+
+/* ---- buttons ---- */
+.tiao-button {
+  height: var(--tiao-row-height);
+  padding: 0 12px;
+  border-radius: var(--tiao-radius-sm);
+  background: var(--tiao-button-bg);
+  font-family: var(--tiao-font-mono);
+  font-size: var(--tiao-font-size-mono);
+  transition: background 0.12s ease;
+}
+.tiao-button:hover {
+  background: var(--tiao-button-bg-hover);
+}
+.tiao-button:active {
+  transform: translateY(0.5px);
+}
+
+/* ---- number: compact fill slider + number field in the control column ---- */
+.tiao-number {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+}
+.tiao-slider {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: var(--tiao-row-height);
+  border-radius: var(--tiao-radius-sm);
+  background: var(--tiao-surface);
+  overflow: hidden;
+  cursor: ew-resize;
+  touch-action: none;
+}
+.tiao-slider-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--tiao-fill);
+  pointer-events: none;
+}
+/* accent bar right at the filled/unfilled divide, shown on hover */
+.tiao-slider-fill::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 2px;
+  background: var(--tiao-accent);
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.tiao-row:hover .tiao-slider-fill::after,
+.tiao-slider:hover .tiao-slider-fill::after {
+  opacity: 1;
+}
+.tiao-number .tiao-slider-num {
+  flex: none;
+  width: 52px;
+}
+
+/* ---- scrubber number input ---- */
+.tiao-scrub {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+}
+/* left grip dots advertise horizontal draggability (hidden while editing) */
+.tiao-scrub-grip {
+  position: absolute;
+  left: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 6px;
+  height: 11px;
+  pointer-events: none;
+  background-image: radial-gradient(circle, var(--tiao-fg-dim) 0.9px, transparent 1px);
+  background-size: 3px 3px;
+  opacity: 0.8;
+}
+.tiao-scrub .tiao-num-input:read-write + .tiao-scrub-grip {
+  display: none;
+}
+/* the slider variant already signals dragging via its track */
+.tiao-number .tiao-slider-num .tiao-scrub-grip {
+  display: none;
+}
+/* tick ruler revealed while dragging; background-position scrolls with dx */
+.tiao-scrub-guide {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  bottom: 2px;
+  height: 4px;
+  opacity: 0;
+  pointer-events: none;
+  background-image: repeating-linear-gradient(
+    90deg,
+    var(--tiao-fg-dim) 0 1px,
+    transparent 1px 5px
+  );
+  background-position-x: 50%;
+  transition: opacity 0.1s ease;
+}
+.tiao-scrub-guide::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: -2px;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--tiao-accent);
+}
+.tiao-scrub.tiao-scrubbing .tiao-scrub-guide {
+  opacity: 0.7;
+}
+.tiao-num-input {
+  width: 100%;
+  height: var(--tiao-row-height);
+  padding: 0 6px 0 12px;
+  border-radius: var(--tiao-radius-sm);
+  background: var(--tiao-surface);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  touch-action: none;
+  transition: background 0.12s ease;
+}
+.tiao-num-input:hover {
+  background: var(--tiao-surface-hover);
+}
+.tiao-num-input:read-only {
+  cursor: ew-resize;
+}
+
+/* ---- text input ---- */
+.tiao-text-input {
+  width: 100%;
+  height: var(--tiao-row-height);
+  padding: 0 6px;
+  border-radius: var(--tiao-radius-sm);
+  background: var(--tiao-surface);
+  transition: background 0.12s ease;
+}
+.tiao-text-input:hover {
+  background: var(--tiao-surface-hover);
+}
+
+/* ---- check toggle: rounded square in a rounded square, like the pad toggle ---- */
+.tiao-check {
+  position: relative;
+  width: 18px;
+  height: 18px;
+  flex: none;
+  border-radius: var(--tiao-radius-sm);
+  background: var(--tiao-surface);
+  transition: background 0.12s ease;
+}
+.tiao-check:hover {
+  background: var(--tiao-surface-hover);
+}
+.tiao-check::after {
+  content: '';
+  position: absolute;
+  inset: 5px;
+  border-radius: 2px;
+  background: transparent;
+  transition: background 0.12s ease;
+}
+.tiao-check.tiao-checked::after {
+  background: var(--tiao-accent);
+}
+
+/* ---- select ---- */
+.tiao-select-wrap {
+  position: relative;
+  width: 100%;
+  display: flex;
+  align-items: center;
+}
+.tiao-select {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  height: var(--tiao-row-height);
+  padding: 0 22px 0 6px;
+  border-radius: var(--tiao-radius-sm);
+  background: var(--tiao-surface);
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+.tiao-select:hover {
+  background: var(--tiao-surface-hover);
+}
+.tiao-select-wrap .tiao-icon-chevron {
+  position: absolute;
+  right: 6px;
+  color: var(--tiao-fg-dim);
+  pointer-events: none;
+}
+
+/* ---- pane settings menu ---- */
+.tiao-pane-menu {
+  position: absolute;
+  top: 4px;
+  left: calc(100% + 6px);
+  z-index: 100;
+  display: none;
+  flex-direction: column;
+  gap: 4px;
+  width: 132px;
+  padding: 8px;
+  background: var(--tiao-bg);
+  border-radius: calc(var(--tiao-radius-sm) + 2px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.22), 0 0 0 1px var(--tiao-border);
+}
+.tiao-pane-menu.tiao-open {
+  display: flex;
+}
+.tiao-pane-menu.tiao-menu-left {
+  left: auto;
+  right: calc(100% + 6px);
+}
+.tiao-pane-menu-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-height: 18px;
+}
+.tiao-pane-menu-label {
+  color: var(--tiao-fg-dim);
+  font-weight: 500;
+  margin-top: 2px;
+}
+.tiao-anchor-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 3px;
+}
+.tiao-anchor-cell {
+  height: 22px;
+  border-radius: 4px;
+  background: var(--tiao-surface);
+  position: relative;
+  transition: background 0.12s ease;
+}
+.tiao-anchor-cell:hover {
+  background: var(--tiao-surface-hover);
+}
+.tiao-anchor-cell::after {
+  content: '';
+  position: absolute;
+  inset: 7px;
+  border-radius: 2px;
+  background: var(--tiao-fg-dim);
+  transition: background 0.12s ease;
+}
+.tiao-anchor-cell.tiao-selected {
+  background: var(--tiao-accent);
+}
+.tiao-anchor-cell.tiao-selected::after {
+  background: var(--tiao-accent-fg);
+}
+
+/* ---- popups (color picker, xy pad) ---- */
+.tiao-popup {
+  position: absolute;
+  z-index: 100;
+  display: none;
+  padding: 6px;
+  background: var(--tiao-bg);
+  border-radius: calc(var(--tiao-radius-sm) + 2px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.22), 0 0 0 1px var(--tiao-border);
+}
+.tiao-popup.tiao-open {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* ---- color ---- */
+.tiao-color {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+}
+.tiao-color-swatch {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1px var(--tiao-border);
+  transition: transform 0.1s ease;
+}
+.tiao-color-swatch:hover {
+  transform: scale(1.06);
+}
+.tiao-color-text {
+  flex: 1;
+  min-width: 0;
+  height: var(--tiao-row-height);
+  padding: 0 6px;
+  border-radius: var(--tiao-radius-sm);
+  background: var(--tiao-surface);
+  font-variant-numeric: tabular-nums;
+  transition: background 0.12s ease;
+}
+.tiao-color-text:hover {
+  background: var(--tiao-surface-hover);
+}
+.tiao-color-picker {
+  width: 168px;
+}
+.tiao-color-mode {
+  display: flex;
+  gap: 4px;
+}
+.tiao-color-mode .tiao-select-wrap {
+  width: 76px;
+  flex: none;
+}
+.tiao-color-mode .tiao-color-text {
+  flex: 1;
+  min-width: 0;
+}
+.tiao-color-sv {
+  position: relative;
+  height: 110px;
+  border-radius: var(--tiao-radius-sm);
+  cursor: crosshair;
+  touch-action: none;
+}
+/* OKLCH lightness x chroma plane; unpainted canvas shows the gamut boundary */
+.tiao-color-ok {
+  position: relative;
+  height: 110px;
+  border-radius: var(--tiao-radius-sm);
+  background: var(--tiao-surface);
+  overflow: hidden;
+  cursor: crosshair;
+  touch-action: none;
+}
+.tiao-ok-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.tiao-thumb {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.3);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+.tiao-color-hue,
+.tiao-color-alpha {
+  position: relative;
+  height: 12px;
+  border-radius: 6px;
+  cursor: ew-resize;
+  touch-action: none;
+}
+.tiao-color-hue {
+  background: linear-gradient(
+    to right,
+    #f00 0%, #ff0 17%, #0f0 33%, #0ff 50%, #00f 67%, #f0f 83%, #f00 100%
+  );
+}
+.tiao-color-alpha {
+  background-image:
+    linear-gradient(to right, transparent, var(--tiao-alpha-color, #000)),
+    repeating-conic-gradient(#ccc 0% 25%, #fff 0% 50%);
+  background-size: 100% 100%, 8px 8px;
+}
+.tiao-bar-thumb {
+  position: absolute;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.3);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  background: transparent;
+}
+
+/* ---- point ---- */
+.tiao-point {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+}
+.tiao-point-fields {
+  display: flex;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+.tiao-point-fields .tiao-scrub {
+  flex: 1;
+  min-width: 0;
+}
+.tiao-point-fields .tiao-num-input {
+  max-width: none;
+  min-width: 0;
+}
+.tiao-point-pad-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex: none;
+  border-radius: var(--tiao-radius-sm);
+  background: var(--tiao-surface);
+  color: var(--tiao-fg-dim);
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.tiao-point-pad-toggle:hover {
+  background: var(--tiao-surface-hover);
+  color: var(--tiao-fg);
+}
+.tiao-point-pad-toggle .tiao-icon {
+  width: 10px;
+  height: 10px;
+}
+.tiao-point-pad-popup {
+  width: 148px;
+}
+.tiao-point-pad {
+  position: relative;
+  height: 136px;
+  border-radius: var(--tiao-radius-sm);
+  background: var(--tiao-surface);
+  background-image:
+    linear-gradient(var(--tiao-border) 1px, transparent 1px),
+    linear-gradient(90deg, var(--tiao-border) 1px, transparent 1px);
+  background-size: 17px 17px;
+  background-position: center;
+  cursor: crosshair;
+  touch-action: none;
+}
+.tiao-point-pad .tiao-thumb {
+  background: var(--tiao-accent);
+}
+.tiao-pad-axis {
+  position: absolute;
+  pointer-events: none;
+}
+.tiao-pad-axis::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--tiao-fg-dim);
+  opacity: 0.35;
+}
+.tiao-pad-axis-x {
+  left: 0;
+  right: 0;
+  height: 1px;
+}
+.tiao-pad-axis-y {
+  top: 0;
+  bottom: 0;
+  width: 1px;
+}
+.tiao-pad-axis-label {
+  position: absolute;
+  font-family: var(--tiao-font-mono);
+  font-size: 8px;
+  line-height: 1;
+  color: var(--tiao-fg-dim);
+}
+.tiao-pad-axis-x .tiao-pad-axis-label {
+  right: 3px;
+  bottom: 3px;
+}
+.tiao-pad-axis-y .tiao-pad-axis-label {
+  left: 4px;
+  top: 3px;
+}
+
+/* ---- monitors ---- */
+.tiao-monitor-text {
+  width: 100%;
+  text-align: right;
+  padding-right: 6px;
+  color: var(--tiao-fg-dim);
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tiao-graph {
+  position: relative;
+  width: 100%;
+  height: 40px;
+  border-radius: var(--tiao-radius-sm);
+  background: var(--tiao-surface);
+  box-shadow: inset 0 0 0 1px var(--tiao-border);
+  overflow: hidden;
+}
+.tiao-graph-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.tiao-graph-value {
+  position: absolute;
+  top: 3px;
+  right: 6px;
+  color: var(--tiao-fg);
+  font-variant-numeric: tabular-nums;
+}
