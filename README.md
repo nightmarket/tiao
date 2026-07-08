@@ -11,6 +11,7 @@ A themeable, draggable debug pane for tweaking parameters — tweakpane-style bi
 | `@tiao/plugin-radio-grid` | Segmented radio grid input |
 | `@tiao/plugin-media` | Image/video upload input (drag & drop) for WebGL/WebGPU textures |
 | `@tiao/export-pane` | Pre-configured pane that exports a canvas to PNG / WebM / MP4 |
+| `@tiao/perf-pane` | Pre-configured pane for canvas/three.js perf: fps, cpu/gpu ms, draw calls, memory |
 
 ## Quick start (vanilla)
 
@@ -172,6 +173,22 @@ const pane = createExportPane({ target: canvas, filename: 'scene' })
 ```
 
 Anchored bottom-right by default: PNG export with scale, WebM recording via `MediaRecorder`, and MP4 via WebCodecs + [mediabunny](https://mediabunny.dev) (lazy-loaded; the option hides itself where WebCodecs is unavailable).
+
+## Perf pane
+
+```ts
+import { createPerfPane } from '@tiao/perf-pane'
+
+// renderer: three.js WebGLRenderer or WebGPURenderer (duck-typed — no three dependency)
+const { pane, perf, dispose } = createPerfPane({ renderer })
+```
+
+Anchored top-right by default: FPS / CPU ms / GPU ms graphs, a Render folder with three.js counters (calls, triangles, lines, points), and a Memory folder for leak hunting (geometries, textures, shaders, JS heap graph). Rows without a data source skip themselves.
+
+- **CPU ms** — `renderer.render` is wrapped automatically; pass `instrument: false` to opt out and bracket your frame manually with `perf.begin()` / `perf.end()`.
+- **GPU ms** — WebGL2 uses `EXT_disjoint_timer_query_webgl2`; three's WebGPURenderer works when created with `trackTimestamp: true`; or supply your own timer with `gpuTime: () => ms`.
+- **GPU memory** — pass `gpuMemory: () => bytes` from your own texture/buffer accounting to add a graph next to JS heap.
+- `addPerfMonitors(container, perf)` drops the same rows into a pane or folder you already have; `createPerfMonitor(options)` is the headless sampler if you only want the numbers.
 
 ## Development
 
