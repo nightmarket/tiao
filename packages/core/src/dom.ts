@@ -107,15 +107,27 @@ const MOVE_THRESHOLD = 3
 
 /** Pointer-capture drag helper. `moved` flips once movement exceeds a threshold (click vs drag). */
 export function draggable(el: HTMLElement, handlers: DragHandlers): () => void {
+  let cleanupActiveDrag: (() => void) | null = null
+
   const onPointerDown = (ev: PointerEvent) => {
     if (ev.button !== 0) return
     if (handlers.filter && !handlers.filter(ev)) return
+    cleanupActiveDrag?.()
     const startX = ev.clientX
     const startY = ev.clientY
+    const pointerId = ev.pointerId
+    const doc = el.ownerDocument
+    const win = doc.defaultView
     let moved = false
+    let lastEvent = ev
+    let ended = false
     // capture retargets all pointer events (and the click) to `el`,
     // which is why filtered elements must bail out above
-    el.setPointerCapture?.(ev.pointerId)
+    try {
+      el.setPointerCapture?.(pointerId)
+    } catch {
+      /* pointer capture is best-effort; document listeners below still finish the drag */
+    }
     handlers.onStart?.(ev)
 
     const state = (e: PointerEvent): DragState => {
@@ -124,17 +136,52 @@ export function draggable(el: HTMLElement, handlers: DragHandlers): () => void {
       if (!moved && Math.hypot(dx, dy) > MOVE_THRESHOLD) moved = true
       return { dx, dy, x: e.clientX, y: e.clientY, moved }
     }
-    const onMove = (e: PointerEvent) => handlers.onMove?.(state(e), e)
-    const onUp = (e: PointerEvent) => {
-      el.removeEventListener('pointermove', onMove)
-      el.removeEventListener('pointerup', onUp)
-      el.removeEventListener('pointercancel', onUp)
+
+    const isActivePointer = (e: PointerEvent) => e.pointerId === pointerId
+    const cleanup = () => {
+      doc.removeEventListener('pointermove', onMove, true)
+      doc.removeEventListener('pointerup', onUp, true)
+      doc.removeEventListener('pointercancel', onUp, true)
+      el.removeEventListener('lostpointercapture', onLostPointerCapture)
+      win?.removeEventListener('blur', onWindowBlur, true)
+      if (cleanupActiveDrag === cleanup) cleanupActiveDrag = null
+    }
+    const finish = (e: PointerEvent) => {
+      if (ended) return
+      ended = true
+      cleanup()
+      try {
+        if (el.hasPointerCapture?.(pointerId)) el.releasePointerCapture?.(pointerId)
+      } catch {
+        /* release can fail if the browser already dropped capture */
+      }
       handlers.onEnd?.(state(e), e)
     }
-    el.addEventListener('pointermove', onMove)
-    el.addEventListener('pointerup', onUp)
-    el.addEventListener('pointercancel', onUp)
+    const onMove = (e: PointerEvent) => {
+      if (!isActivePointer(e)) return
+      lastEvent = e
+      handlers.onMove?.(state(e), e)
+    }
+    const onUp = (e: PointerEvent) => {
+      if (!isActivePointer(e)) return
+      finish(e)
+    }
+    const onLostPointerCapture = (e: PointerEvent) => {
+      if (!isActivePointer(e)) return
+      finish(e)
+    }
+    const onWindowBlur = () => finish(lastEvent)
+
+    cleanupActiveDrag = cleanup
+    doc.addEventListener('pointermove', onMove, true)
+    doc.addEventListener('pointerup', onUp, true)
+    doc.addEventListener('pointercancel', onUp, true)
+    el.addEventListener('lostpointercapture', onLostPointerCapture)
+    win?.addEventListener('blur', onWindowBlur, true)
   }
   el.addEventListener('pointerdown', onPointerDown)
-  return () => el.removeEventListener('pointerdown', onPointerDown)
+  return () => {
+    cleanupActiveDrag?.()
+    el.removeEventListener('pointerdown', onPointerDown)
+  }
 }

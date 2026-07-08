@@ -465,6 +465,22 @@ describe('Pane registry and chrome', () => {
     pane.dispose()
   })
 
+  it('clears the scrubber overlay when pointerup lands outside the input', () => {
+    const params = { seed: 42 }
+    const pane = new Pane()
+    const binding = pane.addBinding(params, 'seed')
+    const input = binding.element.querySelector('.tiao-num-input') as HTMLInputElement
+
+    input.dispatchEvent(new MouseEvent('pointerdown', { button: 0, clientX: 0, clientY: 0, bubbles: true }))
+    input.dispatchEvent(new MouseEvent('pointermove', { clientX: 12, clientY: 0, bubbles: true }))
+    const overlay = document.querySelector('.tiao-drag-overlay') as HTMLElement
+    expect(overlay).not.toBeNull()
+
+    overlay.dispatchEvent(new MouseEvent('pointerup', { button: 0, clientX: 12, clientY: 0, bubbles: true }))
+    expect(document.querySelector('.tiao-drag-overlay')).toBeNull()
+    pane.dispose()
+  })
+
   it('number input blur collapses the highlighted value selection', () => {
     const params = { seed: 42 }
     const pane = new Pane()
