@@ -68,7 +68,7 @@ export type PaneTheme = 'light' | 'dark'
 export type PaneSize = 's' | 'm' | 'l'
 
 /** default --tiao-accent, used when the computed style is unavailable (e.g. jsdom) */
-const DEFAULT_ACCENT = '#3478f6'
+const DEFAULT_ACCENT = '#65a30d'
 
 /** edge-resize bounds */
 const MIN_WIDTH = 200
@@ -181,9 +181,12 @@ export class Pane extends Container {
     this.hidden = options.hidden ?? false
 
     // collapse on any titlebar click except the action buttons (and not right after a drag)
-    let dragged = false
+    let suppressClick = false
     const onTitlebarClick = (e: MouseEvent) => {
-      if (dragged) return
+      if (suppressClick) {
+        suppressClick = false
+        return
+      }
       if ((e.target as Element | null)?.closest?.('.tiao-titlebar-btn')) return
       this.expanded = !this.expanded
     }
@@ -240,22 +243,23 @@ export class Pane extends Container {
             // size is captured once so each move avoids a forced layout read
             baseW = rect.width
             baseH = rect.height
-            dragged = false
+            suppressClick = false
           },
           onMove: (s) => {
             if (!this._draggable || !s.moved) return
-            dragged = true
+            suppressClick = true
             this.setPosition(baseX + s.dx, baseY + s.dy, baseW, baseH)
           },
           onEnd: (s) => {
-            if (this._draggable && s.moved) {
-              // persist the clamped position applied by moveTo, not the raw drag
-              const rect = this.element.getBoundingClientRect()
-              this.saveState({ x: rect.left, y: rect.top, anchor: undefined })
-            }
-            // let the click handler observe `dragged`, then reset
+            if (!this._draggable || !s.moved) return
+            // moved can become true on pointerup alone (no prior moved onMove)
+            suppressClick = true
+            // persist the clamped position applied by moveTo, not the raw drag
+            const rect = this.element.getBoundingClientRect()
+            this.saveState({ x: rect.left, y: rect.top, anchor: undefined })
+            // clear if no click follows (pointerup outside the titlebar)
             setTimeout(() => {
-              dragged = false
+              suppressClick = false
             }, 0)
           },
         }),

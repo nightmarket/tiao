@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { Pane } from './pane'
 import { registerPlugin } from './plugin'
-import { maxChroma, oklchInGamut, parseColor, serializeColor } from './controls/color-model'
+import { maxChroma, maxChromaP3, oklchInGamut, oklchInP3Gamut, parseColor, serializeColor } from './controls/color-model'
 import { snap, formatNumber } from './util'
 
 beforeEach(() => {
@@ -27,6 +27,73 @@ describe('Pane bindings', () => {
       expect.objectContaining({ value: 0.75, last: true, key: 'speed' }),
     )
     expect(onPane).toHaveBeenCalledTimes(1)
+    // min/max numbers overlay the value on a full-width track (fill-edge is the handlebar)
+    expect(binding.element.querySelector('.tiao-slider')).not.toBeNull()
+    expect(binding.element.querySelector('.tiao-slider-num')).not.toBeNull()
+    pane.dispose()
+  })
+
+  it('binds {min,max} objects as interval sliders with from/to fields', () => {
+    const params = { range: { min: 20, max: 80 } }
+    const pane = new Pane()
+    const binding = pane.addBinding(params, 'range', { min: 0, max: 100, step: 1 })
+
+    expect(binding.element.querySelector('.tiao-interval')).not.toBeNull()
+    expect(binding.element.querySelector('.tiao-interval-min')).not.toBeNull()
+    expect(binding.element.querySelector('.tiao-interval-max')).not.toBeNull()
+    const inputs = binding.element.querySelectorAll('.tiao-num-input')
+    expect(inputs).toHaveLength(2)
+    expect((inputs[0] as HTMLInputElement).value).toBe('20')
+    expect((inputs[1] as HTMLInputElement).value).toBe('80')
+
+    binding.value.set({ min: 30, max: 70 }, { source: 'ui', last: true })
+    expect(params.range).toEqual({ min: 30, max: 70 })
+    expect((inputs[0] as HTMLInputElement).value).toBe('30')
+    expect((inputs[1] as HTMLInputElement).value).toBe('70')
+
+    // row activate focuses "from"; DOM order lets Tab reach "to"
+    const label = binding.element.querySelector('.tiao-label') as HTMLElement
+    label.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    expect(document.activeElement).toBe(inputs[0])
+    pane.dispose()
+  })
+
+  it('interval track drag moves the nearer endpoint without crossing', () => {
+    const params = { range: { min: 20, max: 80 } }
+    const pane = new Pane()
+    const binding = pane.addBinding(params, 'range', { min: 0, max: 100 })
+    const track = binding.element.querySelector('.tiao-slider') as HTMLElement
+
+    // jsdom has no layout; stub the track rect so pointer→value mapping works
+    vi.spyOn(track, 'getBoundingClientRect').mockReturnValue({
+      left: 0,
+      right: 100,
+      top: 0,
+      bottom: 20,
+      width: 100,
+      height: 20,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    })
+
+    track.dispatchEvent(new MouseEvent('pointerdown', { button: 0, clientX: 10, clientY: 10, bubbles: true }))
+    track.dispatchEvent(new MouseEvent('pointermove', { clientX: 25, clientY: 10, bubbles: true, buttons: 1 }))
+    track.dispatchEvent(new MouseEvent('pointerup', { button: 0, clientX: 25, clientY: 10, bubbles: true }))
+    expect(params.range.min).toBe(25)
+    expect(params.range.max).toBe(80)
+
+    track.dispatchEvent(new MouseEvent('pointerdown', { button: 0, clientX: 90, clientY: 10, bubbles: true }))
+    track.dispatchEvent(new MouseEvent('pointermove', { clientX: 60, clientY: 10, bubbles: true, buttons: 1 }))
+    track.dispatchEvent(new MouseEvent('pointerup', { button: 0, clientX: 60, clientY: 10, bubbles: true }))
+    expect(params.range.min).toBe(25)
+    expect(params.range.max).toBe(60)
+
+    // left of the band always grabs from; right of the band always grabs to
+    track.dispatchEvent(new MouseEvent('pointerdown', { button: 0, clientX: 5, clientY: 10, bubbles: true }))
+    track.dispatchEvent(new MouseEvent('pointerup', { button: 0, clientX: 5, clientY: 10, bubbles: true }))
+    expect(params.range.min).toBe(5)
+    expect(params.range.max).toBe(60)
     pane.dispose()
   })
 
@@ -98,15 +165,90 @@ describe('Pane bindings', () => {
     pane.dispose()
   })
 
-  it('point2d renders two fields and an XY pad popup that opens into the pane root', () => {
+  it('point2d renders two fields and an XY pad overlay centered on the plus icon', () => {
     const pane = new Pane()
     const binding = pane.addBinding({ pos: { x: 0, y: 0 } }, 'pos')
     expect(binding.element.querySelectorAll('.tiao-num-input')).toHaveLength(2)
     const toggle = binding.element.querySelector('.tiao-point-pad-toggle') as HTMLButtonElement
+    vi.spyOn(toggle, 'getBoundingClientRect').mockReturnValue({
+      left: 40,
+      right: 60,
+      top: 10,
+      bottom: 30,
+      width: 20,
+      height: 20,
+      x: 40,
+      y: 10,
+      toJSON: () => ({}),
+    })
     toggle.click()
-    const popup = pane.element.querySelector(':scope > .tiao-popup.tiao-open')
-    expect(popup).not.toBeNull()
-    expect(popup!.querySelector('.tiao-point-pad')).not.toBeNull()
+    const overlay = document.querySelector('.tiao-point-overlay') as HTMLElement
+    expect(overlay).not.toBeNull()
+    expect(overlay.querySelector('.tiao-point-pad')).not.toBeNull()
+    expect(overlay.querySelector('.tiao-point-pad-ray')).not.toBeNull()
+    expect(overlay.style.left).toBe('50px')
+    expect(overlay.style.top).toBe('20px')
+    pane.dispose()
+  })
+
+  it('angle view renders a dial knob and opens a sticky overlay centered on the icon', () => {
+    const params = { yaw: 45 }
+    const pane = new Pane()
+    const binding = pane.addBinding(params, 'yaw', { view: 'angle' })
+    const knob = binding.element.querySelector('.tiao-angle-knob') as HTMLButtonElement
+    const input = binding.element.querySelector('.tiao-num-input') as HTMLInputElement
+    expect(knob).not.toBeNull()
+    expect(input.value).toContain('°')
+
+    vi.spyOn(knob, 'getBoundingClientRect').mockReturnValue({
+      left: 40,
+      right: 60,
+      top: 10,
+      bottom: 30,
+      width: 20,
+      height: 20,
+      x: 40,
+      y: 10,
+      toJSON: () => ({}),
+    })
+    knob.click()
+    const overlay = document.querySelector('.tiao-angle-overlay') as HTMLElement
+    expect(overlay).not.toBeNull()
+    expect(overlay.querySelector('.tiao-angle-dial')).not.toBeNull()
+    // centered on the knob (50, 20) whether opened by click or long-press
+    expect(overlay.style.left).toBe('50px')
+    expect(overlay.style.top).toBe('20px')
+    expect(document.querySelector('.tiao-angle-overlay')).not.toBeNull()
+    pane.dispose()
+  })
+
+  it('angle sticky overlay follows the pointer and commits on mousedown', () => {
+    const params = { yaw: 0 }
+    const pane = new Pane()
+    const binding = pane.addBinding(params, 'yaw', { view: 'angle' })
+    const knob = binding.element.querySelector('.tiao-angle-knob') as HTMLButtonElement
+    vi.spyOn(knob, 'getBoundingClientRect').mockReturnValue({
+      left: 0,
+      right: 100,
+      top: 0,
+      bottom: 100,
+      width: 100,
+      height: 100,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    })
+    knob.click()
+    expect(document.querySelector('.tiao-angle-overlay')).not.toBeNull()
+    // hover-follow: origin is knob center (50,50) → (100, 50) is right = 90°
+    document.dispatchEvent(new MouseEvent('pointermove', { clientX: 100, clientY: 50, bubbles: true }))
+    expect(params.yaw).toBe(90)
+    // mousedown commits and closes
+    document.dispatchEvent(
+      new MouseEvent('pointerdown', { button: 0, clientX: 50, clientY: 100, bubbles: true }),
+    )
+    expect(params.yaw).toBe(180)
+    expect(document.querySelector('.tiao-angle-overlay')).toBeNull()
     pane.dispose()
   })
 
@@ -224,7 +366,7 @@ describe('Pane registry and chrome', () => {
     const drag = (edge: string, dx: number, dy: number) => {
       const handle = pane.element.querySelector(`.tiao-resize-${edge}`) as HTMLElement
       handle.dispatchEvent(new MouseEvent('pointerdown', { button: 0, clientX: 0, clientY: 0 }))
-      handle.dispatchEvent(new MouseEvent('pointermove', { clientX: dx, clientY: dy }))
+      handle.dispatchEvent(new MouseEvent('pointermove', { clientX: dx, clientY: dy, buttons: 1 }))
       handle.dispatchEvent(new MouseEvent('pointerup', { clientX: dx, clientY: dy }))
     }
 
@@ -276,6 +418,24 @@ describe('Pane registry and chrome', () => {
     const binding = pane.addBinding(params, 'time', { readonly: true, view: 'graph', unit: 's' })
     const unit = binding.element.querySelector('.tiao-graph-unit')
     expect(unit?.textContent).toBe('s')
+    pane.dispose()
+  })
+
+  it('renders graphs full-width with an optional bottom-left label', () => {
+    const params = { fps: 60, cpu: 4.2 }
+    const pane = new Pane()
+    const labeled = pane.addBinding(params, 'fps', {
+      readonly: true,
+      view: 'graph',
+      label: 'FPS',
+      unit: 'FPS',
+    })
+    const plain = pane.addBinding(params, 'cpu', { readonly: true, view: 'graph', unit: 'ms' })
+    expect(labeled.element.classList.contains('tiao-row-full')).toBe(true)
+    expect(labeled.element.querySelector('.tiao-label')).toBeNull()
+    expect(labeled.element.querySelector('.tiao-graph-label')?.textContent).toBe('FPS')
+    expect(plain.element.classList.contains('tiao-row-full')).toBe(true)
+    expect(plain.element.querySelector('.tiao-graph-label')).toBeNull()
     pane.dispose()
   })
 
@@ -425,6 +585,37 @@ describe('Pane registry and chrome', () => {
     pane.dispose()
   })
 
+  it('arrow keys nudge number inputs by step, with shift×10 and alt÷10', () => {
+    const params = { seed: 10 }
+    const pane = new Pane()
+    const binding = pane.addBinding(params, 'seed', { step: 1 })
+    const input = binding.element.querySelector('.tiao-num-input') as HTMLInputElement
+
+    // highlighted (edit) mode
+    input.dispatchEvent(new MouseEvent('pointerdown', { button: 0, bubbles: true }))
+    input.dispatchEvent(new MouseEvent('pointerup', { button: 0, bubbles: true }))
+    expect(input.readOnly).toBe(false)
+
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }))
+    expect(params.seed).toBe(11)
+    expect(input.value).toBe('11')
+    expect(input.selectionStart).toBe(0)
+    expect(input.selectionEnd).toBe(input.value.length)
+
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', shiftKey: true, bubbles: true }))
+    expect(params.seed).toBe(1)
+
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', altKey: true, bubbles: true }))
+    expect(params.seed).toBe(1.1)
+
+    // read-only scrub mode still nudges
+    input.dispatchEvent(new FocusEvent('blur'))
+    expect(input.readOnly).toBe(true)
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }))
+    expect(params.seed).toBe(2.1)
+    pane.dispose()
+  })
+
   it('outside pointerdown blurs and deselects number inputs without typing', () => {
     const params = { seed: 12 }
     const pane = new Pane()
@@ -465,19 +656,222 @@ describe('Pane registry and chrome', () => {
     pane.dispose()
   })
 
-  it('clears the scrubber overlay when pointerup lands outside the input', () => {
+  it('shows a scrubber guide and tooltip while dragging, without selecting the input', () => {
     const params = { seed: 42 }
     const pane = new Pane()
     const binding = pane.addBinding(params, 'seed')
+    const scrub = binding.element.querySelector('.tiao-scrub') as HTMLElement
     const input = binding.element.querySelector('.tiao-num-input') as HTMLInputElement
+    const grip = binding.element.querySelector('.tiao-scrub-grip') as HTMLElement
 
-    input.dispatchEvent(new MouseEvent('pointerdown', { button: 0, clientX: 0, clientY: 0, bubbles: true }))
-    input.dispatchEvent(new MouseEvent('pointermove', { clientX: 12, clientY: 0, bubbles: true }))
-    const overlay = document.querySelector('.tiao-drag-overlay') as HTMLElement
+    grip.dispatchEvent(new MouseEvent('pointerdown', { button: 0, clientX: 0, clientY: 0, bubbles: true }))
+    grip.dispatchEvent(new MouseEvent('pointermove', { clientX: 12, clientY: 0, bubbles: true, buttons: 1 }))
+    expect(scrub.classList.contains('tiao-scrub-dragging')).toBe(true)
+    const overlay = document.querySelector('.tiao-scrub-overlay') as HTMLElement
     expect(overlay).not.toBeNull()
+    expect(overlay.querySelector('.tiao-scrub-tooltip')?.textContent).toBe(String(params.seed))
+    expect(input.readOnly).toBe(true)
+    expect(input.selectionStart).toBe(input.selectionEnd)
+    expect(document.activeElement).not.toBe(input)
 
-    overlay.dispatchEvent(new MouseEvent('pointerup', { button: 0, clientX: 12, clientY: 0, bubbles: true }))
-    expect(document.querySelector('.tiao-drag-overlay')).toBeNull()
+    grip.dispatchEvent(new MouseEvent('pointerup', { button: 0, clientX: 12, clientY: 0, bubbles: true }))
+    expect(document.querySelector('.tiao-scrub-overlay')).toBeNull()
+    expect(scrub.classList.contains('tiao-scrub-dragging')).toBe(false)
+    pane.dispose()
+  })
+
+  it('starting a scrub on another binding finishes the previous drag overlay', () => {
+    const params = { a: 1, b: 2 }
+    const pane = new Pane()
+    const a = pane.addBinding(params, 'a')
+    const b = pane.addBinding(params, 'b')
+    const gripA = a.element.querySelector('.tiao-scrub-grip') as HTMLElement
+    const gripB = b.element.querySelector('.tiao-scrub-grip') as HTMLElement
+    const scrubA = a.element.querySelector('.tiao-scrub') as HTMLElement
+
+    gripA.dispatchEvent(new MouseEvent('pointerdown', { button: 0, clientX: 0, clientY: 0, bubbles: true }))
+    gripA.dispatchEvent(new MouseEvent('pointermove', { clientX: 16, clientY: 0, bubbles: true, buttons: 1 }))
+    expect(scrubA.classList.contains('tiao-scrub-dragging')).toBe(true)
+    expect(document.querySelectorAll('.tiao-scrub-overlay')).toHaveLength(1)
+
+    // click another scrubber without pointerup on the first — must not leave a stuck overlay
+    gripB.dispatchEvent(new MouseEvent('pointerdown', { button: 0, clientX: 0, clientY: 0, bubbles: true }))
+    expect(scrubA.classList.contains('tiao-scrub-dragging')).toBe(false)
+    expect(document.querySelectorAll('.tiao-scrub-overlay')).toHaveLength(0)
+
+    gripB.dispatchEvent(new MouseEvent('pointermove', { clientX: 20, clientY: 0, bubbles: true, buttons: 1 }))
+    expect(document.querySelectorAll('.tiao-scrub-overlay')).toHaveLength(1)
+    gripB.dispatchEvent(new MouseEvent('pointerup', { button: 0, clientX: 20, clientY: 0, bubbles: true }))
+    expect(document.querySelector('.tiao-scrub-overlay')).toBeNull()
+    pane.dispose()
+  })
+
+  it('switching number slider tracks without pointerup drives the second binding', () => {
+    const params = { gain: 0.2, threshold: 0.8 }
+    const pane = new Pane()
+    const gain = pane.addBinding(params, 'gain', { min: 0, max: 1, step: 0.01 })
+    const threshold = pane.addBinding(params, 'threshold', { min: 0, max: 1, step: 0.01 })
+    const trackA = gain.element.querySelector('.tiao-slider') as HTMLElement
+    const trackB = threshold.element.querySelector('.tiao-slider') as HTMLElement
+    const rect = {
+      left: 0,
+      right: 100,
+      top: 0,
+      bottom: 20,
+      width: 100,
+      height: 20,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    }
+    vi.spyOn(trackA, 'getBoundingClientRect').mockReturnValue(rect)
+    vi.spyOn(trackB, 'getBoundingClientRect').mockReturnValue(rect)
+
+    trackA.dispatchEvent(new MouseEvent('pointerdown', { button: 0, clientX: 20, clientY: 10, bubbles: true }))
+    trackA.dispatchEvent(new MouseEvent('pointermove', { clientX: 40, clientY: 10, bubbles: true, buttons: 1 }))
+    expect(params.gain).toBe(0.4)
+
+    // no pointerup — click/drag the other track; prior drag must end first
+    trackB.dispatchEvent(new MouseEvent('pointerdown', { button: 0, clientX: 10, clientY: 10, bubbles: true }))
+    expect(params.threshold).toBe(0.1)
+    trackB.dispatchEvent(new MouseEvent('pointermove', { clientX: 70, clientY: 10, bubbles: true, buttons: 1 }))
+    expect(params.threshold).toBe(0.7)
+    expect(params.gain).toBe(0.4)
+    trackB.dispatchEvent(new MouseEvent('pointerup', { button: 0, clientX: 70, clientY: 10, bubbles: true }))
+
+    // after a completed drag, clicking the filled track of another slider still works
+    trackA.dispatchEvent(new MouseEvent('pointerdown', { button: 0, clientX: 30, clientY: 10, bubbles: true }))
+    expect(params.gain).toBe(0.3)
+    trackA.dispatchEvent(new MouseEvent('pointermove', { clientX: 55, clientY: 10, bubbles: true, buttons: 1 }))
+    expect(params.gain).toBe(0.55)
+    trackA.dispatchEvent(new MouseEvent('pointerup', { button: 0, clientX: 55, clientY: 10, bubbles: true }))
+    pane.dispose()
+  })
+
+  it('button click then slider drag continues to move', () => {
+    const params = { speed: 1 }
+    const pane = new Pane()
+    const binding = pane.addBinding(params, 'speed', { min: 0, max: 4, step: 0.01 })
+    pane.addButtonGroup({
+      label: 'presets',
+      buttons: {
+        '0.5x': () => {
+          params.speed = 0.5
+          binding.refresh()
+        },
+      },
+    })
+    const btn = pane.element.querySelector('.tiao-button') as HTMLButtonElement
+    const track = binding.element.querySelector('.tiao-slider') as HTMLElement
+    const rect = {
+      left: 0,
+      right: 100,
+      top: 0,
+      bottom: 20,
+      width: 100,
+      height: 20,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    }
+    vi.spyOn(track, 'getBoundingClientRect').mockReturnValue(rect)
+
+    btn.dispatchEvent(new MouseEvent('pointerdown', { button: 0, clientX: 5, clientY: 5, bubbles: true }))
+    btn.dispatchEvent(new MouseEvent('pointerup', { button: 0, clientX: 5, clientY: 5, bubbles: true }))
+    btn.click()
+    expect(params.speed).toBe(0.5)
+
+    track.dispatchEvent(new MouseEvent('pointerdown', { button: 0, clientX: 25, clientY: 10, bubbles: true }))
+    expect(params.speed).toBe(1)
+    // a buttons:0 move before any pressed move must not kill the drag
+    track.dispatchEvent(new MouseEvent('pointermove', { clientX: 26, clientY: 10, bubbles: true, buttons: 0 }))
+    track.dispatchEvent(new MouseEvent('pointermove', { clientX: 50, clientY: 10, bubbles: true, buttons: 1 }))
+    expect(params.speed).toBe(2)
+    track.dispatchEvent(new MouseEvent('pointermove', { clientX: 75, clientY: 10, bubbles: true, buttons: 1 }))
+    expect(params.speed).toBe(3)
+    track.dispatchEvent(new MouseEvent('pointerup', { button: 0, clientX: 75, clientY: 10, bubbles: true }))
+    pane.dispose()
+  })
+
+  it('an element blur during a drag does not end it, a window blur does', () => {
+    const params = { speed: 1 }
+    const pane = new Pane()
+    const binding = pane.addBinding(params, 'speed', { min: 0, max: 4, step: 0.01 })
+    const track = binding.element.querySelector('.tiao-slider') as HTMLElement
+    const rect = {
+      left: 0,
+      right: 100,
+      top: 0,
+      bottom: 20,
+      width: 100,
+      height: 20,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    }
+    vi.spyOn(track, 'getBoundingClientRect').mockReturnValue(rect)
+
+    track.dispatchEvent(new MouseEvent('pointerdown', { button: 0, clientX: 25, clientY: 10, bubbles: true }))
+    expect(params.speed).toBe(1)
+    // focus moving off another control fires blur on that element; the event
+    // passes window in the capture phase and must not kill the fresh drag
+    // (this is what froze "drag count, then drag size" and pane→pane drags)
+    track.dispatchEvent(new FocusEvent('blur'))
+    track.dispatchEvent(new MouseEvent('pointermove', { clientX: 50, clientY: 10, bubbles: true, buttons: 1 }))
+    expect(params.speed).toBe(2)
+
+    // an actual window blur (target = window) still finishes the drag
+    window.dispatchEvent(new FocusEvent('blur'))
+    track.dispatchEvent(new MouseEvent('pointermove', { clientX: 75, clientY: 10, bubbles: true, buttons: 1 }))
+    expect(params.speed).toBe(2)
+    pane.dispose()
+  })
+
+  it('holds the ew-resize cursor page-wide during track drags and row long-press scrubs', () => {
+    vi.useFakeTimers()
+    const params = { speed: 1 }
+    const pane = new Pane()
+    const binding = pane.addBinding(params, 'speed', { min: 0, max: 4, step: 0.01 })
+    const track = binding.element.querySelector('.tiao-slider') as HTMLElement
+    const label = binding.element.querySelector('.tiao-label') as HTMLElement
+    const root = document.documentElement
+
+    track.dispatchEvent(new MouseEvent('pointerdown', { button: 0, clientX: 25, clientY: 10, bubbles: true }))
+    expect(root.classList.contains('tiao-cursor-ew')).toBe(true)
+    track.dispatchEvent(new MouseEvent('pointerup', { button: 0, clientX: 25, clientY: 10, bubbles: true }))
+    expect(root.classList.contains('tiao-cursor-ew')).toBe(false)
+
+    // long-press on the label: cursor engages when the hold fires, before any move
+    label.dispatchEvent(new MouseEvent('pointerdown', { button: 0, clientX: 25, clientY: 10, bubbles: true }))
+    expect(root.classList.contains('tiao-cursor-ew')).toBe(false)
+    vi.advanceTimersByTime(200)
+    expect(root.classList.contains('tiao-cursor-ew')).toBe(true)
+    label.dispatchEvent(new MouseEvent('pointerup', { button: 0, clientX: 25, clientY: 10, bubbles: true }))
+    expect(root.classList.contains('tiao-cursor-ew')).toBe(false)
+    pane.dispose()
+    vi.useRealTimers()
+  })
+
+  it('point axis grips scrub without selecting neighboring fields', () => {
+    const params = { pos: { x: 1, y: 2, z: 3 } }
+    const pane = new Pane()
+    const binding = pane.addBinding(params, 'pos')
+    const grips = binding.element.querySelectorAll('.tiao-scrub-grip')
+    const inputs = binding.element.querySelectorAll('.tiao-num-input')
+    expect(grips).toHaveLength(3)
+
+    const grip = grips[1] as HTMLElement
+    const input = inputs[1] as HTMLInputElement
+    grip.dispatchEvent(new MouseEvent('pointerdown', { button: 0, clientX: 0, clientY: 0, bubbles: true }))
+    grip.dispatchEvent(new MouseEvent('pointermove', { clientX: 20, clientY: 0, bubbles: true, buttons: 1 }))
+    expect((grip.parentElement as HTMLElement).classList.contains('tiao-scrub-dragging')).toBe(true)
+    expect(document.querySelector('.tiao-scrub-overlay')).not.toBeNull()
+    expect(input.readOnly).toBe(true)
+    expect(document.activeElement).not.toBe(input)
+    expect(params.pos.y).not.toBe(2)
+
+    grip.dispatchEvent(new MouseEvent('pointerup', { button: 0, clientX: 20, clientY: 0, bubbles: true }))
+    expect(document.querySelector('.tiao-scrub-overlay')).toBeNull()
     pane.dispose()
   })
 
@@ -574,6 +968,25 @@ describe('Pane registry and chrome', () => {
     // gear toggles the menu, not the collapse state
     expect(pane.expanded).toBe(false)
     expect(pane.element.querySelector('.tiao-pane-menu.tiao-open')).not.toBeNull()
+    pane.dispose()
+  })
+
+  it('dragging the titlebar does not toggle expanded', () => {
+    const pane = new Pane()
+    const titlebar = pane.element.querySelector('.tiao-titlebar') as HTMLElement
+    expect(pane.expanded).toBe(true)
+
+    titlebar.dispatchEvent(new MouseEvent('pointerdown', { button: 0, clientX: 10, clientY: 10, bubbles: true }))
+    // move past the drag threshold, then release — browsers still fire click after this
+    document.dispatchEvent(new MouseEvent('pointermove', { clientX: 40, clientY: 10, bubbles: true, buttons: 1 }))
+    document.dispatchEvent(new MouseEvent('pointerup', { button: 0, clientX: 40, clientY: 10, bubbles: true }))
+    titlebar.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+
+    expect(pane.expanded).toBe(true)
+
+    // a subsequent plain click still collapses
+    titlebar.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    expect(pane.expanded).toBe(false)
     pane.dispose()
   })
 
@@ -749,6 +1162,13 @@ describe('color model', () => {
     expect(oklchInGamut(0.6279, m, 29.23)).toBe(true)
   })
 
+  it('Display-P3 extends past sRGB for saturated oklch hues', () => {
+    // same red hue: P3 can hold more chroma than sRGB
+    expect(oklchInGamut(0.6279, 0.28, 29.23)).toBe(false)
+    expect(oklchInP3Gamut(0.6279, 0.28, 29.23)).toBe(true)
+    expect(maxChromaP3(0.6279, 29.23)).toBeGreaterThan(maxChroma(0.6279, 29.23))
+  })
+
   it('round-trips formats', () => {
     const hex = parseColor('#ff8800')
     expect(hex?.format).toBe('hex')
@@ -798,7 +1218,12 @@ describe('number utils', () => {
     expect(snap(7, 5)).toBe(5)
   })
   it('formats according to step', () => {
-    expect(formatNumber(0.5, 0.01)).toBe('0.5')
+    // keep step precision so 5.0 stays "5.0" next to 4.9
+    expect(formatNumber(5, 0.1)).toBe('5.0')
+    expect(formatNumber(4.9, 0.1)).toBe('4.9')
+    expect(formatNumber(0.5, 0.01)).toBe('0.50')
     expect(formatNumber(3, 1)).toBe('3')
+    // finer Alt-nudge digits still show when present
+    expect(formatNumber(5.01, 0.1)).toBe('5.01')
   })
 })

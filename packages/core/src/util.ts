@@ -23,12 +23,22 @@ export function decimalCount(n: number): number {
   return dot >= 0 ? s.length - dot - 1 : 0
 }
 
-/** Default number formatting: enough decimals for the step, trimmed. */
+/**
+ * Default number formatting. With a step, keep at least that many decimals so
+ * values like 5.0 stay "5.0" next to 4.9 (consistent precision). Finer digits
+ * (e.g. Alt nudge at step/10) are still shown when present.
+ */
 export function formatNumber(v: number, step?: number): string {
   if (!Number.isFinite(v)) return String(v)
-  const decimals = step !== undefined ? decimalCount(step) : suggestedDecimals(v)
-  // Number() round-trip trims trailing zeros without eating integer digits
-  return String(Number(v.toFixed(decimals)))
+  if (step === undefined) {
+    // no step: trim trailing zeros — precision isn't meaningful
+    return String(Number(v.toFixed(suggestedDecimals(v))))
+  }
+  const min = decimalCount(step)
+  // count significant decimals in the value without float noise
+  const trimmed = v.toFixed(12).replace(/\.?0+$/, '')
+  const valueDecimals = trimmed.includes('.') ? trimmed.length - trimmed.indexOf('.') - 1 : 0
+  return v.toFixed(Math.min(Math.max(min, valueDecimals), 12))
 }
 
 function suggestedDecimals(v: number): number {
@@ -41,6 +51,25 @@ function suggestedDecimals(v: number): number {
 export function parseNumberInput(text: string): number | null {
   const v = Number(text.replace(/[^\d.eE+-]/g, ''))
   return Number.isFinite(v) ? v : null
+}
+
+/**
+ * Arrow-key nudge for number fields (tweakpane-style):
+ * plain = ±step, Shift = ±step×10, Alt = ±step/10. Returns 0 for other keys.
+ */
+export function arrowKeyStep(e: KeyboardEvent, step: number): number {
+  const dir = e.key === 'ArrowUp' || e.key === 'ArrowRight' ? 1 : e.key === 'ArrowDown' || e.key === 'ArrowLeft' ? -1 : 0
+  if (!dir) return 0
+  return dir * step * (e.shiftKey ? 10 : 1) * (e.altKey ? 0.1 : 1)
+}
+
+/**
+ * Apply an arrow-key delta without re-snapping onto the base step, so Alt
+ * fractions survive later plain/Shift nudges; finer deltas snap to their own
+ * grid only to clean up float noise.
+ */
+export function nudge(current: number, delta: number, base: number): number {
+  return snap(current + delta, Math.abs(delta) < base ? Math.abs(delta) : undefined)
 }
 
 export function isRecord(v: unknown): v is Record<string, unknown> {

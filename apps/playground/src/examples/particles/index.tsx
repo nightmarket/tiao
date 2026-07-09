@@ -108,6 +108,7 @@ function buildKitchenSink(pane: Pane): Pane {
     gain: 0.4,
     threshold: 0.75,
     amount: 32,
+    range: { min: 20, max: 80 },
     tag: 'root',
     active: true,
     exposure: 0.6,
@@ -124,6 +125,7 @@ function buildKitchenSink(pane: Pane): Pane {
     lch: 'oklch(0.7 0.15 200)',
     offset: { x: 0.2, y: -0.3 },
     rotation: { x: 0, y: 0, z: 0 },
+    angle: 45,
     easing: [0.25, 0.1, 0.25, 1] as [number, number, number, number],
     flen: 55,
     fnumber: 1.8,
@@ -141,7 +143,7 @@ function buildKitchenSink(pane: Pane): Pane {
     baseDispose()
   }
 
-  // one labeled two-column graph, one full-width label-less graph
+  // one full-width graph with bottom-left label, one without
   addFpsGraph(pane, { label: 'FPS' })
   addFpsGraph(pane)
 
@@ -149,6 +151,7 @@ function buildKitchenSink(pane: Pane): Pane {
   pane.addBinding(params, 'gain', { min: 0, max: 1, step: 0.01 })
   pane.addBinding(params, 'threshold', { min: 0, max: 1, step: 0.01 })
   pane.addBinding(params, 'amount', { min: 0, max: 100, step: 1 })
+  pane.addBinding(params, 'range', { min: 0, max: 100, step: 1 })
   pane.addBinding(params, 'tag')
   pane.addBinding(params, 'active')
 
@@ -194,6 +197,7 @@ function buildKitchenSink(pane: Pane): Pane {
     x: { min: -1, max: 1, step: 0.01 },
     y: { min: -1, max: 1, step: 0.01 },
   })
+  vectors.addBinding(params, 'angle', { view: 'angle', step: 1 })
   const nested = vectors.addFolder({ title: 'Nested' })
   nested.addBinding(params, 'rotation', { step: 1 })
   const deeper = nested.addFolder({ title: 'Deeper' })

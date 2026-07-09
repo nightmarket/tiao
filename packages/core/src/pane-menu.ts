@@ -37,7 +37,7 @@ const ACCENT_PALETTE = [
   '#f87171',
   '#fb923c',
   '#facc15',
-  '#a3e635',
+  '#65a30d',
   '#22d3ee',
   '#60a5fa',
   '#a78bfa',

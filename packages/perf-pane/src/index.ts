@@ -22,9 +22,9 @@ export interface PerfPaneApi {
 
 /**
  * Pre-configured pane (top-right by default) that monitors a canvas app:
- * fps / cpu ms / gpu ms graphs, three.js draw-call and geometry counts, and
- * heap graphs for leak hunting. Pass a three.js renderer and everything
- * available lights up; rows without a data source are skipped.
+ * fps / cpu / gpu / heap graphs in a tab group, plus flat three.js counters.
+ * Pass a three.js renderer and everything available lights up; rows without a
+ * data source are skipped.
  */
 export function createPerfPane(options: PerfPaneOptions = {}): PerfPaneApi {
   const perf = createPerfMonitor(options)
@@ -61,36 +61,41 @@ export function addPerfMonitors(
 ): void {
   const { stats, capabilities, interval } = perf
   const graph = { readonly: true, view: 'graph', interval, min: 0 } as const
+  const fpsOpts = { ...graph, label: 'FPS', max: options.maxFps ?? 120, unit: 'FPS', format: round }
+  const cpuOpts = { ...graph, label: 'CPU', unit: 'ms', format: ms }
+  const gpuOpts = { ...graph, label: 'GPU', unit: 'ms', format: ms }
+  const heapOpts = { ...graph, label: 'JS heap', unit: 'MB', format: mb }
 
-  container.addBinding(stats, 'fps', { ...graph, label: 'FPS', max: options.maxFps ?? 120, unit: 'FPS', format: round })
-  container.addBinding(stats, 'cpu', { ...graph, label: 'CPU', unit: 'ms', format: ms })
-  if (capabilities.gpu) {
-    container.addBinding(stats, 'gpu', { ...graph, label: 'GPU', unit: 'ms', format: ms })
+  const tabs = container.addTab({
+    pages: [{ title: 'All' }, { title: 'FPS' }, { title: 'Memory' }, { title: 'Perf' }],
+  })
+  const [all, fpsPage, memoryPage, perfPage] = tabs.pages
+
+  all!.addBinding(stats, 'fps', fpsOpts)
+  all!.addBinding(stats, 'cpu', cpuOpts)
+  if (capabilities.gpu) all!.addBinding(stats, 'gpu', gpuOpts)
+  if (capabilities.jsHeap) all!.addBinding(stats, 'jsHeap', heapOpts)
+
+  fpsPage!.addBinding(stats, 'fps', fpsOpts)
+
+  if (capabilities.jsHeap) memoryPage!.addBinding(stats, 'jsHeap', heapOpts)
+  if (capabilities.gpuMemory) {
+    memoryPage!.addBinding(stats, 'gpuMemory', { ...graph, label: 'GPU mem', unit: 'MB', format: mb })
   }
+
+  perfPage!.addBinding(stats, 'cpu', cpuOpts)
+  if (capabilities.gpu) perfPage!.addBinding(stats, 'gpu', gpuOpts)
 
   if (capabilities.counts) {
-    const render = container.addFolder({ title: 'Render' })
-    render.addBinding(stats, 'calls', { readonly: true, format: int })
-    render.addBinding(stats, 'triangles', { readonly: true, format: int })
-    render.addBinding(stats, 'lines', { readonly: true, format: int })
-    render.addBinding(stats, 'points', { readonly: true, format: int })
+    container.addBinding(stats, 'calls', { readonly: true, format: int })
+    container.addBinding(stats, 'triangles', { readonly: true, format: int })
+    container.addBinding(stats, 'lines', { readonly: true, format: int })
+    container.addBinding(stats, 'points', { readonly: true, format: int })
+    container.addBinding(stats, 'geometries', { readonly: true, format: int })
+    container.addBinding(stats, 'textures', { readonly: true, format: int })
   }
-
-  if (capabilities.counts || capabilities.shaders || capabilities.jsHeap || capabilities.gpuMemory) {
-    const memory = container.addFolder({ title: 'Memory' })
-    if (capabilities.counts) {
-      memory.addBinding(stats, 'geometries', { readonly: true, format: int })
-      memory.addBinding(stats, 'textures', { readonly: true, format: int })
-    }
-    if (capabilities.shaders) {
-      memory.addBinding(stats, 'shaders', { readonly: true, format: int })
-    }
-    if (capabilities.jsHeap) {
-      memory.addBinding(stats, 'jsHeap', { ...graph, label: 'JS heap', unit: 'MB', format: mb })
-    }
-    if (capabilities.gpuMemory) {
-      memory.addBinding(stats, 'gpuMemory', { ...graph, label: 'GPU mem', unit: 'MB', format: mb })
-    }
+  if (capabilities.shaders) {
+    container.addBinding(stats, 'shaders', { readonly: true, format: int })
   }
 }
 

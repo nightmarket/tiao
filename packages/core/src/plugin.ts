@@ -33,6 +33,8 @@ export interface PluginView {
   full?: boolean
   /** invoked when the row (label area) is clicked, e.g. focus the input */
   activate?: () => void
+  /** long-press on the row label starts a scrub/drag gesture when provided */
+  beginScrub?: (ev: PointerEvent) => void
 }
 
 export interface InputPlugin<T = unknown> {

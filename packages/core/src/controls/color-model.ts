@@ -317,9 +317,7 @@ export function oklchToRgb(L: number, C: number, H: number): { r: number; g: num
 
 const GAMUT_EPS = 1e-4
 
-export function oklchInGamut(L: number, C: number, H: number): boolean {
-  const rad = (H * Math.PI) / 180
-  const [r, g, b] = oklabToLinear(L, C * Math.cos(rad), C * Math.sin(rad))
+function channelsInUnitCube(r: number, g: number, b: number): boolean {
   return (
     r >= -GAMUT_EPS && r <= 1 + GAMUT_EPS &&
     g >= -GAMUT_EPS && g <= 1 + GAMUT_EPS &&
@@ -327,18 +325,58 @@ export function oklchInGamut(L: number, C: number, H: number): boolean {
   )
 }
 
-/** largest sRGB-representable chroma at a given lightness/hue (binary search) */
-export function maxChroma(L: number, H: number, limit = 0.4): number {
-  if (!oklchInGamut(L, 0, H)) return 0
-  if (oklchInGamut(L, limit, H)) return limit
+export function oklchInGamut(L: number, C: number, H: number): boolean {
+  const rad = (H * Math.PI) / 180
+  const [r, g, b] = oklabToLinear(L, C * Math.cos(rad), C * Math.sin(rad))
+  return channelsInUnitCube(r, g, b)
+}
+
+/** linear sRGB → XYZ (D65) → linear Display-P3 */
+function linearSrgbToLinearP3(r: number, g: number, b: number): [number, number, number] {
+  const x = 0.4123907993 * r + 0.3575843394 * g + 0.1804807884 * b
+  const y = 0.2126390059 * r + 0.7151686788 * g + 0.0721923154 * b
+  const z = 0.0193308187 * r + 0.1191947798 * g + 0.9505321522 * b
+  return [
+    2.493496912 * x - 0.9313836179 * y - 0.4027107845 * z,
+    -0.8294889696 * x + 1.7626640603 * y + 0.0236246858 * z,
+    0.0358458302 * x - 0.0761723893 * y + 0.956884524 * z,
+  ]
+}
+
+/** true when the OKLCH sample fits in Display-P3 (superset of sRGB) */
+export function oklchInP3Gamut(L: number, C: number, H: number): boolean {
+  const rad = (H * Math.PI) / 180
+  const [r, g, b] = oklabToLinear(L, C * Math.cos(rad), C * Math.sin(rad))
+  if (channelsInUnitCube(r, g, b)) return true
+  return channelsInUnitCube(...linearSrgbToLinearP3(r, g, b))
+}
+
+function maxChromaFor(
+  inGamut: (L: number, C: number, H: number) => boolean,
+  L: number,
+  H: number,
+  limit: number,
+): number {
+  if (!inGamut(L, 0, H)) return 0
+  if (inGamut(L, limit, H)) return limit
   let lo = 0
   let hi = limit
   for (let i = 0; i < 16; i++) {
     const mid = (lo + hi) / 2
-    if (oklchInGamut(L, mid, H)) lo = mid
+    if (inGamut(L, mid, H)) lo = mid
     else hi = mid
   }
   return lo
+}
+
+/** largest sRGB-representable chroma at a given lightness/hue (binary search) */
+export function maxChroma(L: number, H: number, limit = 0.4): number {
+  return maxChromaFor(oklchInGamut, L, H, limit)
+}
+
+/** largest Display-P3-representable chroma at a given lightness/hue */
+export function maxChromaP3(L: number, H: number, limit = 0.4): number {
+  return maxChromaFor(oklchInP3Gamut, L, H, limit)
 }
 
 /** h 0-360, s/v 0-1 */

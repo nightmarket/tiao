@@ -1,5 +1,5 @@
-import { collapseSelection, draggable, h } from '../dom'
-import { clamp, formatNumber, parseNumberInput, snap } from '../util'
+import { collapseSelection, h, setEwCursor, setRowActive, startDrag } from '../dom'
+import { arrowKeyStep, clamp, formatNumber, nudge, parseNumberInput, snap } from '../util'
 import type { Value } from '../value'
 
 export interface ScrubberOptions {
@@ -9,10 +9,54 @@ export interface ScrubberOptions {
   /** value change per horizontal pixel while dragging (default derived from step) */
   pointerScale?: number
   format?: (v: number) => string
+  /**
+   * Show the dotted arrow + tooltip overlay while scrubbing (default true).
+   * Min/max fill sliders turn this off — the fill-edge handlebar is the cue.
+   */
+  guide?: boolean
+  /**
+   * Allow dragging the value field itself to scrub (default true).
+   * Fill sliders turn this off so the track receives pointer events on the fill.
+   */
+  fieldDrag?: boolean
+}
+
+export interface ScrubberApi {
+  element: HTMLElement
+  activate: () => void
+  /** start a scrub drag from an external pointer event (e.g. row long-press) */
+  beginScrub: (ev: PointerEvent) => void
+  dispose: () => void
+}
+
+const SVG_NS = 'http://www.w3.org/2000/svg'
+
+/** Copy pane theme tokens onto a body-portaled overlay. */
+export function applyOverlayTheme(overlay: HTMLElement, from: Element): void {
+  const cs = from.ownerDocument.defaultView?.getComputedStyle(from)
+  if (!cs) return
+  for (const prop of [
+    '--tiao-fg',
+    '--tiao-fg-soft',
+    '--tiao-fg-dim',
+    '--tiao-bg',
+    '--tiao-bg-solid',
+    '--tiao-border',
+    '--tiao-accent',
+    '--tiao-font-mono',
+    '--tiao-font-size-mono',
+    '--tiao-radius',
+    '--tiao-radius-sm',
+    '--tiao-shadow-popup',
+  ]) {
+    const v = cs.getPropertyValue(prop)
+    if (v) overlay.style.setProperty(prop, v)
+  }
 }
 
 /**
- * Draggable number field: drag horizontally to scrub, click to type.
+ * Draggable number field: drag the left knob to scrub, click the value to type.
+ * While scrubbing, a dotted guide + value tooltip follow the pointer (tweakpane-style).
  * Used by plain number inputs and point component fields.
  */
 export function createScrubber(
@@ -20,9 +64,13 @@ export function createScrubber(
   get: () => number,
   set: (v: number, last: boolean) => void,
   opts: ScrubberOptions,
-): { element: HTMLElement; activate: () => void; dispose: () => void } {
+): ScrubberApi {
   const step = opts.step
   const scale = opts.pointerScale ?? (step ?? guessStep(get())) * 0.5
+  const showGuide = opts.guide !== false
+  const fieldDrag = opts.fieldDrag !== false
+  // format to the binding step; formatNumber keeps trailing zeros and still
+  // shows finer Alt (step/10) digits when present
   const format = opts.format ?? ((v: number) => formatNumber(v, step))
 
   const input = h('input', 'tiao-num-input')
@@ -30,38 +78,72 @@ export function createScrubber(
   input.inputMode = 'decimal'
   input.readOnly = true
   input.value = format(get())
-  // left grip dots signal draggability
-  const grip = h('div', 'tiao-scrub-grip')
-  const wrap = h('div', 'tiao-scrub', input, grip)
 
-  // full-screen tick ruler while scrubbing: aligned with the input but spanning
-  // the whole viewport, so the drag direction reads even outside the pane
+  // left knob is the scrub handle; guide/tooltip are portaled to <body> so
+  // they aren't clipped by pane overflow (critical for tight vec2/vec3 fields)
+  const knob = h('div', 'tiao-scrub-grip')
+  const wrap = h('div', 'tiao-scrub', input, knob)
+
   let overlay: HTMLElement | null = null
-  let overlayGuide: HTMLElement | null = null
-  let overlayCenter = 0
-  const showOverlay = () => {
-    if (overlay) return
-    const doc = input.ownerDocument
-    const rect = input.getBoundingClientRect()
-    overlayCenter = rect.left + rect.width / 2
-    overlayGuide = h('div', 'tiao-drag-overlay-guide')
-    overlayGuide.style.top = `${rect.bottom - 6}px`
-    const marker = h('div', 'tiao-drag-overlay-marker')
-    marker.style.left = `${overlayCenter}px`
-    marker.style.top = `${rect.bottom - 8}px`
-    overlay = h('div', 'tiao-drag-overlay', overlayGuide, marker)
-    // the overlay lives on <body>, outside the pane's CSS variable scope
-    const cs = doc.defaultView?.getComputedStyle(input)
-    if (cs) {
-      overlay.style.setProperty('--tiao-fg-dim', cs.getPropertyValue('--tiao-fg-dim'))
-      overlay.style.setProperty('--tiao-accent', cs.getPropertyValue('--tiao-accent'))
-    }
-    doc.body.append(overlay)
-  }
+  let guideBody: SVGPathElement | null = null
+  let guideHead: SVGPathElement | null = null
+  let tooltip: HTMLElement | null = null
+  let originX = 0
+  let originY = 0
+
   const hideOverlay = () => {
     overlay?.remove()
     overlay = null
-    overlayGuide = null
+    guideBody = null
+    guideHead = null
+    tooltip = null
+    wrap.classList.remove('tiao-scrub-dragging')
+    setRowActive(wrap, false)
+    setEwCursor(input, false)
+  }
+
+  const showOverlay = (anchor: HTMLElement) => {
+    wrap.classList.add('tiao-scrub-dragging')
+    setEwCursor(input, true)
+    if (!showGuide || overlay) return
+    const doc = input.ownerDocument
+    const rect = anchor.getBoundingClientRect()
+    // grip: center of the handle; input: left padding edge so the guide
+    // grows from the value field the same way the knob does
+    originX = anchor === knob ? rect.left + rect.width / 2 : rect.left + 6
+    originY = rect.top + rect.height / 2
+
+    guideBody = doc.createElementNS(SVG_NS, 'path')
+    guideBody.setAttribute('class', 'tiao-scrub-guide-body')
+    guideHead = doc.createElementNS(SVG_NS, 'path')
+    guideHead.setAttribute('class', 'tiao-scrub-guide-head')
+    const guide = doc.createElementNS(SVG_NS, 'svg')
+    guide.setAttribute('class', 'tiao-scrub-guide')
+    guide.setAttribute('aria-hidden', 'true')
+    guide.append(guideBody, guideHead)
+
+    tooltip = h('div', 'tiao-scrub-tooltip')
+    // the value subscription keeps the text current after this
+    tooltip.textContent = format(get())
+    overlay = h('div', 'tiao-scrub-overlay', guide, tooltip)
+    overlay.style.left = `${originX}px`
+    overlay.style.top = `${originY}px`
+    applyOverlayTheme(overlay, input)
+    doc.body.append(overlay)
+  }
+
+  const updateGuide = (clientX: number) => {
+    if (!guideBody || !guideHead || !tooltip) return
+    const dx = clientX - originX
+    // arrow sits just shy of the cursor so the head reads as a pointer tip
+    const aox = dx + (dx > 0 ? -1 : dx < 0 ? 1 : 0)
+    const adx = clamp(-aox, -4, 4)
+    guideHead.setAttribute(
+      'd',
+      [`M ${aox + adx},0 L${aox},4 L${aox + adx},8`, `M ${dx},-1 L${dx},9`].join(' '),
+    )
+    guideBody.setAttribute('d', `M 0,4 L${dx},4`)
+    tooltip.style.left = `${dx}px`
   }
 
   const constrain = (v: number): number => {
@@ -81,47 +163,84 @@ export function createScrubber(
     }, 0)
   }
 
-  let dragBase = 0
-  const disposeDrag = draggable(input, {
-    onStart: () => {
-      dragBase = get()
-    },
-    onMove: (s) => {
-      if (!s.moved || !input.readOnly) return
-      showOverlay()
-      if (overlayGuide) overlayGuide.style.backgroundPositionX = `${overlayCenter + s.dx}px`
-      set(constrain(dragBase + s.dx * scale), false)
-    },
-    onEnd: (s) => {
-      hideOverlay()
+  const runScrub = (anchor: HTMLElement, ev: PointerEvent, onTap?: () => void) => {
+    let base = get()
+    startDrag(ev, {
+      onStart: (e) => {
+        e.preventDefault()
+        base = get()
+        // long-press / drag activation cue before the pointer moves
+        wrap.classList.add('tiao-scrub-dragging')
+        setRowActive(wrap, true)
+        setEwCursor(input, true)
+      },
+      onMove: (s, e) => {
+        if (!s.moved) return
+        showOverlay(anchor)
+        set(constrain(base + s.dx * scale), false)
+        updateGuide(e.clientX)
+      },
+      onEnd: (s) => {
+        hideOverlay()
+        if (s.moved) set(constrain(base + s.dx * scale), true)
+        else onTap?.()
+      },
+    })
+  }
+
+  // scrub from the knob so the input never focuses / selects while dragging;
+  // dragging the field itself also scrubs (unless fieldDrag is off — fill
+  // sliders need the track to receive those hits), and a plain click enters edit
+  const bindScrub = (anchor: HTMLElement, onTap?: () => void) => {
+    const onPointerDown = (ev: PointerEvent) => {
+      if (ev.button !== 0) return
       if (!input.readOnly) return
-      if (s.moved) {
-        set(constrain(dragBase + s.dx * scale), true)
-      } else {
-        // plain click: enter edit mode with the value selected
-        enterEdit()
-      }
-    },
-  })
+      runScrub(anchor, ev, onTap)
+    }
+    anchor.addEventListener('pointerdown', onPointerDown)
+    return () => anchor.removeEventListener('pointerdown', onPointerDown)
+  }
+  const disposeKnobDrag = bindScrub(knob)
+  const disposeFieldDrag = fieldDrag
+    ? bindScrub(input, enterEdit)
+    : (() => {
+        // click-to-edit only — don't start a competing drag over the fill track
+        const onClick = () => {
+          if (input.readOnly) enterEdit()
+        }
+        input.addEventListener('click', onClick)
+        return () => input.removeEventListener('click', onClick)
+      })()
 
   const commitText = () => {
     if (input.readOnly) return
     collapseSelection(input)
     const parsed = parseNumberInput(input.value)
-    if (parsed !== null) set(constrain(parsed), true)
+    // skip re-snap when the field still shows a value we already committed
+    // (e.g. Alt step/10 nudges that sit between the binding's `step` grid)
+    if (parsed !== null && parsed !== get()) set(constrain(parsed), true)
     input.readOnly = true
     input.value = format(get())
     collapseSelection(input)
   }
-  const onKeyDown = (e: KeyboardEvent) => {
-    if (input.readOnly) {
-      const delta = e.key === 'ArrowUp' ? 1 : e.key === 'ArrowDown' ? -1 : 0
-      if (delta) {
-        e.preventDefault()
-        set(constrain(get() + delta * (step ?? guessStep(get()))), true)
-      }
-      return
+  const nudgeFromKey = (e: KeyboardEvent): boolean => {
+    const base = step ?? guessStep(get())
+    const delta = arrowKeyStep(e, base)
+    if (!delta) return false
+    e.preventDefault()
+    const current = input.readOnly ? get() : (parseNumberInput(input.value) ?? get())
+    const next = clamp(nudge(current, delta, base), opts.min ?? -Infinity, opts.max ?? Infinity)
+    set(next, true)
+    if (!input.readOnly) {
+      input.value = format(next)
+      input.select()
     }
+    return true
+  }
+
+  const onKeyDown = (e: KeyboardEvent) => {
+    if (nudgeFromKey(e)) return
+    if (input.readOnly) return
     if (e.key === 'Enter') commitText()
     if (e.key === 'Escape') {
       input.readOnly = true
@@ -133,15 +252,26 @@ export function createScrubber(
   input.addEventListener('keydown', onKeyDown)
 
   const unsubscribe = value.subscribe(() => {
-    if (input.readOnly) input.value = format(get())
+    const text = format(get())
+    if (input.readOnly) input.value = text
+    if (tooltip) tooltip.textContent = text
   })
 
   return {
     element: wrap,
     activate: enterEdit,
+    beginScrub: (ev) => {
+      if (!input.readOnly) return
+      // slider-num / interval hide the grip; scrub from the value field then
+      const gripHidden = wrap.classList.contains('tiao-slider-num')
+        || wrap.classList.contains('tiao-interval-min')
+        || wrap.classList.contains('tiao-interval-max')
+      runScrub(gripHidden ? input : knob, ev)
+    },
     dispose: () => {
       hideOverlay()
-      disposeDrag()
+      disposeKnobDrag()
+      disposeFieldDrag()
       input.removeEventListener('blur', commitText)
       input.removeEventListener('keydown', onKeyDown)
       unsubscribe()

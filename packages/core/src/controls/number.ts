@@ -1,11 +1,11 @@
-import { draggable, h } from '../dom'
-import { clamp, mapRange, snap } from '../util'
+import { h, setEwCursor, setRowActive, startDrag } from '../dom'
+import { arrowKeyStep, clamp, mapRange, nudge, snap } from '../util'
 import { createScrubber } from './scrubber'
 import type { InputPlugin, PluginContext, PluginView } from '../plugin'
 
 /**
- * Number input (tweakpane-style). With min & max it renders a compact fill
- * slider plus a number field in the control column; otherwise a scrubber field.
+ * Number input (tweakpane-style). With min & max it renders a full-width fill
+ * slider with the value field overlaid on the right; otherwise a scrubber field.
  */
 export const numberInputPlugin: InputPlugin<number> = {
   id: 'number',
@@ -36,6 +36,9 @@ function createSliderRow(ctx: PluginContext<number>, min: number, max: number): 
     {
       min,
       max,
+      // fill-edge handlebar is the affordance; track owns dragging on the fill
+      guide: false,
+      fieldDrag: false,
       ...(options.format ? { format: options.format } : {}),
       ...(typeof step === 'number' ? { step } : {}),
     },
@@ -56,30 +59,68 @@ function createSliderRow(ctx: PluginContext<number>, min: number, max: number): 
     const rect = (trackRect ??= track.getBoundingClientRect())
     return constrain(mapRange(clientX, rect.left, rect.right, min, max))
   }
-  ctx.onDispose(
-    draggable(track, {
-      onStart: (e) => {
-        trackRect = track.getBoundingClientRect()
-        value.set(fromPointer(e.clientX), { source: 'ui', last: false })
-      },
+  const setTrackActive = (on: boolean) => {
+    el.classList.toggle('tiao-slider-dragging', on)
+    setRowActive(el, on)
+    setEwCursor(track, on)
+  }
+  const beginTrackDrag = (e: PointerEvent) => {
+    trackRect = track.getBoundingClientRect()
+    setTrackActive(true)
+    value.set(fromPointer(e.clientX), { source: 'ui', last: false })
+    startDrag(e, {
       onMove: (s) => value.set(fromPointer(s.x), { source: 'ui', last: false }),
-      onEnd: (s) => value.set(fromPointer(s.x), { source: 'ui', last: true }),
-    }),
-  )
+      onEnd: (s) => {
+        value.set(fromPointer(s.x), { source: 'ui', last: true })
+        setTrackActive(false)
+      },
+    })
+  }
+  const onTrackPointerDown = (e: PointerEvent) => {
+    if (e.button !== 0) return
+    beginTrackDrag(e)
+  }
+  track.addEventListener('pointerdown', onTrackPointerDown)
+  ctx.onDispose(() => track.removeEventListener('pointerdown', onTrackPointerDown))
 
-  // keyboard support on the track
+  // keyboard support on the track (Shift ×10, Alt ÷10)
   track.tabIndex = 0
   const onKeyDown = (e: KeyboardEvent) => {
-    const dir = e.key === 'ArrowRight' || e.key === 'ArrowUp' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowDown' ? -1 : 0
-    if (!dir) return
+    const base = step ?? (max - min) / 100
+    const delta = arrowKeyStep(e, base)
+    if (!delta) return
     e.preventDefault()
-    const delta = step ?? (max - min) / 100
-    value.set(constrain(value.get() + dir * delta), { source: 'ui', last: true })
+    value.set(clamp(nudge(value.get(), delta, base), min, max), { source: 'ui', last: true })
   }
   track.addEventListener('keydown', onKeyDown)
   ctx.onDispose(() => track.removeEventListener('keydown', onKeyDown))
 
-  return { element: el, activate: scrub.activate }
+  /** row long-press: mouse position = current value; drag left/right from there */
+  const beginRelativeScrub = (e: PointerEvent) => {
+    const base = value.get()
+    const width = track.getBoundingClientRect().width || 1
+    const unitsPerPx = (max - min) / width
+    setTrackActive(true)
+    startDrag(e, {
+      onStart: (ev) => {
+        ev.preventDefault()
+      },
+      onMove: (s) => {
+        value.set(constrain(base + s.dx * unitsPerPx), { source: 'ui', last: false })
+      },
+      onEnd: (s) => {
+        value.set(constrain(base + s.dx * unitsPerPx), { source: 'ui', last: true })
+        setTrackActive(false)
+      },
+    })
+  }
+
+  return {
+    element: el,
+    activate: scrub.activate,
+    // row long-press: relative from current value (track click still jumps)
+    beginScrub: beginRelativeScrub,
+  }
 }
 
 function createScrubberRow(ctx: PluginContext<number>): PluginView {
@@ -97,5 +138,5 @@ function createScrubberRow(ctx: PluginContext<number>): PluginView {
     opts,
   )
   ctx.onDispose(scrub.dispose)
-  return { element: scrub.element, activate: scrub.activate }
+  return { element: scrub.element, activate: scrub.activate, beginScrub: scrub.beginScrub }
 }

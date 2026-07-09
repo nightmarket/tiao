@@ -1,6 +1,5 @@
 import {
   createGraph,
-  h,
   onTick,
   registerPlugin,
   Value,
@@ -41,6 +40,7 @@ export const fpsPlugin: BladePlugin = {
       }),
     )
 
+    const label = typeof ctx.params['label'] === 'string' ? ctx.params['label'] : undefined
     const graph = createGraph({
       value,
       options: {
@@ -48,16 +48,12 @@ export const fpsPlugin: BladePlugin = {
         max,
         unit: 'FPS',
         format: (v: number) => String(Math.round(v)),
+        ...(label !== undefined && { label }),
         ...(bufferSize !== undefined && { bufferSize }),
       },
       onDispose: ctx.onDispose,
     })
-    // labeled: standard two-column row; label-less: full-width graph
-    const label = typeof ctx.params['label'] === 'string' ? ctx.params['label'] : null
-    const element = label
-      ? h('div', 'tiao-fps', h('div', 'tiao-label', label), h('div', 'tiao-control', graph))
-      : graph
-    return { element, full: true }
+    return { element: graph, full: true }
   },
 }
 

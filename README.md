@@ -20,6 +20,7 @@ import { Pane } from '@tiao/core'
 
 const params = {
   speed: 1,
+  range: { min: 20, max: 80 },
   enabled: true,
   label: 'hello',
   tint: '#ff8800',
@@ -30,11 +31,13 @@ const params = {
 const pane = new Pane({ title: 'Scene', anchor: 'top-right', toggleKey: '`' })
 
 pane.addBinding(params, 'speed', { min: 0, max: 4, step: 0.01 }) // fill slider
+pane.addBinding(params, 'range', { min: 0, max: 100, step: 1 })  // interval ({ min, max } value)
 pane.addBinding(params, 'enabled')                               // check toggle
 pane.addBinding(params, 'label')                                 // text input
 pane.addBinding(params, 'tint')                                  // color picker (auto-detected)
 pane.addBinding(params, 'accent')                                // 'oklch(0.7 0.15 200)' / 'oklab(...)' open a gamut-aware OKLCH picker
 pane.addBinding(params, 'offset', { x: { min: -1, max: 1 }, y: { min: -1, max: 1 } })
+pane.addBinding(params, 'yaw', { view: 'angle' }) // circular angle overlay (degrees; unit: 'rad' for radians)
 pane.addBinding(params, 'blend', { options: { Multiply: 'multiply', Screen: 'screen' } })
 
 const folder = pane.addFolder({ title: 'Advanced', expanded: false }) // collapsible: false pins a section open
@@ -183,7 +186,7 @@ import { createPerfPane } from '@tiao/perf-pane'
 const { pane, perf, dispose } = createPerfPane({ renderer })
 ```
 
-Anchored top-right by default: FPS / CPU ms / GPU ms graphs, a Render folder with three.js counters (calls, triangles, lines, points), and a Memory folder for leak hunting (geometries, textures, shaders, JS heap graph). Rows without a data source skip themselves.
+Anchored top-right by default: an All / FPS / Memory / Perf tab group for the graphs (FPS, CPU, GPU, JS heap), then flat three.js counters (calls, triangles, lines, points, geometries, textures, shaders). Rows without a data source skip themselves.
 
 - **CPU ms** — `renderer.render` is wrapped automatically; pass `instrument: false` to opt out and bracket your frame manually with `perf.begin()` / `perf.end()`.
 - **GPU ms** — WebGL2 uses `EXT_disjoint_timer_query_webgl2`; three's WebGPURenderer works when created with `trackTimestamp: true`; or supply your own timer with `gpuTime: () => ms`.

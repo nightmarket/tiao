@@ -1,6 +1,8 @@
+import { angleInputPlugin } from './angle'
 import { booleanInputPlugin } from './boolean'
 import { colorInputPlugin } from './color'
 import { graphMonitorPlugin, textMonitorPlugin } from './monitor'
+import { intervalInputPlugin } from './interval'
 import { numberInputPlugin } from './number'
 import { pointInputPlugin } from './point'
 import { selectInputPlugin } from './select'
@@ -18,7 +20,7 @@ export function ensureBuiltins(registry: PluginRegistry): void {
 
 /**
  * Registration order matters: the registry scans most-recently-registered
- * first, so more specific plugins (select, color) are registered last.
+ * first, so more specific plugins (select, color, angle) are registered last.
  */
 export function registerBuiltins(registry: PluginRegistry): void {
   registry.register(textMonitorPlugin)
@@ -27,6 +29,8 @@ export function registerBuiltins(registry: PluginRegistry): void {
   registry.register(stringInputPlugin)
   registry.register(booleanInputPlugin)
   registry.register(pointInputPlugin)
+  registry.register(intervalInputPlugin)
   registry.register(colorInputPlugin)
   registry.register(selectInputPlugin)
+  registry.register(angleInputPlugin)
 }

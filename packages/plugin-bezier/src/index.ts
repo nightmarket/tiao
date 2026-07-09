@@ -569,6 +569,11 @@ const CSS = `
   flex: 1;
   min-width: 0;
 }
+/* popup fields aren't under a .tiao-row; light the grip on the hovered field */
+.tiao-bezier-fields .tiao-scrub:hover .tiao-scrub-grip::before {
+  background: var(--tiao-accent);
+  opacity: 1;
+}
 `
 
 let registered = false

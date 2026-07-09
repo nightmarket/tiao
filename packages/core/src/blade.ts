@@ -1,5 +1,5 @@
 import { Emitter } from './emitter'
-import { h, icon } from './dom'
+import { h, icon, longPress } from './dom'
 import { onInterval } from './ticker'
 import { Value } from './value'
 import type { BindingOptions, PluginRegistry } from './plugin'
@@ -243,6 +243,7 @@ export class BindingApi<T> extends Item {
   readonly value: Value<T>
   private bindingEmitter = new Emitter<BindingEvents<T>>()
   private labelEl: HTMLElement | null = null
+  private labelText: string
 
   constructor(
     host: BladeHost,
@@ -254,6 +255,7 @@ export class BindingApi<T> extends Item {
     this.key = key
     const initial = target[key] as T
     const label = options.label ?? key
+    this.labelText = label
     this.value = new Value<T>(initial)
 
     const plugin = options.readonly
@@ -283,18 +285,44 @@ export class BindingApi<T> extends Item {
       )
     }
 
-    // clicking the row outside the concrete control activates it (focus input, open picker, ...)
-    if (view.activate && !view.full) {
+    // clicking the row outside the concrete control activates it (focus input, open picker, ...);
+    // long-pressing the label starts a scrub/drag when the plugin supports it
+    if ((view.activate || view.beginScrub) && !view.full) {
       this.element.classList.add('tiao-row-activate')
-      const onRowClick = (e: MouseEvent) => {
-        const target = e.target as Node | null
-        if (target && view.element.contains(target)) return
-        // this click just deselected this row's input; don't immediately focus it again
-        if (clickFollowsPointerBlur(this.element)) return
-        view.activate?.()
+      let suppressClick = false
+      if (view.beginScrub) {
+        this.disposers.push(
+          longPress(this.element, {
+            filter: (e) => {
+              const t = e.target as Node | null
+              return !(t && view.element.contains(t))
+            },
+            onLongPress: (e) => {
+              suppressClick = true
+              e.preventDefault()
+              view.beginScrub?.(e)
+            },
+            onTap: () => {
+              suppressClick = false
+            },
+          }),
+        )
       }
-      this.element.addEventListener('click', onRowClick)
-      this.disposers.push(() => this.element.removeEventListener('click', onRowClick))
+      if (view.activate) {
+        const onRowClick = (e: MouseEvent) => {
+          if (suppressClick) {
+            suppressClick = false
+            return
+          }
+          const target = e.target as Node | null
+          if (target && view.element.contains(target)) return
+          // this click just deselected this row's input; don't immediately focus it again
+          if (clickFollowsPointerBlur(this.element)) return
+          view.activate?.()
+        }
+        this.element.addEventListener('click', onRowClick)
+        this.disposers.push(() => this.element.removeEventListener('click', onRowClick))
+      }
     }
 
     if (options.readonly) {
@@ -323,9 +351,10 @@ export class BindingApi<T> extends Item {
   }
 
   get label(): string {
-    return this.labelEl?.textContent ?? this.key
+    return this.labelEl?.textContent ?? this.labelText
   }
   set label(v: string) {
+    this.labelText = v
     if (this.labelEl) this.labelEl.textContent = v
   }
 

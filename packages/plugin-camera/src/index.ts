@@ -319,12 +319,12 @@ const CSS = `
   overflow: visible;
 }
 .tiao-ring-mjt {
-  stroke: var(--tiao-fg-muted);
+  stroke: var(--tiao-fg-soft);
   stroke-width: 2;
   transform-origin: bottom;
 }
 .tiao-ring-mnt {
-  stroke: var(--tiao-fg-muted);
+  stroke: var(--tiao-fg-soft);
   stroke-width: 1;
   transform-origin: bottom;
 }
@@ -332,7 +332,7 @@ const CSS = `
   position: absolute;
   top: 0;
   transform: translateX(-50%);
-  color: var(--tiao-fg-muted);
+  color: var(--tiao-fg-soft);
   font-family: var(--tiao-font-mono);
   font-size: 9px;
   pointer-events: none;

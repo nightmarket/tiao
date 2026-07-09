@@ -27,12 +27,22 @@ export type {
 export { Value } from './value'
 export type { ValueListener, ValueMeta } from './value'
 export { onTick, onInterval } from './ticker'
-export { h, icon, gearIcon, searchIcon, draggable } from './dom'
-export type { DragState, DragHandlers } from './dom'
+export {
+  h,
+  icon,
+  gearIcon,
+  searchIcon,
+  draggable,
+  startDrag,
+  longPress,
+  cancelActiveDrag,
+  setRowActive,
+} from './dom'
+export type { DragState, DragHandlers, LongPressHandlers } from './dom'
 export { clamp, mapRange, snap, formatNumber, decimalCount } from './util'
 export { createGraph } from './controls/monitor'
 export { createScrubber } from './controls/scrubber'
-export { createPopup } from './controls/popup'
+export { createPopup, onPaneScroll, bindOverlayPointerGuard } from './controls/popup'
 export { normalizeOptions } from './controls/select'
 export type { SelectEntry } from './controls/select'
 export { registerBuiltins, ensureBuiltins } from './controls/index'

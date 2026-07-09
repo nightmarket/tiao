@@ -5,7 +5,7 @@ import {
   formatIsString,
   hsvToRgb,
   maxChroma,
-  oklchInGamut,
+  maxChromaP3,
   oklchToRgb,
   parseColor,
   rgbToHsv,
@@ -117,7 +117,9 @@ function createColorView(ctx: PluginContext<unknown>) {
   const alphaThumb = h('div', 'tiao-bar-thumb')
   const alphaBar = h('div', 'tiao-color-alpha', alphaThumb)
 
-  // --- OKLCH picker: L (y) x C (x) plane at the current hue, sRGB gamut only ---
+  // --- OKLCH picker: L (y) x C (x) plane at the current hue ---
+  // sRGB colors are opaque; P3-only and wider colors render faded so the
+  // full hue slice stays readable, with white cutoff curves on top.
   const OK_C_MAX = 0.4
   const okThumb = h('div', 'tiao-thumb')
   const okCanvas = h('canvas', 'tiao-ok-canvas')
@@ -133,6 +135,25 @@ function createColorView(ctx: PluginContext<unknown>) {
 
   let planeHue = -1
   let planeImg: ImageData | null = null
+  const strokeGamutEdge = (
+    c2d: CanvasRenderingContext2D,
+    xs: Float64Array,
+    style: string,
+    dash?: number[],
+  ) => {
+    c2d.save()
+    c2d.strokeStyle = style
+    c2d.lineWidth = 1
+    c2d.setLineDash(dash ?? [])
+    c2d.beginPath()
+    for (let y = 0; y < xs.length; y++) {
+      const x = xs[y]!
+      if (y === 0) c2d.moveTo(x, y)
+      else c2d.lineTo(x, y)
+    }
+    c2d.stroke()
+    c2d.restore()
+  }
   const drawPlane = () => {
     const c2d = okCanvas.getContext?.('2d')
     if (!c2d) return
@@ -141,22 +162,29 @@ function createColorView(ctx: PluginContext<unknown>) {
     // reuse one ImageData across redraws (hue drags redraw per pointermove)
     planeImg ??= c2d.createImageData(w, hgt)
     const data = planeImg.data
-    data.fill(0)
+    const srgbEdge = new Float64Array(hgt)
+    const p3Edge = new Float64Array(hgt)
     for (let y = 0; y < hgt; y++) {
       const L = 1 - y / (hgt - 1)
+      // gamut edges once per row; pixels classify against them instead of
+      // re-running the (pow-heavy) in-gamut checks per pixel
+      srgbEdge[y] = (maxChroma(L, ok.H, OK_C_MAX) / OK_C_MAX) * (w - 1)
+      p3Edge[y] = (maxChromaP3(L, ok.H, OK_C_MAX) / OK_C_MAX) * (w - 1)
       for (let x = 0; x < w; x++) {
         const C = (x / (w - 1)) * OK_C_MAX
-        // out-of-gamut pixels stay transparent so the gamut shape is visible
-        if (!oklchInGamut(L, C, ok.H)) continue
+        // clipped sRGB preview; alpha encodes accessibility (sRGB / P3 / beyond)
         const { r, g, b } = oklchToRgb(L, C, ok.H)
         const i = (y * w + x) * 4
         data[i] = r
         data[i + 1] = g
         data[i + 2] = b
-        data[i + 3] = 255
+        data[i + 3] = x <= srgbEdge[y]! ? 255 : x <= p3Edge[y]! ? 110 : 45
       }
     }
     c2d.putImageData(planeImg, 0, 0)
+    // P3 edge first (dashed), then solid white sRGB cutoff on top
+    strokeGamutEdge(c2d, p3Edge, 'rgba(255,255,255,0.35)', [2, 2])
+    strokeGamutEdge(c2d, srgbEdge, 'rgba(255,255,255,0.9)')
     planeHue = ok.H
   }
 

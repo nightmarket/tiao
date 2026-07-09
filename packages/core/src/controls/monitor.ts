@@ -60,7 +60,7 @@ function defaultFormat(v: unknown): string {
 
 const DEFAULT_BUFFER = 128
 
-/** Rolling line graph for numeric values. */
+/** Rolling line graph for numeric values. Always full-width; optional `label` sits bottom-left. */
 export const graphMonitorPlugin: MonitorPlugin<number> = {
   id: 'graph',
   type: 'monitor',
@@ -68,7 +68,7 @@ export const graphMonitorPlugin: MonitorPlugin<number> = {
     return typeof value === 'number' && options.view === 'graph'
   },
   create(ctx) {
-    return { element: createGraph(ctx) }
+    return { element: createGraph(ctx), full: true }
   },
 }
 
@@ -82,7 +82,10 @@ export function createGraph(
   // unit (e.g. "s", "FPS") renders after the number in a subtler color
   const unit = typeof ctx.options['unit'] === 'string' ? ctx.options['unit'] : ''
   const valueEl = h('span', 'tiao-graph-value', numberEl, unit ? h('span', 'tiao-graph-unit', unit) : null)
-  const el = h('div', 'tiao-graph', canvas, valueEl)
+  // only an explicit options.label — not the binding key fallback — becomes the overlay
+  const label = typeof ctx.options.label === 'string' && ctx.options.label ? ctx.options.label : ''
+  const labelEl = label ? h('span', 'tiao-graph-label', label) : null
+  const el = h('div', 'tiao-graph', canvas, valueEl, labelEl)
 
   const explicitMin = ctx.options.min
   const explicitMax = ctx.options.max
