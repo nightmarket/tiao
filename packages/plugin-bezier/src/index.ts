@@ -153,7 +153,7 @@ export const bezierPlugin: InputPlugin<BezierValue> = {
     const arm2 = svgEl('line', 'tiao-bezier-arm', graphSvg)
     const line = svgEl('polyline', 'tiao-bezier-curve', graphSvg)
     const handles = [h('div', 'tiao-bezier-point'), h('div', 'tiao-bezier-point')] as const
-    const graph = h('div', 'tiao-bezier-graph', strip, graphSvg, handles[0], handles[1])
+    const graph = h('div', 'tiao-bezier-graph', graphSvg, handles[0], handles[1])
     graph.tabIndex = 0
 
     let selected: 0 | 1 = 0
@@ -205,7 +205,7 @@ export const bezierPlugin: InputPlugin<BezierValue> = {
     presetSelect.addEventListener('change', onPresetChange)
     ctx.onDispose(() => presetSelect.removeEventListener('change', onPresetChange))
 
-    const editor = h('div', 'tiao-bezier-editor', graph, presetWrap, fields)
+    const editor = h('div', 'tiao-bezier-editor', strip, graph, presetWrap, fields)
     const popup = createPopup(root, editor, ctx.onDispose)
 
     // --- coordinate mapping (pixel space, 25% vertical margins) ---
@@ -522,17 +522,15 @@ const CSS = `
   background: var(--tiao-accent);
   border-color: var(--tiao-accent);
 }
-/* playback strip: eased tick marks + a marker dot that replays on change */
+/* playback strip above the graph: eased tick marks + a marker dot that
+   replays on change */
 .tiao-bezier-strip {
-  position: absolute;
-  left: 12px;
-  right: 12px;
-  top: 0;
+  position: relative;
   /* border-box: 4px of tick height plus 4px padding above and below */
   height: 12px;
   padding: 4px 0;
+  margin-bottom: 4px;
   cursor: pointer;
-  z-index: 1;
 }
 .tiao-bezier-ticks {
   display: block;
@@ -540,9 +538,10 @@ const CSS = `
   height: 100%;
   overflow: visible;
 }
+/* ticks stay tertiary; the accent marker ball is the primary element */
 .tiao-bezier-tick {
-  stroke: var(--tiao-fg-dim);
-  opacity: 0.5;
+  stroke: var(--tiao-fg-soft);
+  stroke-width: 1.5;
 }
 .tiao-bezier-marker {
   position: absolute;
@@ -551,7 +550,7 @@ const CSS = `
   height: 4px;
   margin: -2px 0 0 -2px;
   border-radius: 50%;
-  background: var(--tiao-fg);
+  background: var(--tiao-accent);
   opacity: 0;
   transition: opacity 0.2s ease-out;
 }

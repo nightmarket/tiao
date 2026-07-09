@@ -39,6 +39,8 @@ export interface PaneOptions {
   maxHeight?: number
   /** CSS custom property overrides, e.g. { '--tiao-accent': '#f0f' } */
   theme?: Record<string, string>
+  /** overall scale: fonts, control heights, spacing, and width (default 'm') */
+  size?: PaneSize
   width?: number
   document?: Document
   /** internal: set false to omit the settings menu (used by the menu's own pane) */
@@ -62,6 +64,8 @@ interface PersistedState {
 }
 
 export type PaneTheme = 'light' | 'dark'
+
+export type PaneSize = 's' | 'm' | 'l'
 
 /** default --tiao-accent, used when the computed style is unavailable (e.g. jsdom) */
 const DEFAULT_ACCENT = '#3478f6'
@@ -151,6 +155,7 @@ export class Pane extends Container {
       this.element.style.setProperty('--tiao-max-height', `${options.maxHeight}px`)
     }
     if (options.theme) this.applyTheme(options.theme)
+    if (options.size) this.size = options.size
 
     // restore persisted state before first paint
     const persisted = this.loadState()
@@ -429,6 +434,16 @@ export class Pane extends Container {
     this._anchor = anchor
     this.applyAnchor()
     this.saveState({ anchor, x: undefined, y: undefined })
+  }
+
+  get size(): PaneSize {
+    if (this.element.classList.contains('tiao-size-s')) return 's'
+    if (this.element.classList.contains('tiao-size-l')) return 'l'
+    return 'm'
+  }
+  set size(v: PaneSize) {
+    this.element.classList.remove('tiao-size-s', 'tiao-size-l')
+    if (v !== 'm') this.element.classList.add(`tiao-size-${v}`)
   }
 
   get theme(): PaneTheme {

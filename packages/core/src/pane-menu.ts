@@ -106,7 +106,7 @@ function buildMenu(host: PaneMenuHost): { shell: HTMLElement; refresh: () => voi
     accent: host.getAccent(),
     numbers: host.getNumbers(),
   }
-  const menuPane = host.createPane({ container: shell, menu: false, storage: false })
+  const menuPane = host.createPane({ container: shell, menu: false, storage: false, size: 's' })
   host.onDispose(() => menuPane.dispose())
 
   // the embedded pane re-declares the theme variables, so its chrome has to

@@ -180,7 +180,7 @@ const CSS = `
 }
 /* same depth-aware split as core rows so the zone spans the full control column */
 .tiao-media > .tiao-label {
-  flex: 0 0 calc(50% - 6px - var(--tiao-depth, 0) * 6px);
+  flex: 0 0 calc(50% - (var(--tiao-depth, 0) + 1) * var(--tiao-indent) / 2);
   align-self: center;
 }
 .tiao-media-zone {

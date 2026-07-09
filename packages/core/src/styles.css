@@ -14,15 +14,25 @@
 
   /* ---- theme tokens ---- */
   --tiao-bg: rgba(250, 250, 250, 0.95);
+  /* opaque variant for popups/editors that must not show content through */
+  --tiao-bg-solid: #fafafa;
   --tiao-fg: var(--tiao-neutral-900);
-  /* muted: value/label text sits one tick below headers in the hierarchy */
+  /* text hierarchy: fg (headers) > muted (row labels) > soft (values,
+     monitors) > dim (secondary hints) > faint (chrome like carets) */
   --tiao-fg-muted: var(--tiao-neutral-600);
+  --tiao-fg-soft: var(--tiao-neutral-500);
   --tiao-fg-dim: var(--tiao-neutral-400);
+  --tiao-fg-faint: var(--tiao-neutral-300);
   /* translucent interaction surfaces so controls read at any nesting depth */
   --tiao-titlebar-bg: rgba(0, 0, 0, 0.05);
-  /* vertical guide marking folder nesting depth; active while hovered */
-  --tiao-depth-line: rgba(0, 0, 0, 0.09);
-  --tiao-depth-line-active: rgba(0, 0, 0, 0.3);
+  /* vertical guide marking folder nesting depth; -hover is the intermediate
+     section-wide hover state, -active is direct hover on the line itself.
+     opaque (mixed toward the pane background, not transparent) so the line
+     and its cap dots overlap without alpha-stacking artifacts; the fg/bg mix
+     adapts to both themes */
+  --tiao-depth-line: color-mix(in srgb, var(--tiao-fg) 10%, var(--tiao-bg-solid));
+  --tiao-depth-line-hover: color-mix(in srgb, var(--tiao-fg) 19%, var(--tiao-bg-solid));
+  --tiao-depth-line-active: color-mix(in srgb, var(--tiao-fg) 31%, var(--tiao-bg-solid));
   --tiao-hover: rgba(0, 0, 0, 0.08);
   /* softer section-wide highlight, one contrast step below row hover */
   --tiao-hover-soft: rgba(0, 0, 0, 0.04);
@@ -38,8 +48,9 @@
   --tiao-radius: 7px;
   --tiao-radius-sm: 4px;
   --tiao-width: 280px;
-  /* folder-header inset and chevron gap; keeps header titles aligned with row labels */
-  --tiao-gutter: 4px;
+  /* folder-header left inset; roughly matches the header's vertical text
+     inset without letting the section hover read left-heavy */
+  --tiao-gutter: 5px;
   --tiao-max-height: 500px;
   --tiao-font:
     -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
@@ -47,10 +58,19 @@
     ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
   --tiao-font-size: 11px;
   --tiao-font-size-mono: 10px;
+  /* dimension tokens: the s/m/l size classes rescale the whole pane by
+     overriding these (see .tiao-size-s / .tiao-size-l) */
   --tiao-row-height: 20px;
+  --tiao-titlebar-height: 28px;
+  --tiao-header-height: 24px;
+  --tiao-gap: 6px;
+  /* nesting offset per level; sized so a nested section's hover background
+     clears the parent depth line by ~5px */
+  --tiao-indent: 16px;
+  --tiao-icon-size: 12px;
   --tiao-shadow: 0 4px 24px rgba(0, 0, 0, 0.12), 0 0 0 1px var(--tiao-border);
   /* the readout number is primary; the line itself stays quiet */
-  --tiao-graph-stroke: var(--tiao-fg-dim);
+  --tiao-graph-stroke: var(--tiao-fg-faint);
 
   position: relative;
   font-family: var(--tiao-font);
@@ -70,12 +90,14 @@
 
 .tiao-pane.tiao-theme-dark {
   --tiao-bg: rgba(23, 23, 23, 0.95);
+  --tiao-bg-solid: #171717;
   --tiao-fg: var(--tiao-neutral-100);
   --tiao-fg-muted: var(--tiao-neutral-300);
+  --tiao-fg-soft: var(--tiao-neutral-400);
   --tiao-fg-dim: var(--tiao-neutral-500);
+  --tiao-fg-faint: var(--tiao-neutral-600);
   --tiao-titlebar-bg: rgba(255, 255, 255, 0.06);
-  --tiao-depth-line: rgba(255, 255, 255, 0.11);
-  --tiao-depth-line-active: rgba(255, 255, 255, 0.34);
+  /* depth-line colors derive from fg/bg-solid, so they retheme automatically */
   --tiao-hover: rgba(255, 255, 255, 0.09);
   --tiao-hover-soft: rgba(255, 255, 255, 0.045);
   --tiao-hover-strong: rgba(255, 255, 255, 0.14);
@@ -87,6 +109,33 @@
   --tiao-accent: #a3e635;
   --tiao-accent-fg: #1a2e05;
   --tiao-border: rgba(255, 255, 255, 0.08);
+}
+
+/* ---- sizes: s/m/l rescale every dimension token together (m is the
+   defaults above); s doubles as the pane-settings subpane scale ---- */
+.tiao-pane.tiao-size-s {
+  --tiao-font-size: 10px;
+  --tiao-font-size-mono: 9px;
+  --tiao-row-height: 17px;
+  --tiao-titlebar-height: 24px;
+  --tiao-header-height: 20px;
+  --tiao-gap: 5px;
+  --tiao-indent: 14px;
+  --tiao-icon-size: 10px;
+  --tiao-width: 240px;
+  --tiao-radius: 6px;
+}
+.tiao-pane.tiao-size-l {
+  --tiao-font-size: 12px;
+  --tiao-font-size-mono: 11px;
+  --tiao-row-height: 24px;
+  --tiao-titlebar-height: 32px;
+  --tiao-header-height: 28px;
+  --tiao-gap: 7px;
+  --tiao-indent: 18px;
+  --tiao-icon-size: 14px;
+  --tiao-width: 320px;
+  --tiao-radius: 8px;
 }
 
 .tiao-pane *,
@@ -152,18 +201,23 @@
 }
 
 .tiao-icon {
-  width: 12px;
-  height: 12px;
+  width: var(--tiao-icon-size);
+  height: var(--tiao-icon-size);
   flex: none;
 }
 
-/* values and row labels are monospace and one tick less primary than headers,
-   so section titles carry the hierarchy */
+/* values and row labels are monospace and less primary than headers, so
+   section titles carry the hierarchy; control-column text (values, monitors)
+   sits one further tick below the row labels */
 .tiao-pane :where(.tiao-label, .tiao-num-input, .tiao-text-input, .tiao-select,
     .tiao-color-text, .tiao-monitor-text, .tiao-graph-value) {
   font-family: var(--tiao-font-mono);
   font-size: var(--tiao-font-size-mono);
   color: var(--tiao-fg-muted);
+}
+.tiao-pane :where(.tiao-num-input, .tiao-text-input, .tiao-select,
+    .tiao-color-text, .tiao-monitor-text, .tiao-graph-value) {
+  color: var(--tiao-fg-soft);
 }
 
 /* ---- pane chrome ---- */
@@ -172,7 +226,7 @@
   display: flex;
   align-items: center;
   width: 100%;
-  height: 28px;
+  height: var(--tiao-titlebar-height);
   background: var(--tiao-titlebar-bg);
   border-bottom: 1px solid var(--tiao-border);
   border-radius: var(--tiao-radius) var(--tiao-radius) 0 0;
@@ -216,7 +270,7 @@
   white-space: nowrap;
 }
 .tiao-titlebar .tiao-icon-triangle {
-  color: var(--tiao-fg-dim);
+  color: var(--tiao-fg-faint);
   transition: transform 0.18s ease;
 }
 .tiao-pane:not(.tiao-expanded) .tiao-titlebar .tiao-icon-triangle {
@@ -231,8 +285,8 @@
   padding-right: 6px;
 }
 .tiao-titlebar-btn {
-  width: 18px;
-  height: 18px;
+  width: calc(var(--tiao-titlebar-height) - 10px);
+  height: calc(var(--tiao-titlebar-height) - 10px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -264,14 +318,14 @@
   transition: height 0.15s ease;
 }
 .tiao-searchbar.tiao-open {
-  height: 28px;
+  height: var(--tiao-titlebar-height);
 }
 .tiao-search-input {
   appearance: none;
   -webkit-appearance: none;
   flex: 1;
   min-width: 0;
-  height: 20px;
+  height: var(--tiao-row-height);
   padding: 0 6px;
   border-radius: var(--tiao-radius-sm);
   background: var(--tiao-surface);
@@ -302,7 +356,7 @@
 }
 /* scrollbar is hidden so overflow never changes the content width */
 .tiao-pane > .tiao-pane-body > .tiao-pane-clip {
-  max-height: calc(var(--tiao-max-height) - 28px);
+  max-height: calc(var(--tiao-max-height) - var(--tiao-titlebar-height));
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: none;
@@ -312,10 +366,15 @@
 }
 /* floating panes never grow past the window height either */
 .tiao-pane.tiao-floating > .tiao-pane-body > .tiao-pane-clip {
-  max-height: min(calc(var(--tiao-max-height) - 28px), calc(100dvh - 44px));
+  max-height: min(
+    calc(var(--tiao-max-height) - var(--tiao-titlebar-height)),
+    calc(100dvh - var(--tiao-titlebar-height) - 16px)
+  );
 }
+/* 4px horizontal inset: hover pills sit as far from the pane edge as the
+   controls sit from the pill edge */
 .tiao-pane > .tiao-pane-body > .tiao-pane-clip > .tiao-rack {
-  padding: 1px 2px 2px;
+  padding: 1px 4px 4px;
 }
 
 /* ---- rack & rows ---- */
@@ -323,15 +382,15 @@
   display: flex;
   flex-direction: column;
 }
-/* rows carry 2px padding so the full-width hover surface never touches the
-   control edges (mirrors the header hover inset) */
+/* row padding doubles as the hover pill's inner padding: 3px vertical around
+   the controls and 4px horizontal keeps the pill evenly padded, button-like */
 .tiao-row {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 2px;
-  min-height: calc(var(--tiao-row-height) + 4px);
+  gap: var(--tiao-gap);
+  padding: 3px 4px;
+  min-height: calc(var(--tiao-row-height) + 6px);
   border-radius: var(--tiao-radius-sm);
 }
 .tiao-row::before {
@@ -356,12 +415,14 @@
 }
 .tiao-label {
   /* labelled rows split exactly in half so control columns align across rows.
-     each folder level indents the row by 12px; shrinking the label by an
-     extra 6px/level (50% of the narrower row already absorbs the other half)
-     keeps control columns identical across nesting depths. --tiao-depth is
-     set on folder racks from JS. */
-  flex: 0 0 calc(50% - 6px - var(--tiao-depth, 0) * 6px);
-  padding-left: 6px;
+     each folder level indents the row by --tiao-indent; shrinking the label by
+     an extra half-indent/level (50% of the narrower row already absorbs the
+     other half) keeps control columns identical across nesting depths.
+     --tiao-depth is set on folder racks from JS. */
+  flex: 0 0 calc(50% - (var(--tiao-depth, 0) + 1) * var(--tiao-indent) / 2);
+  /* nested labels add 2px: their hover pill is inset 2px from the row edge,
+     so text keeps the same 4px inset from the pill on every depth */
+  padding-left: calc(min(var(--tiao-depth, 0), 1) * 2px);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -380,7 +441,7 @@
 /* inset from the edges so sections get some breathing room */
 .tiao-separator {
   height: 1px;
-  margin: 4px 8px;
+  margin: 8px;
   background: var(--tiao-border);
 }
 
@@ -400,9 +461,9 @@
   position: relative;
   display: flex;
   align-items: center;
-  gap: var(--tiao-gutter);
+  gap: 4px;
   width: 100%;
-  height: 24px;
+  height: var(--tiao-header-height);
   padding: 0 6px 0 var(--tiao-gutter);
   text-align: left;
   border-radius: var(--tiao-radius-sm);
@@ -426,7 +487,7 @@
 .tiao-folder-header .tiao-icon-triangle {
   position: relative;
   top: -1px;
-  color: var(--tiao-fg-dim);
+  color: var(--tiao-fg-faint);
   transition: transform 0.18s ease;
 }
 .tiao-folder:not(.tiao-expanded) > .tiao-folder-header .tiao-icon-triangle {
@@ -439,29 +500,51 @@
 }
 .tiao-folder-line {
   position: absolute;
-  /* hit area centered on the line, under the caret (header gutter 4 + half icon 6) */
-  left: 4px;
+  /* hit area centered on the line, which sits under the caret's center
+     (gutter + half icon); the visible line is drawn at +5px inside */
+  left: calc(var(--tiao-gutter) + var(--tiao-icon-size) / 2 - 5px);
   top: 2px;
   bottom: 4px;
   width: 10px;
   cursor: pointer;
+  /* three states, resolved by the rules below: default, section-wide hover
+     (intermediate), and direct hover on the line itself */
+  --tiao-line-color: var(--tiao-depth-line);
 }
+/* the visible line runs from the vertical center of the first row to the
+   center of the last: (row min-height)/2, minus this element's own insets */
 .tiao-folder-line::before {
   content: '';
   position: absolute;
   left: 5px;
-  top: 2px;
-  bottom: 2px;
+  top: calc((var(--tiao-row-height) + 6px) / 2 - 2px);
+  bottom: calc((var(--tiao-row-height) + 6px) / 2 - 2px);
   width: 1px;
   border-radius: 1px;
-  background: var(--tiao-depth-line);
+  background: var(--tiao-line-color);
   transition: background 0.12s ease;
 }
-.tiao-folder:hover > .tiao-folder-body > .tiao-folder-line::before {
-  background: var(--tiao-depth-line-active);
+/* subtle 3px dots capping both ends of the line */
+.tiao-folder-line::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: calc((var(--tiao-row-height) + 6px) / 2 - 3px);
+  bottom: calc((var(--tiao-row-height) + 6px) / 2 - 3px);
+  width: 3px;
+  background-image:
+    radial-gradient(circle closest-side, var(--tiao-line-color) 99%, transparent),
+    radial-gradient(circle closest-side, var(--tiao-line-color) 99%, transparent);
+  background-size: 3px 3px;
+  background-position: top, bottom;
+  background-repeat: no-repeat;
 }
-.tiao-folder-line:hover::before {
-  background: var(--tiao-accent);
+/* intermediate state: pointer is somewhere in the section, not on the line */
+.tiao-folder:hover > .tiao-folder-body > .tiao-folder-line {
+  --tiao-line-color: var(--tiao-depth-line-hover);
+}
+.tiao-folder > .tiao-folder-body > .tiao-folder-line:hover {
+  --tiao-line-color: var(--tiao-depth-line-active);
 }
 .tiao-folder-static > .tiao-folder-body > .tiao-folder-line {
   pointer-events: none;
@@ -474,22 +557,24 @@
   color: color-mix(in srgb, var(--tiao-folder-color) 55%, transparent);
 }
 .tiao-folder-colored > .tiao-folder-header .tiao-icon-triangle {
-  color: color-mix(in srgb, var(--tiao-folder-color) 65%, transparent);
+  color: color-mix(in srgb, var(--tiao-folder-color) 45%, transparent);
 }
-.tiao-folder-colored > .tiao-folder-body > .tiao-folder-line::before {
-  background: color-mix(in srgb, var(--tiao-folder-color) 30%, transparent);
+/* opaque mixes toward the pane background (no alpha, so the cap dots and the
+   line overlap without stacking artifacts) */
+.tiao-folder-colored > .tiao-folder-body > .tiao-folder-line {
+  --tiao-line-color: color-mix(in srgb, var(--tiao-folder-color) 30%, var(--tiao-bg-solid));
 }
-.tiao-folder-colored:hover > .tiao-folder-body > .tiao-folder-line::before {
-  background: color-mix(in srgb, var(--tiao-folder-color) 55%, transparent);
+.tiao-folder-colored:hover > .tiao-folder-body > .tiao-folder-line {
+  --tiao-line-color: color-mix(in srgb, var(--tiao-folder-color) 55%, var(--tiao-bg-solid));
 }
-.tiao-folder-colored > .tiao-folder-body > .tiao-folder-line:hover::before {
-  background: var(--tiao-folder-color);
+.tiao-folder-colored > .tiao-folder-body > .tiao-folder-line:hover {
+  --tiao-line-color: var(--tiao-folder-color);
 }
 /* children indent past the depth line; label text lines up with the header
    title. no right padding: nested control columns end flush with top-level
    ones (the pane rack already provides the outer 2px inset) */
 .tiao-folder > .tiao-folder-body > .tiao-folder-clip > .tiao-rack {
-  padding: 0 0 2px 12px;
+  padding: 0 0 2px var(--tiao-indent);
 }
 /* nested row hover pills sit slightly inside the indent */
 .tiao-folder-clip > .tiao-rack > .tiao-row::before {
@@ -507,7 +592,7 @@
 }
 .tiao-tab-button {
   flex: 1;
-  height: 20px;
+  height: var(--tiao-row-height);
   border-radius: calc(var(--tiao-radius-sm) - 2px);
   color: var(--tiao-fg-dim);
   transition: background 0.12s ease, color 0.12s ease;
@@ -602,7 +687,7 @@
 }
 .tiao-number .tiao-slider-num {
   flex: none;
-  width: 52px;
+  width: calc(var(--tiao-font-size-mono) * 5.2);
 }
 
 /* ---- scrubber number input ---- */
@@ -717,8 +802,8 @@
 /* ---- check toggle: rounded square in a rounded square, like the pad toggle ---- */
 .tiao-check {
   position: relative;
-  width: 18px;
-  height: 18px;
+  width: calc(var(--tiao-row-height) - 2px);
+  height: calc(var(--tiao-row-height) - 2px);
   flex: none;
   border-radius: var(--tiao-radius-sm);
   background: var(--tiao-surface);
@@ -756,9 +841,20 @@
   background: var(--tiao-surface);
   cursor: pointer;
   transition: background 0.12s ease;
+  /* the native dropdown menu derives its row metrics from the select's
+     computed font; the pane's 1.35 line-height on a 10px mono font skews the
+     OS checkmark off-center, so reset to normal here */
+  line-height: normal;
 }
 .tiao-select:hover {
   background: var(--tiao-surface-hover);
+}
+/* the open menu is native (only the closed field is custom-drawn); give its
+   rows the UI font at normal metrics so text and checkmarks center cleanly */
+.tiao-select option {
+  font-family: var(--tiao-font);
+  font-size: var(--tiao-font-size);
+  line-height: normal;
 }
 .tiao-select-wrap .tiao-icon-chevron {
   position: absolute;
@@ -788,7 +884,8 @@
   left: auto;
   right: calc(100% + 6px);
 }
-/* the embedded settings pane inherits the shell's chrome */
+/* the embedded settings pane inherits the shell's chrome; it is created at
+   size s so it reads as a subpane of the host */
 .tiao-pane-menu > .tiao-pane {
   width: 100%;
   background: transparent;
@@ -833,13 +930,14 @@
   background: var(--tiao-accent);
 }
 
-/* ---- popups (color picker, xy pad) ---- */
+/* ---- popups (color picker, xy pad, easing editor) ----
+   fully opaque: editors must not let pane content bleed through */
 .tiao-popup {
   position: absolute;
   z-index: 100;
   display: none;
   padding: 6px;
-  background: var(--tiao-bg);
+  background: var(--tiao-bg-solid);
   border-radius: calc(var(--tiao-radius-sm) + 2px);
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.22), 0 0 0 1px var(--tiao-border);
 }
@@ -988,8 +1086,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
+  width: calc(var(--tiao-row-height) - 2px);
+  height: calc(var(--tiao-row-height) - 2px);
   flex: none;
   border-radius: var(--tiao-radius-sm);
   /* inverted by default: prominent gray chip (like the slider fill), so the
@@ -1068,7 +1166,6 @@
   width: 100%;
   text-align: right;
   padding-right: 6px;
-  color: var(--tiao-fg-dim);
   font-variant-numeric: tabular-nums;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1103,7 +1200,7 @@
 .tiao-fps {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--tiao-gap);
   width: 100%;
 }
 
@@ -1120,8 +1217,23 @@
   overscroll-behavior: contain;
   font-family: var(--tiao-font-mono);
   font-size: var(--tiao-font-size-mono);
-  color: var(--tiao-fg-muted);
+  color: var(--tiao-fg-soft);
   font-variant-numeric: tabular-nums;
+  /* thumb only, no track/gutter; the faint tier follows the theme */
+  scrollbar-width: thin;
+  scrollbar-color: var(--tiao-fg-faint) transparent;
+}
+/* WebKit fallback (Safari ignores scrollbar-color): same thumb-only look */
+.tiao-monitor-log::-webkit-scrollbar {
+  width: 6px;
+  background: transparent;
+}
+.tiao-monitor-log::-webkit-scrollbar-track {
+  background: transparent;
+}
+.tiao-monitor-log::-webkit-scrollbar-thumb {
+  background: var(--tiao-fg-faint);
+  border-radius: 3px;
 }
 
 /* ---- edge resize: invisible strips straddling the pane edges ---- */
