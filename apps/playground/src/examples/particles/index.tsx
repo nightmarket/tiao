@@ -105,6 +105,11 @@ export function ParticlesExample() {
 
 function buildKitchenSink(pane: Pane): Pane {
   const params = {
+    gain: 0.4,
+    threshold: 0.75,
+    amount: 32,
+    tag: 'root',
+    active: true,
     exposure: 0.6,
     iterations: 12,
     seed: 42,
@@ -139,6 +144,13 @@ function buildKitchenSink(pane: Pane): Pane {
   // one labeled two-column graph, one full-width label-less graph
   addFpsGraph(pane, { label: 'FPS' })
   addFpsGraph(pane)
+
+  // root-level rows (not in a folder) sit between the FPS graphs and Basics
+  pane.addBinding(params, 'gain', { min: 0, max: 1, step: 0.01 })
+  pane.addBinding(params, 'threshold', { min: 0, max: 1, step: 0.01 })
+  pane.addBinding(params, 'amount', { min: 0, max: 100, step: 1 })
+  pane.addBinding(params, 'tag')
+  pane.addBinding(params, 'active')
 
   const basics = pane.addFolder({ title: 'Basics' })
   basics.addBinding(params, 'exposure', { min: 0, max: 1, step: 0.01 })
