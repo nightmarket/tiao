@@ -126,7 +126,13 @@ function buildMenu(host: PaneMenuHost): { shell: HTMLElement; refresh: () => voi
 
   const themeBinding = menuPane.addBinding(settings, 'theme', {
     label: 'Theme',
-    options: { Light: 'light', Dark: 'dark' },
+    options: {
+      Dark: 'dark',
+      Light: 'light',
+      Solarized: 'solarized',
+      Nord: 'nord',
+      Catppuccin: 'catppuccin',
+    },
   })
   themeBinding.on('change', (ev) => {
     host.setTheme(ev.value)

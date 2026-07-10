@@ -63,12 +63,21 @@ interface PersistedState {
   numbers?: boolean | undefined
 }
 
-export type PaneTheme = 'light' | 'dark'
+export type PaneTheme = 'light' | 'dark' | 'solarized' | 'nord' | 'catppuccin'
+
+/** CSS class for each theme; light uses no theme class (base tokens). */
+const THEME_CLASS: Record<PaneTheme, string | null> = {
+  light: null,
+  dark: 'tiao-theme-dark',
+  solarized: 'tiao-theme-solarized',
+  nord: 'tiao-theme-nord',
+  catppuccin: 'tiao-theme-catppuccin',
+}
 
 export type PaneSize = 's' | 'm' | 'l'
 
 /** default --tiao-accent, used when the computed style is unavailable (e.g. jsdom) */
-const DEFAULT_ACCENT = '#65a30d'
+const DEFAULT_ACCENT = '#facc15'
 
 /** edge-resize bounds */
 const MIN_WIDTH = 200
@@ -164,7 +173,7 @@ export class Pane extends Container {
       this.element.style.setProperty('--tiao-max-height', `${persisted.hMax}px`)
     }
     if (persisted?.expanded !== undefined) this._expanded = persisted.expanded
-    if (persisted?.theme) this.applyThemeMode(persisted.theme)
+    this.applyThemeMode(persisted?.theme ?? 'dark')
     if (persisted?.accent) this.applyTheme({ accent: persisted.accent })
     if (persisted?.draggable !== undefined && this.floating) this._draggable = persisted.draggable
     if (persisted?.numbers !== undefined) this._numbers = persisted.numbers
@@ -451,7 +460,10 @@ export class Pane extends Container {
   }
 
   get theme(): PaneTheme {
-    return this.element.classList.contains('tiao-theme-dark') ? 'dark' : 'light'
+    for (const [name, cls] of Object.entries(THEME_CLASS) as [PaneTheme, string | null][]) {
+      if (cls && this.element.classList.contains(cls)) return name
+    }
+    return 'light' // no theme class → light (base tokens)
   }
   set theme(v: PaneTheme) {
     this.applyThemeMode(v)
@@ -646,7 +658,11 @@ export class Pane extends Container {
   }
 
   private applyThemeMode(theme: PaneTheme): void {
-    this.element.classList.toggle('tiao-theme-dark', theme === 'dark')
+    for (const cls of Object.values(THEME_CLASS)) {
+      if (cls) this.element.classList.remove(cls)
+    }
+    const next = THEME_CLASS[theme]
+    if (next) this.element.classList.add(next)
   }
 
   private applyDraggable(): void {

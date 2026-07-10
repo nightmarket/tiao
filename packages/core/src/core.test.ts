@@ -1041,22 +1041,38 @@ describe('Pane registry and chrome', () => {
     pane.dispose()
   })
 
-  it('menu theme select switches light/dark and persists per pane id', () => {
+  it('menu theme select switches themes and persists per pane id', () => {
     const pane = new Pane({ id: 'themed' })
     pane.element.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))
     const menu = pane.element.querySelector('.tiao-pane-menu.tiao-open')!
     // the settings menu is a real embedded pane, so theme is a select binding
     const select = menu.querySelector('.tiao-select') as HTMLSelectElement
-    expect(pane.theme).toBe('light')
+    expect(pane.theme).toBe('dark')
+    expect(pane.element.classList.contains('tiao-theme-dark')).toBe(true)
 
     select.value = '1'
     select.dispatchEvent(new Event('change'))
-    expect(pane.theme).toBe('dark')
-    expect(pane.element.classList.contains('tiao-theme-dark')).toBe(true)
+    expect(pane.theme).toBe('light')
+    expect(pane.element.classList.contains('tiao-theme-dark')).toBe(false)
+
+    select.value = '2'
+    select.dispatchEvent(new Event('change'))
+    expect(pane.theme).toBe('solarized')
+    expect(pane.element.classList.contains('tiao-theme-solarized')).toBe(true)
+
+    select.value = '3'
+    select.dispatchEvent(new Event('change'))
+    expect(pane.theme).toBe('nord')
+    expect(pane.element.classList.contains('tiao-theme-nord')).toBe(true)
+
+    select.value = '4'
+    select.dispatchEvent(new Event('change'))
+    expect(pane.theme).toBe('catppuccin')
+    expect(pane.element.classList.contains('tiao-theme-catppuccin')).toBe(true)
     pane.dispose()
 
     const revived = new Pane({ id: 'themed' })
-    expect(revived.theme).toBe('dark')
+    expect(revived.theme).toBe('catppuccin')
     revived.dispose()
   })
 

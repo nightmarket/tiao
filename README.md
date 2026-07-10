@@ -55,7 +55,7 @@ Styles are injected automatically on first pane creation. To manage CSS yourself
 ### Pane chrome
 
 - `anchor`: any corner, side center, or `'center'` (`'top-left'`, `'top-center'`, `'right-center'`, ...), or `container: element` for inline panes
-- Hover the title bar for a gear icon (or right-click the pane) to open the Pane Settings panel: toggle dragging, switch the light/dark theme, pick the accent color, and jump between the 9 anchor positions on a mini window that mirrors your viewport's aspect ratio
+- Hover the title bar for a gear icon (or right-click the pane) to open the Pane Settings panel: toggle dragging, switch themes (light, dark, solarized, nord, catppuccin), pick the accent color, and jump between the 9 anchor positions on a mini window that mirrors your viewport's aspect ratio
 - The search icon in the title bar opens a filter row: rows are matched by label/title, folders holding a match are forced open, and a folder-title match keeps its whole subtree visible. `pane.filter(query)` / `pane.searchOpen` do the same programmatically
 - `draggable: true` (default for floating panes); drag position, anchor, and the draggable toggle persist to `localStorage` when the pane has an `id`
 - `toggleKey: '\`'` toggles visibility; `pane.hidden`, `pane.expanded` are settable
@@ -69,7 +69,7 @@ All styling flows through CSS custom properties on `.tiao-pane` (`--tiao-bg`, `-
 
 ```ts
 new Pane({ theme: { accent: '#f0f', '--tiao-width': '320px' } })
-pane.theme = 'dark'       // built-in dark theme ('light' | 'dark')
+pane.theme = 'light'      // default 'dark'; also 'light' | 'solarized' | 'nord' | 'catppuccin'
 pane.accent = '#ff0080'   // sets --tiao-accent
 ```
 
