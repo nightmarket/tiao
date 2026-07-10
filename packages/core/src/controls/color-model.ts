@@ -1,4 +1,4 @@
-import { clamp, isRecord } from '../util'
+import { clamp, isRecord, round2, roundN } from '../util'
 
 /** Internal color representation: r/g/b 0-255, a 0-1. */
 export interface Rgba {
@@ -242,15 +242,6 @@ export function toHexText(rgba: Rgba, alpha: boolean): string {
 
 function toHex(n: number): string {
   return clamp(n, 0, 255).toString(16).padStart(2, '0')
-}
-
-function roundN(n: number, decimals: number): number {
-  const f = Math.pow(10, decimals)
-  return Math.round(n * f) / f
-}
-
-function round2(n: number): number {
-  return roundN(n, 2)
 }
 
 /* ---- OKLab / OKLCH (Björn Ottosson's reference conversions) ---- */

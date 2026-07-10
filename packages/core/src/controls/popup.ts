@@ -1,4 +1,5 @@
-import { setRowActive } from '../dom'
+import { longPress, setRowActive } from '../dom'
+import { applyOverlayTheme } from './scrubber'
 
 /**
  * Floating popup anchored below an element. The popup node is re-parented to
@@ -88,6 +89,157 @@ export function onPaneScroll(from: Element, onScroll: () => void): () => void {
  * targets (e.g. the toggle icon) still receive events. After close, the
  * trailing click from the dismiss press is also swallowed.
  */
+export interface StickyOverlayOptions {
+  document: Document
+  /** trigger button: clicks toggle the overlay, long-press runs `onLongPress` */
+  trigger: HTMLElement
+  /** row root that receives `dragClass` + active-row state while open */
+  root: HTMLElement
+  overlay: HTMLElement
+  dragClass: string
+  /** (re)position the overlay around the trigger, rebuilding any mapping state */
+  center(): void
+  /** apply a pointer position to the value */
+  apply(clientX: number, clientY: number, last: boolean): void
+  /** custom long-press gesture (e.g. a free drag); clicks always toggle sticky */
+  onLongPress?(ev: PointerEvent): void
+  onOpen?(): void
+  onClose?(): void
+  /** sync visuals after open/center */
+  render?(): void
+  onDispose(fn: () => void): void
+}
+
+export interface StickyOverlayHandle {
+  isOpen(): boolean
+  isSticky(): boolean
+  open(mode: { sticky: boolean; follow: boolean }): void
+  close(): void
+  /** click behavior: open sticky, or close when already sticky-open */
+  toggleSticky(): void
+  setHoverFollow(on: boolean): void
+}
+
+/**
+ * Shared controller for body-portaled overlay editors (angle dial, XY pad):
+ * sticky mode follows pointer hovers until a press commits and closes; the
+ * pane chrome underneath is guarded, scrolling the pane closes the overlay,
+ * and Escape dismisses it.
+ */
+export function createStickyOverlay(opts: StickyOverlayOptions): StickyOverlayHandle {
+  const { document: doc, trigger, root, overlay } = opts
+  let open = false
+  let sticky = false
+  let hovering = false
+  let stopScrollWatch: (() => void) | null = null
+  let stopPointerGuard: (() => void) | null = null
+
+  const onHoverMove = (e: PointerEvent) => {
+    if (!sticky || !hovering) return
+    opts.apply(e.clientX, e.clientY, false)
+  }
+  const stopHoverFollow = () => {
+    if (!hovering) return
+    hovering = false
+    doc.removeEventListener('pointermove', onHoverMove, true)
+  }
+  const startHoverFollow = () => {
+    stopHoverFollow()
+    hovering = true
+    doc.addEventListener('pointermove', onHoverMove, true)
+  }
+
+  const close = () => {
+    if (!open) return
+    open = false
+    sticky = false
+    stopHoverFollow()
+    stopScrollWatch?.()
+    stopScrollWatch = null
+    stopPointerGuard?.()
+    stopPointerGuard = null
+    overlay.remove()
+    root.classList.remove(opts.dragClass)
+    setRowActive(root, false)
+    opts.onClose?.()
+  }
+
+  const openOverlay = (mode: { sticky: boolean; follow: boolean }) => {
+    // theme must be copied when mounted — root/trigger aren't styled at create time
+    applyOverlayTheme(overlay, trigger)
+    if (!open) {
+      doc.body.append(overlay)
+      root.classList.add(opts.dragClass)
+      setRowActive(root, true)
+      open = true
+      opts.onOpen?.()
+      stopScrollWatch?.()
+      stopScrollWatch = onPaneScroll(trigger, close)
+      stopPointerGuard?.()
+      stopPointerGuard = bindOverlayPointerGuard(doc, {
+        isOpen: () => open,
+        allow: (t) => trigger.contains(t),
+        onPointerDown: (e) => {
+          if (!sticky) return
+          opts.center()
+          opts.apply(e.clientX, e.clientY, true)
+          close()
+        },
+        onKeyDown: (e) => {
+          if (e.key === 'Escape') close()
+        },
+      })
+    }
+    sticky = mode.sticky
+    // always center on the trigger, regardless of where the press started
+    opts.center()
+    if (mode.follow) startHoverFollow()
+    else stopHoverFollow()
+    opts.render?.()
+  }
+
+  const toggleSticky = () => {
+    if (open && sticky) {
+      close()
+      return
+    }
+    openOverlay({ sticky: true, follow: true })
+  }
+
+  // click → sticky overlay that follows the pointer; long-press → custom gesture
+  let suppressClick = false
+  if (opts.onLongPress) {
+    opts.onDispose(
+      longPress(trigger, {
+        onLongPress: (e) => {
+          suppressClick = true
+          e.preventDefault()
+          opts.onLongPress?.(e)
+        },
+      }),
+    )
+  }
+  const onTriggerClick = () => {
+    if (suppressClick) {
+      suppressClick = false
+      return
+    }
+    toggleSticky()
+  }
+  trigger.addEventListener('click', onTriggerClick)
+  opts.onDispose(() => trigger.removeEventListener('click', onTriggerClick))
+  opts.onDispose(close)
+
+  return {
+    isOpen: () => open,
+    isSticky: () => sticky,
+    open: openOverlay,
+    close,
+    toggleSticky,
+    setHoverFollow: (on) => (on ? startHoverFollow() : stopHoverFollow()),
+  }
+}
+
 export function bindOverlayPointerGuard(
   doc: Document,
   opts: {

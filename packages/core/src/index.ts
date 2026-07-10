@@ -26,7 +26,7 @@ export type {
 } from './plugin'
 export { Value } from './value'
 export type { ValueListener, ValueMeta } from './value'
-export { onTick, onInterval } from './ticker'
+export { onTick, onInterval, onFpsSample } from './ticker'
 export {
   h,
   icon,
@@ -39,9 +39,9 @@ export {
   setRowActive,
 } from './dom'
 export type { DragState, DragHandlers, LongPressHandlers } from './dom'
-export { clamp, mapRange, snap, formatNumber, decimalCount } from './util'
+export { clamp, mapRange, snap, formatNumber, decimalCount, round2, roundN } from './util'
 export { createGraph } from './controls/monitor'
-export { createScrubber } from './controls/scrubber'
+export { createScrubber, createComponentScrubber } from './controls/scrubber'
 export { createPopup, onPaneScroll, bindOverlayPointerGuard } from './controls/popup'
 export { normalizeOptions } from './controls/select'
 export type { SelectEntry } from './controls/select'

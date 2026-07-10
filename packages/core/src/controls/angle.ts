@@ -1,7 +1,7 @@
-import { h, longPress, setRowActive, startDrag } from '../dom'
+import { h, startDrag } from '../dom'
 import { clamp, formatNumber, snap } from '../util'
-import { bindOverlayPointerGuard, onPaneScroll } from './popup'
-import { applyOverlayTheme, createScrubber } from './scrubber'
+import { createStickyOverlay } from './popup'
+import { createScrubber } from './scrubber'
 import type { InputPlugin, PluginContext, PluginView } from '../plugin'
 
 const SVG_NS = 'http://www.w3.org/2000/svg'
@@ -106,23 +106,15 @@ function createAngleRow(ctx: PluginContext<number>): PluginView {
   const dial = createAngleDial(doc, DIAL_SIZE)
   const overlay = h('div', 'tiao-scrub-overlay tiao-angle-overlay', dial.element)
   dial.element.style.transform = 'translate(-50%, -50%)'
-  let open = false
-  let sticky = false
-  let hovering = false
   let originX = 0
   let originY = 0
-  let stopScrollWatch: (() => void) | null = null
-
-  const positionOverlay = (clientX: number, clientY: number) => {
-    overlay.style.left = `${clientX}px`
-    overlay.style.top = `${clientY}px`
-  }
 
   const centerOnKnob = () => {
     const rect = knob.getBoundingClientRect()
     originX = rect.left + rect.width / 2
     originY = rect.top + rect.height / 2
-    positionOverlay(originX, originY)
+    overlay.style.left = `${originX}px`
+    overlay.style.top = `${originY}px`
   }
 
   // stroke/arrow direction flips only when the pointer crosses the 0° seam
@@ -162,82 +154,8 @@ function createAngleRow(ctx: PluginContext<number>): PluginView {
     syncDial()
   }
 
-  const stopHoverFollow = () => {
-    if (!hovering) return
-    hovering = false
-    doc.removeEventListener('pointermove', onHoverMove, true)
-  }
-
-  const onHoverMove = (e: PointerEvent) => {
-    if (!sticky || !hovering) return
-    applyPointer(e.clientX, e.clientY, false)
-  }
-
-  const startHoverFollow = () => {
-    stopHoverFollow()
-    hovering = true
-    doc.addEventListener('pointermove', onHoverMove, true)
-  }
-
-  let stopPointerGuard: (() => void) | null = null
-
-  const closeOverlay = () => {
-    if (!open) return
-    open = false
-    sticky = false
-    lastPointerRad = null
-    ccw = false
-    stopHoverFollow()
-    stopScrollWatch?.()
-    stopScrollWatch = null
-    stopPointerGuard?.()
-    stopPointerGuard = null
-    overlay.remove()
-    root.classList.remove('tiao-angle-dragging')
-    setRowActive(root, false)
-  }
-
-  const openOverlay = (mode: 'sticky' | 'drag') => {
-    // theme must be copied when mounted — root/knob aren't styled at create time
-    applyOverlayTheme(overlay, knob)
-    if (!open) {
-      doc.body.append(overlay)
-      root.classList.add('tiao-angle-dragging')
-      setRowActive(root, true)
-      open = true
-      lastPointerRad = toRad(value.get())
-      ccw = false
-      stopScrollWatch?.()
-      stopScrollWatch = onPaneScroll(knob, closeOverlay)
-      stopPointerGuard?.()
-      stopPointerGuard = bindOverlayPointerGuard(doc, {
-        isOpen: () => open,
-        allow: (t) => knob.contains(t),
-        onPointerDown: (e) => {
-          if (!sticky) return
-          centerOnKnob()
-          applyPointer(e.clientX, e.clientY, true)
-          closeOverlay()
-        },
-        onKeyDown: (e) => {
-          if (e.key === 'Escape') closeOverlay()
-        },
-      })
-    }
-    sticky = mode === 'sticky'
-    // always center on the icon, regardless of where the press started
-    centerOnKnob()
-    if (mode === 'sticky') {
-      // follow moves only — icon click is at the origin, don't jump the angle
-      startHoverFollow()
-    } else {
-      stopHoverFollow()
-    }
-    syncDial()
-  }
-
   const beginAngleDrag = (ev: PointerEvent) => {
-    openOverlay('drag')
+    dialOverlay.open({ sticky: false, follow: false })
     startDrag(ev, {
       onStart: (e) => {
         e.preventDefault()
@@ -246,51 +164,44 @@ function createAngleRow(ctx: PluginContext<number>): PluginView {
       onMove: (s) => applyPointer(s.x, s.y, false),
       onEnd: (s) => {
         applyPointer(s.x, s.y, true)
-        closeOverlay()
+        dialOverlay.close()
       },
     })
   }
 
-  const openSticky = () => {
-    if (open && sticky) {
-      closeOverlay()
-      return
-    }
-    openOverlay('sticky')
-  }
-
-  // click → sticky overlay that follows the pointer; long-press → free drag
-  let suppressClick = false
-  ctx.onDispose(
-    longPress(knob, {
-      onLongPress: (e) => {
-        suppressClick = true
-        e.preventDefault()
-        beginAngleDrag(e)
-      },
-    }),
-  )
-  const onKnobClick = () => {
-    if (suppressClick) {
-      suppressClick = false
-      return
-    }
-    openSticky()
-  }
-  knob.addEventListener('click', onKnobClick)
-  ctx.onDispose(() => knob.removeEventListener('click', onKnobClick))
+  const dialOverlay = createStickyOverlay({
+    document: doc,
+    trigger: knob,
+    root,
+    overlay,
+    dragClass: 'tiao-angle-dragging',
+    // always center on the icon, regardless of where the press started; sticky
+    // mode follows moves only — icon click is at the origin, don't jump the angle
+    center: centerOnKnob,
+    apply: applyPointer,
+    onLongPress: beginAngleDrag,
+    onOpen: () => {
+      lastPointerRad = toRad(value.get())
+      ccw = false
+    },
+    onClose: () => {
+      lastPointerRad = null
+      ccw = false
+    },
+    render: syncDial,
+    onDispose: ctx.onDispose,
+  })
 
   ctx.onDispose(
     value.subscribe((v) => {
       renderKnob(v)
-      if (open) syncDial()
+      if (dialOverlay.isOpen()) syncDial()
     }),
   )
-  ctx.onDispose(closeOverlay)
 
   return {
     element: root,
-    activate: () => openSticky(),
+    activate: () => dialOverlay.toggleSticky(),
     beginScrub: beginAngleDrag,
   }
 }

@@ -1,8 +1,7 @@
-import { h, icon, longPress, setRowActive, startDrag } from '../dom'
+import { h, icon, startDrag } from '../dom'
 import { clamp, isRecord, mapRange } from '../util'
-import { bindOverlayPointerGuard, onPaneScroll } from './popup'
-import { applyOverlayTheme, createScrubber } from './scrubber'
-import { Value } from '../value'
+import { createStickyOverlay } from './popup'
+import { createComponentScrubber } from './scrubber'
 import type { BindingOptions, InputPlugin, PluginContext } from '../plugin'
 
 const AXES = ['x', 'y', 'z', 'w'] as const
@@ -55,20 +54,14 @@ export const pointInputPlugin: InputPlugin<PointValue> = {
       if (scrubOpts.step === undefined && typeof ctx.options.step === 'number') {
         scrubOpts.step = ctx.options.step
       }
-      const axisValue = new Value(ctx.value.get()[axis] ?? 0)
-      ctx.onDispose(
-        ctx.value.subscribe((v) => {
-          axisValue.set(v[axis] ?? 0)
-        }),
-      )
-      const scrub = createScrubber(
-        axisValue,
+      const scrub = createComponentScrubber(
+        ctx.value,
         () => ctx.value.get()[axis] ?? 0,
         (v, last) => setAxis(axis, v, last),
         scrubOpts,
+        ctx.onDispose,
       )
       scrub.element.title = axis
-      ctx.onDispose(scrub.dispose)
       fields.append(scrub.element)
       return scrub
     })
@@ -144,19 +137,13 @@ function createPadOverlay(
   render(ctx.value.get())
   ctx.onDispose(ctx.value.subscribe(render))
 
-  let open = false
-  let sticky = false
-  let hovering = false
-  let originX = 0
-  let originY = 0
-  let stopScrollWatch: (() => void) | null = null
   // pad rect in screen space, rebuilt whenever the overlay is (re)centered
-  let rect: DOMRect
+  let rect = { left: 0, right: 0, top: 0, bottom: 0 }
 
   const centerOnToggle = () => {
     const r = toggle.getBoundingClientRect()
-    originX = r.left + r.width / 2
-    originY = r.top + r.height / 2
+    const originX = r.left + r.width / 2
+    const originY = r.top + r.height / 2
     overlay.style.left = `${originX}px`
     overlay.style.top = `${originY}px`
     // virtual pad centered on the plus icon
@@ -166,12 +153,7 @@ function createPadOverlay(
       right: originX + half,
       top: originY - half,
       bottom: originY + half,
-      width: PAD_SIZE,
-      height: PAD_SIZE,
-      x: originX - half,
-      y: originY - half,
-      toJSON: () => ({}),
-    } as DOMRect
+    }
   }
 
   const apply = (clientX: number, clientY: number, last: boolean) => {
@@ -180,113 +162,36 @@ function createPadOverlay(
     ctx.value.set({ ...ctx.value.get(), x, y }, { source: 'ui', last })
   }
 
-  const stopHoverFollow = () => {
-    if (!hovering) return
-    hovering = false
-    doc.removeEventListener('pointermove', onHoverMove, true)
-  }
-
-  const onHoverMove = (e: PointerEvent) => {
-    if (!sticky || !hovering) return
-    apply(e.clientX, e.clientY, false)
-  }
-
-  const startHoverFollow = () => {
-    stopHoverFollow()
-    hovering = true
-    doc.addEventListener('pointermove', onHoverMove, true)
-  }
-
-  let stopPointerGuard: (() => void) | null = null
-
-  const closeOverlay = () => {
-    if (!open) return
-    open = false
-    sticky = false
-    stopHoverFollow()
-    stopScrollWatch?.()
-    stopScrollWatch = null
-    stopPointerGuard?.()
-    stopPointerGuard = null
-    overlay.remove()
-    root.classList.remove('tiao-point-dragging')
-    setRowActive(root, false)
-  }
-
-  const openOverlay = (mode: 'sticky') => {
-    applyOverlayTheme(overlay, toggle)
-    if (!open) {
-      doc.body.append(overlay)
-      root.classList.add('tiao-point-dragging')
-      setRowActive(root, true)
-      open = true
-      stopScrollWatch?.()
-      stopScrollWatch = onPaneScroll(toggle, closeOverlay)
-      stopPointerGuard?.()
-      stopPointerGuard = bindOverlayPointerGuard(doc, {
-        isOpen: () => open,
-        allow: (t) => toggle.contains(t),
-        onPointerDown: (e) => {
-          if (!sticky) return
-          centerOnToggle()
-          apply(e.clientX, e.clientY, true)
-          closeOverlay()
-        },
-        onKeyDown: (e) => {
-          if (e.key === 'Escape') closeOverlay()
-        },
-      })
-    }
-    sticky = mode === 'sticky'
-    centerOnToggle()
-    // follow moves only — don't jump to the icon center on open
-    startHoverFollow()
-    render(ctx.value.get())
-  }
-
-  const openSticky = () => {
-    if (open && sticky) {
-      closeOverlay()
-      return
-    }
-    openOverlay('sticky')
-  }
-
   // click / long-press both open the overlay editor; long-press keeps adjusting
   // while the pointer stays down, then resumes hover-follow on release
-  let suppressClick = false
-  ctx.onDispose(
-    longPress(toggle, {
-      onLongPress: (e) => {
-        suppressClick = true
-        e.preventDefault()
-        openSticky()
-        stopHoverFollow()
-        centerOnToggle()
-        // don't apply at the icon center (pad origin) — wait until the pointer moves
-        startDrag(e, {
-          onMove: (s) => {
-            if (!s.moved) return
-            apply(s.x, s.y, false)
-          },
-          onEnd: (s) => {
-            if (s.moved) apply(s.x, s.y, true)
-            if (open && sticky) startHoverFollow()
-          },
-        })
-      },
-    }),
-  )
-  const onToggleClick = () => {
-    if (suppressClick) {
-      suppressClick = false
-      return
-    }
-    openSticky()
-  }
-  toggle.addEventListener('click', onToggleClick)
-  ctx.onDispose(() => toggle.removeEventListener('click', onToggleClick))
-  ctx.onDispose(closeOverlay)
+  const pad = createStickyOverlay({
+    document: doc,
+    trigger: toggle,
+    root,
+    overlay,
+    dragClass: 'tiao-point-dragging',
+    center: centerOnToggle,
+    apply,
+    onLongPress: (e) => {
+      pad.toggleSticky()
+      pad.setHoverFollow(false)
+      centerOnToggle()
+      // don't apply at the icon center (pad origin) — wait until the pointer moves
+      startDrag(e, {
+        onMove: (s) => {
+          if (!s.moved) return
+          apply(s.x, s.y, false)
+        },
+        onEnd: (s) => {
+          if (s.moved) apply(s.x, s.y, true)
+          if (pad.isOpen() && pad.isSticky()) pad.setHoverFollow(true)
+        },
+      })
+    },
+    // follow moves only — don't jump to the icon center on open
+    render: () => render(ctx.value.get()),
+    onDispose: ctx.onDispose,
+  })
 
-  return { openSticky }
+  return { openSticky: () => pad.toggleSticky() }
 }

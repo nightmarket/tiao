@@ -1,14 +1,14 @@
 import {
   clamp,
+  createComponentScrubber,
   createPopup,
-  createScrubber,
   draggable,
   h,
   icon,
   injectCss,
   mapRange,
   registerPlugin,
-  Value,
+  round2,
   type InputPlugin,
 } from '@tiao/core'
 
@@ -165,13 +165,10 @@ export const bezierPlugin: InputPlugin<BezierValue> = {
 
     // --- editor: per-component number fields under the graph ---
     const fields = h('div', 'tiao-bezier-fields')
-    const axisValues: Value<number>[] = []
     for (let i = 0; i < 4; i++) {
       const isX = i % 2 === 0
-      const axisValue = new Value(ctx.value.get()[i] as number)
-      axisValues.push(axisValue)
-      const scrub = createScrubber(
-        axisValue,
+      const scrub = createComponentScrubber(
+        ctx.value,
         () => ctx.value.get()[i] as number,
         (v, last) => {
           const next = [...ctx.value.get()] as BezierValue
@@ -179,9 +176,9 @@ export const bezierPlugin: InputPlugin<BezierValue> = {
           ctx.value.set(next, { source: 'ui', last })
         },
         isX ? { min: 0, max: 1, step: 0.01 } : { step: 0.01 },
+        ctx.onDispose,
       )
       scrub.element.title = `${isX ? 'x' : 'y'}${i < 2 ? 1 : 2}`
-      ctx.onDispose(scrub.dispose)
       fields.append(scrub.element)
     }
 
@@ -334,8 +331,7 @@ export const bezierPlugin: InputPlugin<BezierValue> = {
 
     refresh()
     ctx.onDispose(
-      ctx.value.subscribe((v) => {
-        axisValues.forEach((av, i) => av.set(v[i] as number))
+      ctx.value.subscribe(() => {
         refresh()
         play()
       }),
@@ -421,10 +417,6 @@ export const bezierPlugin: InputPlugin<BezierValue> = {
     // clicking the row label opens the editor (same as the preview button)
     return { element: root, activate: onPreviewClick }
   },
-}
-
-function round2(n: number): number {
-  return Math.round(n * 100) / 100
 }
 
 const CSS = `

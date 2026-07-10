@@ -33,3 +33,17 @@ export function onInterval(fn: () => void, interval: number): () => void {
     fn()
   })
 }
+
+/** Counts frames on the shared ticker and reports fps once per `interval` ms window. */
+export function onFpsSample(interval: number, fn: (fps: number) => void): () => void {
+  let frames = 0
+  let windowStart = typeof performance !== 'undefined' ? performance.now() : 0
+  return onTick((t) => {
+    frames++
+    const elapsed = t - windowStart
+    if (elapsed < interval) return
+    fn((frames * 1000) / elapsed)
+    frames = 0
+    windowStart = t
+  })
+}

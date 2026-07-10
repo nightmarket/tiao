@@ -72,6 +72,15 @@ export function nudge(current: number, delta: number, base: number): number {
   return snap(current + delta, Math.abs(delta) < base ? Math.abs(delta) : undefined)
 }
 
+export function roundN(n: number, decimals: number): number {
+  const f = Math.pow(10, decimals)
+  return Math.round(n * f) / f
+}
+
+export function round2(n: number): number {
+  return roundN(n, 2)
+}
+
 export function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v)
 }

@@ -156,7 +156,8 @@ export function createGraph(
   ctx.onDispose(
     ctx.value.subscribe((v) => {
       buffer.push(v)
-      if (buffer.length > bufferSize) buffer.splice(0, buffer.length - bufferSize)
+      // at most one over per sample; shift avoids splice's discard-array allocation
+      while (buffer.length > bufferSize) buffer.shift()
       numberEl.textContent = format(v)
       draw()
     }),

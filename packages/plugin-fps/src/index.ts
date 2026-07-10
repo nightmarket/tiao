@@ -1,6 +1,6 @@
 import {
   createGraph,
-  onTick,
+  onFpsSample,
   registerPlugin,
   Value,
   type BladePlugin,
@@ -26,19 +26,7 @@ export const fpsPlugin: BladePlugin = {
     const max = typeof ctx.params['max'] === 'number' ? ctx.params['max'] : 120
     const bufferSize = typeof ctx.params['bufferSize'] === 'number' ? ctx.params['bufferSize'] : undefined
     const value = new Value(0)
-
-    let frames = 0
-    let windowStart = typeof performance !== 'undefined' ? performance.now() : 0
-    ctx.onDispose(
-      onTick((t) => {
-        frames++
-        const elapsed = t - windowStart
-        if (elapsed < sampleMs) return
-        value.set((frames * 1000) / elapsed)
-        frames = 0
-        windowStart = t
-      }),
-    )
+    ctx.onDispose(onFpsSample(sampleMs, (fps) => value.set(fps)))
 
     const label = typeof ctx.params['label'] === 'string' ? ctx.params['label'] : undefined
     const graph = createGraph({

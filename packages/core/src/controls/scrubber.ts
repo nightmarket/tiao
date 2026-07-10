@@ -1,6 +1,6 @@
 import { collapseSelection, h, setEwCursor, setRowActive, startDrag } from '../dom'
 import { arrowKeyStep, clamp, formatNumber, nudge, parseNumberInput, snap } from '../util'
-import type { Value } from '../value'
+import { Value } from '../value'
 
 export interface ScrubberOptions {
   min?: number
@@ -19,6 +19,12 @@ export interface ScrubberOptions {
    * Fill sliders turn this off so the track receives pointer events on the fill.
    */
   fieldDrag?: boolean
+  /**
+   * Where an external beginScrub (row long-press) drags from (default 'grip').
+   * Controls that hide the grip (slider value field, interval endpoints)
+   * scrub from the value field instead.
+   */
+  scrubAnchor?: 'grip' | 'input'
 }
 
 export interface ScrubberApi {
@@ -262,11 +268,7 @@ export function createScrubber(
     activate: enterEdit,
     beginScrub: (ev) => {
       if (!input.readOnly) return
-      // slider-num / interval hide the grip; scrub from the value field then
-      const gripHidden = wrap.classList.contains('tiao-slider-num')
-        || wrap.classList.contains('tiao-interval-min')
-        || wrap.classList.contains('tiao-interval-max')
-      runScrub(gripHidden ? input : knob, ev)
+      runScrub(opts.scrubAnchor === 'input' ? input : knob, ev)
     },
     dispose: () => {
       hideOverlay()
@@ -277,6 +279,25 @@ export function createScrubber(
       unsubscribe()
     },
   }
+}
+
+/**
+ * Scrubber for one component of a composite value (point axis, interval
+ * endpoint, bezier coordinate): owns the derived Value that mirrors the
+ * component and its subscription to the parent.
+ */
+export function createComponentScrubber<P>(
+  parent: Value<P>,
+  read: () => number,
+  write: (v: number, last: boolean) => void,
+  opts: ScrubberOptions,
+  onDispose: (fn: () => void) => void,
+): ScrubberApi {
+  const component = new Value(read())
+  onDispose(parent.subscribe(() => component.set(read())))
+  const scrub = createScrubber(component, read, write, opts)
+  onDispose(scrub.dispose)
+  return scrub
 }
 
 function guessStep(v: number): number {

@@ -273,9 +273,17 @@ export class Pane extends Container {
           },
         }),
       )
-    }
 
-    if (this.floating) this.installResizeHandles()
+      this.installResizeHandles()
+
+      // free-positioned panes must stay inside the window when it shrinks
+      const win = doc.defaultView
+      if (win) {
+        const onResize = () => this.clampToViewport()
+        win.addEventListener('resize', onResize)
+        this.disposers.push(() => win.removeEventListener('resize', onResize))
+      }
+    }
 
     // settings menu: gear click or right-click anywhere on the pane
     if (options.menu !== false) {
@@ -339,16 +347,6 @@ export class Pane extends Container {
 
     // wider custom caret over focused inputs (the native bar is easy to miss)
     this.disposers.push(installCaret(this.element, doc))
-
-    // free-positioned panes must stay inside the window when it shrinks
-    if (this.floating) {
-      const win = doc.defaultView
-      if (win) {
-        const onResize = () => this.clampToViewport()
-        win.addEventListener('resize', onResize)
-        this.disposers.push(() => win.removeEventListener('resize', onResize))
-      }
-    }
 
     if (options.toggleKey) {
       const onKey = (e: KeyboardEvent) => {

@@ -1,4 +1,4 @@
-import { onTick } from '@tiao/core'
+import { onFpsSample } from '@tiao/core'
 
 /** Live sample values. Poll with readonly bindings or read directly. */
 export interface PerfStats {
@@ -155,20 +155,13 @@ export function createPerfMonitor(options: PerfMonitorOptions = {}): PerfMonitor
     }
   }
 
-  // --- sampling loop ---
-  let frames = 0
-  let windowStart = typeof performance !== 'undefined' ? performance.now() : 0
-  const stopTick = onTick((t) => {
-    frames++
-    readCounts()
-    const elapsed = t - windowStart
-    if (elapsed < sampleMs) return
-    stats.fps = (frames * 1000) / elapsed
+  // --- sampling loop: everything reads once per window, not per frame ---
+  const stopTick = onFpsSample(sampleMs, (fps) => {
+    stats.fps = fps
     stats.cpu = cpuCount > 0 ? cpuSum / cpuCount : 0
-    frames = 0
     cpuSum = 0
     cpuCount = 0
-    windowStart = t
+    readCounts()
 
     if (options.gpuTime) {
       stats.gpu = options.gpuTime()

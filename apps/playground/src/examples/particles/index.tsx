@@ -137,11 +137,7 @@ function buildKitchenSink(pane: Pane): Pane {
     params.time = performance.now() / 1000
   }, 50)
   // the demo tears panes down on example switches; take the ticker with it
-  const baseDispose = pane.dispose.bind(pane)
-  pane.dispose = () => {
-    clearInterval(timeTicker)
-    baseDispose()
-  }
+  pane.onDispose(() => clearInterval(timeTicker))
 
   // one full-width graph with bottom-left label, one without
   addFpsGraph(pane, { label: 'FPS' })

@@ -6,6 +6,7 @@ import {
   hsvToRgb,
   maxChroma,
   maxChromaP3,
+  oklabToRgb,
   oklchToRgb,
   parseColor,
   rgbToHsv,
@@ -164,6 +165,10 @@ function createColorView(ctx: PluginContext<unknown>) {
     const data = planeImg.data
     const srgbEdge = new Float64Array(hgt)
     const p3Edge = new Float64Array(hgt)
+    // hue is constant across the plane; hoist its trig out of the pixel loop
+    const hueRad = (ok.H * Math.PI) / 180
+    const cosH = Math.cos(hueRad)
+    const sinH = Math.sin(hueRad)
     for (let y = 0; y < hgt; y++) {
       const L = 1 - y / (hgt - 1)
       // gamut edges once per row; pixels classify against them instead of
@@ -173,7 +178,7 @@ function createColorView(ctx: PluginContext<unknown>) {
       for (let x = 0; x < w; x++) {
         const C = (x / (w - 1)) * OK_C_MAX
         // clipped sRGB preview; alpha encodes accessibility (sRGB / P3 / beyond)
-        const { r, g, b } = oklchToRgb(L, C, ok.H)
+        const { r, g, b } = oklabToRgb(L, C * cosH, C * sinH)
         const i = (y * w + x) * 4
         data[i] = r
         data[i + 1] = g
@@ -275,11 +280,13 @@ function createColorView(ctx: PluginContext<unknown>) {
       svThumb.style.background = css
       hueThumb.style.left = `${(hsv.h / 360) * 100}%`
     }
-    alphaThumb.style.left = `${rgba.a * 100}%`
-    const alphaColor = `rgb(${Math.round(rgba.r)}, ${Math.round(rgba.g)}, ${Math.round(rgba.b)})`
-    if (alphaColor !== lastAlphaColor) {
-      lastAlphaColor = alphaColor
-      alphaBar.style.setProperty('--tiao-alpha-color', alphaColor)
+    if (alpha) {
+      alphaThumb.style.left = `${rgba.a * 100}%`
+      const alphaColor = `rgb(${Math.round(rgba.r)}, ${Math.round(rgba.g)}, ${Math.round(rgba.b)})`
+      if (alphaColor !== lastAlphaColor) {
+        lastAlphaColor = alphaColor
+        alphaBar.style.setProperty('--tiao-alpha-color', alphaColor)
+      }
     }
   }
 

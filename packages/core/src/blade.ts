@@ -66,6 +66,11 @@ export abstract class Item {
     this.element.classList.toggle('tiao-disabled', v)
   }
 
+  /** register cleanup to run when this item is disposed */
+  onDispose(fn: () => void): void {
+    this.disposers.push(fn)
+  }
+
   /** internal: hide/show against a search query; returns whether this item matched */
   applySearch(query: string): boolean {
     const match = query === '' || this.searchText().toLowerCase().includes(query)

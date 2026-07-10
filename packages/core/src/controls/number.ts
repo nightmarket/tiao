@@ -1,6 +1,7 @@
-import { h, setEwCursor, setRowActive, startDrag } from '../dom'
-import { arrowKeyStep, clamp, mapRange, nudge, snap } from '../util'
+import { h, startDrag } from '../dom'
+import { clamp, mapRange, nudge, snap } from '../util'
 import { createScrubber } from './scrubber'
+import { bindSliderTrack } from './slider'
 import type { InputPlugin, PluginContext, PluginView } from '../plugin'
 
 /**
@@ -39,6 +40,7 @@ function createSliderRow(ctx: PluginContext<number>, min: number, max: number): 
       // fill-edge handlebar is the affordance; track owns dragging on the fill
       guide: false,
       fieldDrag: false,
+      scrubAnchor: 'input',
       ...(options.format ? { format: options.format } : {}),
       ...(typeof step === 'number' ? { step } : {}),
     },
@@ -53,47 +55,22 @@ function createSliderRow(ctx: PluginContext<number>, min: number, max: number): 
   ctx.onDispose(value.subscribe(render))
   ctx.onDispose(scrub.dispose)
 
-  // the track rect is read once per drag to avoid a layout read per pointermove
-  let trackRect: DOMRect | null = null
-  const fromPointer = (clientX: number) => {
-    const rect = (trackRect ??= track.getBoundingClientRect())
-    return constrain(mapRange(clientX, rect.left, rect.right, min, max))
-  }
-  const setTrackActive = (on: boolean) => {
-    el.classList.toggle('tiao-slider-dragging', on)
-    setRowActive(el, on)
-    setEwCursor(track, on)
-  }
-  const beginTrackDrag = (e: PointerEvent) => {
-    trackRect = track.getBoundingClientRect()
-    setTrackActive(true)
-    value.set(fromPointer(e.clientX), { source: 'ui', last: false })
-    startDrag(e, {
-      onMove: (s) => value.set(fromPointer(s.x), { source: 'ui', last: false }),
-      onEnd: (s) => {
-        value.set(fromPointer(s.x), { source: 'ui', last: true })
-        setTrackActive(false)
+  const { setTrackActive } = bindSliderTrack({
+    el,
+    track,
+    min,
+    max,
+    step,
+    handlers: {
+      apply: (raw, last) => value.set(constrain(raw), { source: 'ui', last }),
+      onKeyDelta: (delta, base) => {
+        value.set(clamp(nudge(value.get(), delta, base), min, max), { source: 'ui', last: true })
       },
-    })
-  }
-  const onTrackPointerDown = (e: PointerEvent) => {
-    if (e.button !== 0) return
-    beginTrackDrag(e)
-  }
-  track.addEventListener('pointerdown', onTrackPointerDown)
-  ctx.onDispose(() => track.removeEventListener('pointerdown', onTrackPointerDown))
-
+    },
+    onDispose: ctx.onDispose,
+  })
   // keyboard support on the track (Shift ×10, Alt ÷10)
   track.tabIndex = 0
-  const onKeyDown = (e: KeyboardEvent) => {
-    const base = step ?? (max - min) / 100
-    const delta = arrowKeyStep(e, base)
-    if (!delta) return
-    e.preventDefault()
-    value.set(clamp(nudge(value.get(), delta, base), min, max), { source: 'ui', last: true })
-  }
-  track.addEventListener('keydown', onKeyDown)
-  ctx.onDispose(() => track.removeEventListener('keydown', onKeyDown))
 
   /** row long-press: mouse position = current value; drag left/right from there */
   const beginRelativeScrub = (e: PointerEvent) => {
