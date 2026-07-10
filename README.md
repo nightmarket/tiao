@@ -197,8 +197,10 @@ Anchored top-right by default: an All / FPS / Memory / Perf tab group for the gr
 
 ```sh
 pnpm install
-pnpm build        # build all packages
-pnpm dev          # playground at localhost:5173
+pnpm dev          # playground at localhost:5173 (HMR over package sources)
+pnpm build        # build packages for publish / consumers of dist
 pnpm test         # vitest
 pnpm typecheck
 ```
+
+The playground Vite config aliases `@tiao/*` to each package's `src/`, so edits under `packages/` hot-reload without running `pnpm build`.
