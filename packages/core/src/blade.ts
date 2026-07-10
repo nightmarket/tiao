@@ -1,5 +1,5 @@
 import { Emitter } from './emitter'
-import { h, icon, longPress } from './dom'
+import { h, icon, longPress, withDocument } from './dom'
 import { onInterval } from './ticker'
 import { Value } from './value'
 import type { BindingOptions, PluginRegistry } from './plugin'
@@ -124,7 +124,12 @@ export abstract class Container extends Item {
     key: K,
     options: BindingOptions = {},
   ): BindingApi<O[K]> {
-    const api = new BindingApi<O[K]>(this.host, target as Record<string, O[K]>, key, options)
+    // all add* methods create under the host document so h()/icon() build
+    // elements in the right realm (PaneOptions.document)
+    const api = withDocument(
+      this.host.document,
+      () => new BindingApi<O[K]>(this.host, target as Record<string, O[K]>, key, options),
+    )
     this.attach(api)
     return api
   }
@@ -136,37 +141,37 @@ export abstract class Container extends Item {
     /** tints the folder title; caret and depth line get softer mixes of it */
     color?: string
   }): FolderApi {
-    const api = new FolderApi(this.host, params)
+    const api = withDocument(this.host.document, () => new FolderApi(this.host, params))
     this.attach(api)
     return api
   }
 
   addButton(params: { title: string; label?: string }): ButtonApi {
-    const api = new ButtonApi(params)
+    const api = withDocument(this.host.document, () => new ButtonApi(params))
     this.attach(api)
     return api
   }
 
   addButtonGroup(params: { label?: string; buttons: Record<string, () => void> }): ButtonGroupApi {
-    const api = new ButtonGroupApi(params)
+    const api = withDocument(this.host.document, () => new ButtonGroupApi(params))
     this.attach(api)
     return api
   }
 
   addTab(params: { pages: { title: string }[] }): TabApi {
-    const api = new TabApi(this.host, params)
+    const api = withDocument(this.host.document, () => new TabApi(this.host, params))
     this.attach(api)
     return api
   }
 
   addSeparator(): SeparatorApi {
-    const api = new SeparatorApi()
+    const api = withDocument(this.host.document, () => new SeparatorApi())
     this.attach(api)
     return api
   }
 
   addBlade(params: Record<string, unknown>): BladeApi {
-    const api = new BladeApi(this.host, params)
+    const api = withDocument(this.host.document, () => new BladeApi(this.host, params))
     this.attach(api)
     return api
   }
@@ -338,21 +343,22 @@ export class BindingApi<T> extends Item {
           this.value.set(this.target[this.key] as T, MONITOR_META)
         }, interval),
       )
-    } else {
-      this.disposers.push(
-        this.value.subscribe((v, meta) => {
-          if (meta.source !== 'refresh') this.target[this.key] = v
-          const ev: TiaoChangeEvent<T> = {
-            value: v,
-            last: meta.last ?? true,
-            target: this,
-            key: this.key,
-          }
-          this.bindingEmitter.emit('change', ev)
-          this.parent?.bubble(ev as TiaoChangeEvent)
-        }),
-      )
     }
+    // monitors emit too (Value.set dedupes, so only actual poll changes fire);
+    // they never write back to their target
+    this.disposers.push(
+      this.value.subscribe((v, meta) => {
+        if (!options.readonly && meta.source !== 'refresh') this.target[this.key] = v
+        const ev: TiaoChangeEvent<T> = {
+          value: v,
+          last: meta.last ?? true,
+          target: this,
+          key: this.key,
+        }
+        this.bindingEmitter.emit('change', ev)
+        this.parent?.bubble(ev as TiaoChangeEvent)
+      }),
+    )
   }
 
   get label(): string {

@@ -1,4 +1,4 @@
-import { h } from './dom'
+import { h, withDocument } from './dom'
 import type { Anchor, Pane, PaneOptions, PaneTheme } from './pane'
 
 export interface PaneMenuHost {
@@ -68,7 +68,8 @@ export function createPaneMenu(host: PaneMenuHost): { toggle(): void; close(): v
 
   const openMenu = () => {
     open = true
-    built ??= buildMenu(host)
+    // built lazily on first open, so scope the document here too
+    built ??= withDocument(doc, () => buildMenu(host))
     built.refresh()
     built.shell.classList.add('tiao-open')
     // open to whichever side of the pane has room

@@ -107,6 +107,23 @@ describe('Pane bindings', () => {
     pane.dispose()
   })
 
+  it('readonly bindings emit change events when the monitored value changes', () => {
+    const params = { fps: 60 }
+    const pane = new Pane()
+    const binding = pane.addBinding(params, 'fps', { readonly: true })
+    const seen: number[] = []
+    binding.on('change', (ev) => seen.push(ev.value))
+    const bubbled: number[] = []
+    pane.on('change', (ev) => bubbled.push(ev.value as number))
+    params.fps = 30
+    binding.refresh()
+    binding.refresh() // unchanged value: no duplicate event
+    expect(seen).toEqual([30])
+    expect(bubbled).toEqual([30])
+    expect(params.fps).toBe(30)
+    pane.dispose()
+  })
+
   it('bubbles changes through nested folders', () => {
     const params = { x: 1 }
     const pane = new Pane()

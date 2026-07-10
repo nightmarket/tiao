@@ -1,11 +1,33 @@
 type Child = Node | string | null | undefined
 
+/**
+ * Document that `h`/`icon` create elements in. Pane construction and blade
+ * creation run under `withDocument(host.document, …)` so elements land in the
+ * right realm for multi-document setups (PaneOptions.document). Event-time
+ * creations fall back to the global document and get adopted on append.
+ */
+let currentDoc: Document | null = null
+
+export function withDocument<T>(doc: Document, fn: () => T): T {
+  const prev = currentDoc
+  currentDoc = doc
+  try {
+    return fn()
+  } finally {
+    currentDoc = prev
+  }
+}
+
+function creationDoc(): Document {
+  return currentDoc ?? document
+}
+
 export function h<K extends keyof HTMLElementTagNameMap>(
   tag: K,
   className?: string,
   ...children: Child[]
 ): HTMLElementTagNameMap[K] {
-  const el = document.createElement(tag)
+  const el = creationDoc().createElement(tag)
   if (className) el.className = className
   for (const c of children) {
     if (c == null) continue
@@ -17,11 +39,12 @@ export function h<K extends keyof HTMLElementTagNameMap>(
 const SVG_NS = 'http://www.w3.org/2000/svg'
 
 export function icon(name: 'chevron' | 'plus' | 'triangle'): SVGSVGElement {
-  const svg = document.createElementNS(SVG_NS, 'svg')
+  const doc = creationDoc()
+  const svg = doc.createElementNS(SVG_NS, 'svg')
   svg.setAttribute('viewBox', '0 0 12 12')
   svg.setAttribute('class', `tiao-icon tiao-icon-${name}`)
   svg.setAttribute('aria-hidden', 'true')
-  const path = document.createElementNS(SVG_NS, 'path')
+  const path = doc.createElementNS(SVG_NS, 'path')
   const d = {
     chevron: 'M3.5 4.5 L6 7.5 L8.5 4.5',
     plus: 'M6 2.5 V9.5 M2.5 6 H9.5',
@@ -42,7 +65,7 @@ export function icon(name: 'chevron' | 'plus' | 'triangle'): SVGSVGElement {
 
 /** 24px lucide-style icon shell; shapes get stroked with currentColor */
 function lucideIcon(name: string, shapes: SVGElement[]): SVGSVGElement {
-  const svg = document.createElementNS(SVG_NS, 'svg')
+  const svg = creationDoc().createElementNS(SVG_NS, 'svg')
   svg.setAttribute('viewBox', '0 0 24 24')
   svg.setAttribute('class', `tiao-icon tiao-icon-${name}`)
   svg.setAttribute('aria-hidden', 'true')
@@ -58,13 +81,13 @@ function lucideIcon(name: string, shapes: SVGElement[]): SVGSVGElement {
 }
 
 function svgPath(d: string): SVGPathElement {
-  const path = document.createElementNS(SVG_NS, 'path')
+  const path = creationDoc().createElementNS(SVG_NS, 'path')
   path.setAttribute('d', d)
   return path
 }
 
 function svgCircle(cx: number, cy: number, r: number): SVGCircleElement {
-  const circle = document.createElementNS(SVG_NS, 'circle')
+  const circle = creationDoc().createElementNS(SVG_NS, 'circle')
   circle.setAttribute('cx', String(cx))
   circle.setAttribute('cy', String(cy))
   circle.setAttribute('r', String(r))

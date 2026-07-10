@@ -1,7 +1,7 @@
 import { Container, FolderApi, TabApi, markPointerBlur, type BladeHost } from './blade'
 import { ensureBuiltins } from './controls/index'
 import { installCaret } from './controls/caret'
-import { collapseSelection, draggable, gearIcon, h, icon, searchIcon } from './dom'
+import { collapseSelection, draggable, gearIcon, h, icon, searchIcon, withDocument } from './dom'
 import { createPaneMenu } from './pane-menu'
 import { PluginRegistry, globalRegistry, type TiaoPlugin } from './plugin'
 import { injectStyles } from './styles'
@@ -127,33 +127,44 @@ export class Pane extends Container {
 
     injectStyles(doc)
 
-    this.rack = h('div', 'tiao-rack')
-    const gear = h('button', 'tiao-titlebar-btn tiao-pane-gear', gearIcon())
-    gear.type = 'button'
-    gear.title = 'Pane settings'
-    gear.setAttribute('data-tiao-menu-trigger', '')
-    const searchBtn = h('button', 'tiao-titlebar-btn tiao-pane-search', searchIcon())
-    searchBtn.type = 'button'
-    searchBtn.title = 'Search'
-    const collapseButton = h(
-      'button',
-      'tiao-titlebar-main',
-      icon('triangle'),
-      h('span', 'tiao-pane-title', options.title ?? ''),
-    )
-    collapseButton.type = 'button'
-    this.titlebar = h(
-      'div',
-      'tiao-titlebar',
-      collapseButton,
-      h('div', 'tiao-titlebar-actions', searchBtn, gear),
-    )
-    this.searchInput = h('input', 'tiao-search-input')
-    this.searchInput.type = 'search'
-    this.searchInput.placeholder = 'Search'
-    this.searchbar = h('div', 'tiao-searchbar', this.searchInput)
-    const body = h('div', 'tiao-pane-body', h('div', 'tiao-pane-clip', this.rack))
-    this.element = h('div', 'tiao-pane', this.titlebar, this.searchbar, body)
+    // build the chrome under the pane's document so h()/icon() create
+    // elements in the right realm (PaneOptions.document)
+    const chrome = withDocument(doc, () => {
+      const rack = h('div', 'tiao-rack')
+      const gear = h('button', 'tiao-titlebar-btn tiao-pane-gear', gearIcon())
+      gear.type = 'button'
+      gear.title = 'Pane settings'
+      gear.setAttribute('data-tiao-menu-trigger', '')
+      const searchBtn = h('button', 'tiao-titlebar-btn tiao-pane-search', searchIcon())
+      searchBtn.type = 'button'
+      searchBtn.title = 'Search'
+      const collapseButton = h(
+        'button',
+        'tiao-titlebar-main',
+        icon('triangle'),
+        h('span', 'tiao-pane-title', options.title ?? ''),
+      )
+      collapseButton.type = 'button'
+      const titlebar = h(
+        'div',
+        'tiao-titlebar',
+        collapseButton,
+        h('div', 'tiao-titlebar-actions', searchBtn, gear),
+      )
+      const searchInput = h('input', 'tiao-search-input')
+      searchInput.type = 'search'
+      searchInput.placeholder = 'Search'
+      const searchbar = h('div', 'tiao-searchbar', searchInput)
+      const body = h('div', 'tiao-pane-body', h('div', 'tiao-pane-clip', rack))
+      const element = h('div', 'tiao-pane', titlebar, searchbar, body)
+      return { rack, gear, searchBtn, titlebar, searchInput, searchbar, element }
+    })
+    const { gear, searchBtn } = chrome
+    this.rack = chrome.rack
+    this.titlebar = chrome.titlebar
+    this.searchInput = chrome.searchInput
+    this.searchbar = chrome.searchbar
+    this.element = chrome.element
 
     if (this.floating) {
       this.element.classList.add('tiao-floating')
@@ -538,7 +549,7 @@ export class Pane extends Container {
   private installResizeHandles(): void {
     const edges = ['left', 'right', 'bottom', 'bottom-left', 'bottom-right'] as const
     for (const edge of edges) {
-      const handle = h('div', `tiao-resize tiao-resize-${edge}`)
+      const handle = withDocument(this.doc, () => h('div', `tiao-resize tiao-resize-${edge}`))
       this.element.append(handle)
       const horiz: 'left' | 'right' | null =
         edge === 'bottom' ? null : edge.includes('left') ? 'left' : 'right'

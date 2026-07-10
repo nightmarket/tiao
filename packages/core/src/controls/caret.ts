@@ -1,4 +1,4 @@
-import { h } from '../dom'
+import { h, withDocument } from '../dom'
 
 /** text-like pane inputs that get the custom caret */
 const INPUT_SELECTOR =
@@ -20,7 +20,7 @@ export function installCaret(root: HTMLElement, doc: Document): () => void {
   // no canvas (e.g. jsdom): keep the native caret
   if (!win || !meas) return () => {}
 
-  const caret = h('div', 'tiao-caret')
+  const caret = withDocument(doc, () => h('div', 'tiao-caret'))
   let active: HTMLInputElement | null = null
   let frame = 0
   let deferredSearchbar: HTMLElement | null = null

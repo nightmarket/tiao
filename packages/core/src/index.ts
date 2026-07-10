@@ -37,6 +37,7 @@ export {
   longPress,
   cancelActiveDrag,
   setRowActive,
+  withDocument,
 } from './dom'
 export type { DragState, DragHandlers, LongPressHandlers } from './dom'
 export { clamp, mapRange, snap, formatNumber, decimalCount, round2, roundN } from './util'

@@ -192,6 +192,24 @@ function createColorView(ctx: PluginContext<unknown>) {
     strokeGamutEdge(c2d, srgbEdge, 'rgba(255,255,255,0.9)')
     planeHue = ok.H
   }
+  // hue drags can fire several pointermoves per frame; coalesce the O(w*h)
+  // plane repaint to one per frame. The very first draw stays synchronous so
+  // the plane never flashes blank when the oklch view appears.
+  let planeFrame = 0
+  const schedulePlaneDraw = () => {
+    if (planeHue < 0 || typeof requestAnimationFrame === 'undefined') {
+      drawPlane()
+      return
+    }
+    if (planeFrame) return
+    planeFrame = requestAnimationFrame(() => {
+      planeFrame = 0
+      drawPlane()
+    })
+  }
+  ctx.onDispose(() => {
+    if (planeFrame) cancelAnimationFrame(planeFrame)
+  })
 
   // format dropdown + matching text field
   // oklab (renders like oklch) and hsv (not a CSS notation) are only offered
@@ -264,7 +282,7 @@ function createColorView(ctx: PluginContext<unknown>) {
       pickerText.value = String(serializeColor(rgba, displayFormat(family, alpha)))
     }
     if (isOkMode()) {
-      if (ok.H !== planeHue) drawPlane()
+      if (ok.H !== planeHue) schedulePlaneDraw()
       okThumb.style.left = `${clamp(ok.C / OK_C_MAX, 0, 1) * 100}%`
       okThumb.style.top = `${clamp(1 - ok.L, 0, 1) * 100}%`
       okThumb.style.background = css
