@@ -87,8 +87,64 @@ const MAX_HEIGHT = 2000
 
 const panes = new Map<string, Pane>()
 
+/** all live floating panes (for the global H toggle) */
+const floatingPanes = new Set<Pane>()
+
+/** one global-toggle listener per document */
+const globalToggleInstalled = new WeakSet<Document>()
+
+/** auto-dismiss timers for the "press H to show" hint */
+const hideHintTimers = new WeakMap<Document, ReturnType<typeof setTimeout>>()
+
 /** shared stacking counter so the last-interacted floating pane wins */
 let zTop = 9999
+
+function isTypingTarget(t: EventTarget | null): boolean {
+  if (!(t instanceof HTMLElement)) return false
+  return t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable
+}
+
+/** show a browser-fullscreen-style tip after hiding all panes */
+function showHideHint(doc: Document): void {
+  let el = doc.querySelector('.tiao-hide-hint') as HTMLElement | null
+  if (!el) {
+    el = withDocument(doc, () => {
+      const tip = h('div', 'tiao-hide-hint')
+      tip.setAttribute('role', 'status')
+      tip.append('Press ', h('kbd', undefined, 'H'), ' to show debug panes')
+      return tip
+    })
+    doc.body.append(el)
+  }
+  // restart the slide-in so repeated hides re-show the tip
+  el.classList.remove('tiao-hide-hint-show')
+  void el.offsetWidth
+  el.classList.add('tiao-hide-hint-show')
+  const prev = hideHintTimers.get(doc)
+  if (prev) clearTimeout(prev)
+  hideHintTimers.set(
+    doc,
+    setTimeout(() => el.classList.remove('tiao-hide-hint-show'), 3200),
+  )
+}
+
+function dismissHideHint(doc: Document): void {
+  const prev = hideHintTimers.get(doc)
+  if (prev) clearTimeout(prev)
+  hideHintTimers.delete(doc)
+  doc.querySelector('.tiao-hide-hint')?.classList.remove('tiao-hide-hint-show')
+}
+
+function ensureGlobalToggle(doc: Document): void {
+  if (globalToggleInstalled.has(doc)) return
+  globalToggleInstalled.add(doc)
+  doc.addEventListener('keydown', (e) => {
+    if (e.key !== 'h' && e.key !== 'H') return
+    if (e.metaKey || e.ctrlKey || e.altKey) return
+    if (isTypingTarget(e.target)) return
+    Pane.toggleAll(doc)
+  })
+}
 
 export class Pane extends Container {
   readonly element: HTMLElement
@@ -109,6 +165,21 @@ export class Pane extends Container {
   /** look up a live pane by id */
   static get(id: string): Pane | undefined {
     return panes.get(id)
+  }
+
+  /**
+   * Hide or show every floating pane in `doc`.
+   * If any are visible → hide all (and show a "Press H" tip); otherwise show all.
+   * Returns whether panes are now hidden.
+   */
+  static toggleAll(doc: Document = document): boolean {
+    const list = [...floatingPanes].filter((p) => p.element.ownerDocument === doc)
+    if (list.length === 0) return false
+    const hide = list.some((p) => !p.hidden)
+    for (const p of list) p.hidden = hide
+    if (hide) showHideHint(doc)
+    else dismissHideHint(doc)
+    return hide
   }
 
   constructor(options: PaneOptions = {}) {
@@ -362,12 +433,17 @@ export class Pane extends Container {
     if (options.toggleKey) {
       const onKey = (e: KeyboardEvent) => {
         if (e.key !== options.toggleKey) return
-        const t = e.target as HTMLElement | null
-        if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
+        if (isTypingTarget(e.target)) return
         this.hidden = !this.hidden
       }
       doc.addEventListener('keydown', onKey)
       this.disposers.push(() => doc.removeEventListener('keydown', onKey))
+    }
+
+    if (this.floating) {
+      floatingPanes.add(this)
+      ensureGlobalToggle(doc)
+      this.disposers.push(() => floatingPanes.delete(this))
     }
 
     ;(options.container ?? doc.body).append(this.element)

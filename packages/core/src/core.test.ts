@@ -290,6 +290,42 @@ describe('Pane registry and chrome', () => {
     expect(Pane.get('main')).toBeUndefined()
   })
 
+  it('H toggles all floating panes and shows a restore hint', () => {
+    const a = new Pane({ title: 'A' })
+    const b = new Pane({ title: 'B' })
+    const inline = new Pane({ title: 'Inline', container: document.body.appendChild(document.createElement('div')) })
+
+    expect(Pane.toggleAll()).toBe(true)
+    expect(a.hidden).toBe(true)
+    expect(b.hidden).toBe(true)
+    expect(inline.hidden).toBe(false)
+    expect(document.querySelector('.tiao-hide-hint.tiao-hide-hint-show')).not.toBeNull()
+
+    expect(Pane.toggleAll()).toBe(false)
+    expect(a.hidden).toBe(false)
+    expect(b.hidden).toBe(false)
+    expect(document.querySelector('.tiao-hide-hint.tiao-hide-hint-show')).toBeNull()
+
+    a.dispose()
+    b.dispose()
+    inline.dispose()
+  })
+
+  it('H keydown hides floating panes unless focus is in an input', () => {
+    const pane = new Pane()
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'h', bubbles: true }))
+    expect(pane.hidden).toBe(true)
+
+    pane.hidden = false
+    const input = document.createElement('input')
+    document.body.append(input)
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'h', bubbles: true }))
+    expect(pane.hidden).toBe(false)
+
+    input.remove()
+    pane.dispose()
+  })
+
   it('persists expanded state per id', () => {
     const pane = new Pane({ id: 'p1' })
     pane.expanded = false

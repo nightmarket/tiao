@@ -58,7 +58,8 @@ Styles are injected automatically on first pane creation. To manage CSS yourself
 - Hover the title bar for a gear icon (or right-click the pane) to open the Pane Settings panel: toggle dragging, switch themes (light, dark, solarized, nord, catppuccin), pick the accent color, and jump between the 9 anchor positions on a mini window that mirrors your viewport's aspect ratio
 - The search icon in the title bar opens a filter row: rows are matched by label/title, folders holding a match are forced open, and a folder-title match keeps its whole subtree visible. `pane.filter(query)` / `pane.searchOpen` do the same programmatically
 - `draggable: true` (default for floating panes); drag position, anchor, and the draggable toggle persist to `localStorage` when the pane has an `id`
-- `toggleKey: '\`'` toggles visibility; `pane.hidden`, `pane.expanded` are settable
+- `toggleKey: '\`'` toggles that pane's visibility; `pane.hidden`, `pane.expanded` are settable
+- Press `H` to hide/show all floating panes (skipped while typing). Hiding shows a brief "Press H to show debug panes" tip; `Pane.toggleAll()` does the same programmatically.
 - `maxHeight: 500` (default) caps the pane height; content scrolls when it overflows
 - Clicking a pane brings it above other overlapping panes
 - Multiple panes are independent; `new Pane({ id: 'export' })` registers it for `Pane.get('export')`
