@@ -1,5 +1,5 @@
 export { Pane } from './pane'
-export type { Anchor, PaneOptions, PaneSize, PaneTheme } from './pane'
+export type { Anchor, PaneOptions, PaneSize, PaneStyle, PaneTheme } from './pane'
 export {
   BindingApi,
   BladeApi,

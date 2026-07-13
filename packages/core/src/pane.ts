@@ -41,6 +41,8 @@ export interface PaneOptions {
   theme?: Record<string, string>
   /** overall scale: fonts, control heights, spacing, and width (default 'm') */
   size?: PaneSize
+  /** surface style: bouba (rounded glass) or kiki (sharp / flat) */
+  style?: PaneStyle
   width?: number
   document?: Document
   /** internal: set false to omit the settings menu (used by the menu's own pane) */
@@ -55,6 +57,7 @@ interface PersistedState {
   anchor?: Anchor | undefined
   draggable?: boolean | undefined
   theme?: PaneTheme | undefined
+  style?: PaneStyle | undefined
   accent?: string | undefined
   /** width / max-height set by edge-resizing */
   w?: number | undefined
@@ -72,6 +75,20 @@ const THEME_CLASS: Record<PaneTheme, string | null> = {
   solarized: 'tiao-theme-solarized',
   nord: 'tiao-theme-nord',
   catppuccin: 'tiao-theme-catppuccin',
+}
+
+/** Surface style (shape/elevation) — orthogonal to PaneTheme colors. */
+export type PaneStyle = 'bouba' | 'kiki'
+
+const STYLE_CLASS: Record<PaneStyle, string | null> = {
+  bouba: null,
+  kiki: 'tiao-style-kiki',
+}
+
+/** Map legacy persisted ids onto the bouba/kiki axis. */
+function normalizeStyle(v: string | undefined | null): PaneStyle {
+  if (v === 'kiki' || v === 'arena') return 'kiki'
+  return 'bouba' // includes 'default', 'bouba', missing
 }
 
 export type PaneSize = 's' | 'm' | 'l'
@@ -256,6 +273,7 @@ export class Pane extends Container {
     }
     if (persisted?.expanded !== undefined) this._expanded = persisted.expanded
     this.applyThemeMode(persisted?.theme ?? 'dark')
+    this.applyStyleMode(normalizeStyle(persisted?.style ?? options.style))
     if (persisted?.accent) this.applyTheme({ accent: persisted.accent })
     if (persisted?.draggable !== undefined && this.floating) this._draggable = persisted.draggable
     if (persisted?.numbers !== undefined) this._numbers = persisted.numbers
@@ -384,6 +402,10 @@ export class Pane extends Container {
         getTheme: () => this.theme,
         setTheme: (theme) => {
           this.theme = theme
+        },
+        getStyle: () => this.style,
+        setStyle: (style) => {
+          this.style = style
         },
         getAccent: () => this.accent,
         setAccent: (accent) => {
@@ -553,6 +575,17 @@ export class Pane extends Container {
   set theme(v: PaneTheme) {
     this.applyThemeMode(v)
     this.saveState({ theme: v })
+  }
+
+  get style(): PaneStyle {
+    for (const [name, cls] of Object.entries(STYLE_CLASS) as [PaneStyle, string | null][]) {
+      if (cls && this.element.classList.contains(cls)) return name
+    }
+    return 'bouba'
+  }
+  set style(v: PaneStyle) {
+    this.applyStyleMode(normalizeStyle(v))
+    this.saveState({ style: normalizeStyle(v) })
   }
 
   /** current --tiao-accent (inline override, else the themed default) */
@@ -747,6 +780,14 @@ export class Pane extends Container {
       if (cls) this.element.classList.remove(cls)
     }
     const next = THEME_CLASS[theme]
+    if (next) this.element.classList.add(next)
+  }
+
+  private applyStyleMode(style: PaneStyle): void {
+    for (const cls of Object.values(STYLE_CLASS)) {
+      if (cls) this.element.classList.remove(cls)
+    }
+    const next = STYLE_CLASS[style]
     if (next) this.element.classList.add(next)
   }
 

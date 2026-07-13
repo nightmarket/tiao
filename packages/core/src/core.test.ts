@@ -1129,6 +1129,40 @@ describe('Pane registry and chrome', () => {
     revived.dispose()
   })
 
+  it('menu style select switches kiki style and persists per pane id', () => {
+    const pane = new Pane({ id: 'styled' })
+    pane.element.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))
+    const menu = pane.element.querySelector('.tiao-pane-menu.tiao-open')!
+    const selects = menu.querySelectorAll('.tiao-select')
+    // theme is first select; style is second
+    const styleSelect = selects[1] as HTMLSelectElement
+    expect(pane.style).toBe('bouba')
+    expect(pane.element.classList.contains('tiao-style-kiki')).toBe(false)
+
+    styleSelect.value = '1'
+    styleSelect.dispatchEvent(new Event('change'))
+    expect(pane.style).toBe('kiki')
+    expect(pane.element.classList.contains('tiao-style-kiki')).toBe(true)
+    pane.dispose()
+
+    const revived = new Pane({ id: 'styled' })
+    expect(revived.style).toBe('kiki')
+    expect(revived.element.classList.contains('tiao-style-kiki')).toBe(true)
+    revived.dispose()
+  })
+
+  it('migrates legacy arena/default style ids to kiki/bouba', () => {
+    localStorage.setItem('tiao:legacy-style', JSON.stringify({ style: 'arena' }))
+    const a = new Pane({ id: 'legacy-style' })
+    expect(a.style).toBe('kiki')
+    a.dispose()
+
+    localStorage.setItem('tiao:legacy-style2', JSON.stringify({ style: 'default' }))
+    const b = new Pane({ id: 'legacy-style2' })
+    expect(b.style).toBe('bouba')
+    b.dispose()
+  })
+
   it('menu "Numbers" toggle prepends nesting-aware section indexes to folder titles', () => {
     const pane = new Pane({ id: 'numbered' })
     const a = pane.addFolder({ title: 'Alpha' })
