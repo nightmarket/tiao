@@ -61,6 +61,30 @@ export function applyOverlayTheme(overlay: HTMLElement, from: Element): void {
 }
 
 /**
+ * Value readout that follows the pointer above a body-portaled overlay
+ * (angle dial, XY pad) — same visual language as the scrubber guide tooltip.
+ */
+export function createOverlayTooltip(overlay: HTMLElement): {
+  place(originX: number, originY: number, clientX: number, clientY: number, text: string): void
+  hide(): void
+} {
+  const el = h('div', 'tiao-scrub-tooltip')
+  el.style.visibility = 'hidden'
+  overlay.append(el)
+  return {
+    place(originX, originY, clientX, clientY, text) {
+      el.style.visibility = 'visible'
+      el.style.left = `${clientX - originX}px`
+      el.style.top = `${clientY - originY}px`
+      el.textContent = text
+    },
+    hide() {
+      el.style.visibility = 'hidden'
+    },
+  }
+}
+
+/**
  * Draggable number field: drag the left knob to scrub, click the value to type.
  * While scrubbing, a dotted guide + value tooltip follow the pointer (tweakpane-style).
  * Used by plain number inputs and point component fields.

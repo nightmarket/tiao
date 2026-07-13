@@ -260,12 +260,82 @@ describe('Pane bindings', () => {
     // hover-follow: origin is knob center (50,50) → (100, 50) is right = 90°
     document.dispatchEvent(new MouseEvent('pointermove', { clientX: 100, clientY: 50, bubbles: true }))
     expect(params.yaw).toBe(90)
+    expect(document.querySelector('.tiao-scrub-tooltip')?.textContent).toBe('90°')
     // mousedown commits and closes
     document.dispatchEvent(
       new MouseEvent('pointerdown', { button: 0, clientX: 50, clientY: 100, bubbles: true }),
     )
     expect(params.yaw).toBe(180)
     expect(document.querySelector('.tiao-angle-overlay')).toBeNull()
+    pane.dispose()
+  })
+
+  it('point2d sticky overlay shows a value tooltip while adjusting', () => {
+    const params = { pos: { x: 0, y: 0 } }
+    const pane = new Pane()
+    const binding = pane.addBinding(params, 'pos', {
+      x: { min: -1, max: 1 },
+      y: { min: -1, max: 1 },
+    })
+    const toggle = binding.element.querySelector('.tiao-point-pad-toggle') as HTMLButtonElement
+    vi.spyOn(toggle, 'getBoundingClientRect').mockReturnValue({
+      left: 0,
+      right: 20,
+      top: 0,
+      bottom: 20,
+      width: 20,
+      height: 20,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    })
+    toggle.click()
+    // pad centered at (10,10), size 136 → right edge ≈ (10+68, 10) = x max
+    document.dispatchEvent(new MouseEvent('pointermove', { clientX: 78, clientY: 10, bubbles: true }))
+    expect(params.pos.x).toBeCloseTo(1, 5)
+    expect(params.pos.y).toBeCloseTo(0, 5)
+    expect(document.querySelector('.tiao-scrub-tooltip')?.textContent).toBe('1.00, 0.00')
+    pane.dispose()
+  })
+
+  it('point2d long-press drag commits and closes on pointerup', () => {
+    vi.useFakeTimers()
+    const params = { pos: { x: 0, y: 0 } }
+    const pane = new Pane()
+    const binding = pane.addBinding(params, 'pos', {
+      x: { min: -1, max: 1 },
+      y: { min: -1, max: 1 },
+    })
+    const toggle = binding.element.querySelector('.tiao-point-pad-toggle') as HTMLButtonElement
+    vi.spyOn(toggle, 'getBoundingClientRect').mockReturnValue({
+      left: 0,
+      right: 20,
+      top: 0,
+      bottom: 20,
+      width: 20,
+      height: 20,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    })
+    toggle.dispatchEvent(
+      new MouseEvent('pointerdown', { button: 0, clientX: 10, clientY: 10, bubbles: true }),
+    )
+    vi.advanceTimersByTime(200)
+    expect(document.querySelector('.tiao-point-overlay')).not.toBeNull()
+    // drag past move threshold toward pad right edge
+    document.dispatchEvent(
+      new MouseEvent('pointermove', { clientX: 78, clientY: 10, bubbles: true, buttons: 1 }),
+    )
+    expect(params.pos.x).toBeCloseTo(1, 5)
+    expect(document.querySelector('.tiao-scrub-tooltip')?.textContent).toBe('1.00, 0.00')
+    // release commits — no second click needed
+    document.dispatchEvent(
+      new MouseEvent('pointerup', { button: 0, clientX: 78, clientY: 10, bubbles: true }),
+    )
+    expect(params.pos.x).toBeCloseTo(1, 5)
+    expect(document.querySelector('.tiao-point-overlay')).toBeNull()
+    vi.useRealTimers()
     pane.dispose()
   })
 
