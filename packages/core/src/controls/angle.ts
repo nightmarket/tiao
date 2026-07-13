@@ -1,7 +1,7 @@
 import { h, startDrag } from '../dom'
 import { clamp, formatNumber, snap } from '../util'
 import { createStickyOverlay } from './popup'
-import { createScrubber } from './scrubber'
+import { createOverlayTooltip, createScrubber } from './scrubber'
 import type { InputPlugin, PluginContext, PluginView } from '../plugin'
 
 const SVG_NS = 'http://www.w3.org/2000/svg'
@@ -106,6 +106,7 @@ function createAngleRow(ctx: PluginContext<number>): PluginView {
   const dial = createAngleDial(doc, DIAL_SIZE)
   const overlay = h('div', 'tiao-scrub-overlay tiao-angle-overlay', dial.element)
   dial.element.style.transform = 'translate(-50%, -50%)'
+  const tooltip = createOverlayTooltip(overlay)
   let originX = 0
   let originY = 0
 
@@ -152,6 +153,7 @@ function createAngleRow(ctx: PluginContext<number>): PluginView {
     if (rad !== null) noteDirection(rad)
     setFromPointer(originX, originY, clientX, clientY, last)
     syncDial()
+    tooltip.place(originX, originY, clientX, clientY, format(value.get()))
   }
 
   const beginAngleDrag = (ev: PointerEvent) => {
@@ -183,10 +185,12 @@ function createAngleRow(ctx: PluginContext<number>): PluginView {
     onOpen: () => {
       lastPointerRad = toRad(value.get())
       ccw = false
+      tooltip.hide()
     },
     onClose: () => {
       lastPointerRad = null
       ccw = false
+      tooltip.hide()
     },
     render: syncDial,
     onDispose: ctx.onDispose,

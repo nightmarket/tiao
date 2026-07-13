@@ -1,7 +1,7 @@
 import { h, icon, startDrag } from '../dom'
-import { clamp, isRecord, mapRange } from '../util'
+import { clamp, formatNumber, isRecord, mapRange, snap } from '../util'
 import { createStickyOverlay } from './popup'
-import { createComponentScrubber } from './scrubber'
+import { createComponentScrubber, createOverlayTooltip } from './scrubber'
 import type { BindingOptions, InputPlugin, PluginContext } from '../plugin'
 
 const AXES = ['x', 'y', 'z', 'w'] as const
@@ -17,6 +17,14 @@ interface AxisOptions {
 
 const SVG_NS = 'http://www.w3.org/2000/svg'
 const PAD_SIZE = 136
+/** default display / snap precision for point axes when no step is set */
+const DEFAULT_POINT_STEP = 0.01
+
+function resolveAxisStep(axisOpts: AxisOptions, bindingStep: unknown): number {
+  if (typeof axisOpts.step === 'number') return axisOpts.step
+  if (typeof bindingStep === 'number') return bindingStep
+  return DEFAULT_POINT_STEP
+}
 
 function pointAxes(value: unknown): Axis[] | null {
   if (!isRecord(value)) return null
@@ -50,9 +58,9 @@ export const pointInputPlugin: InputPlugin<PointValue> = {
 
     const scrubs = axes.map((axis) => {
       const axisOpts = (ctx.options[axis] as AxisOptions | undefined) ?? {}
-      const scrubOpts: AxisOptions = { ...axisOpts }
-      if (scrubOpts.step === undefined && typeof ctx.options.step === 'number') {
-        scrubOpts.step = ctx.options.step
+      const scrubOpts: AxisOptions = {
+        ...axisOpts,
+        step: resolveAxisStep(axisOpts, ctx.options.step),
       }
       const scrub = createComponentScrubber(
         ctx.value,
@@ -94,6 +102,8 @@ function createPadOverlay(
 ): { openSticky: (pointer?: { x: number; y: number }) => void } {
   const xOpts = (options['x'] as AxisOptions | undefined) ?? {}
   const yOpts = (options['y'] as AxisOptions | undefined) ?? {}
+  const xStep = resolveAxisStep(xOpts, options.step)
+  const yStep = resolveAxisStep(yOpts, options.step)
   const current = ctx.value.get()
   const xMin = xOpts.min ?? Math.min(-1, (current['x'] ?? 0) * 2)
   const xMax = xOpts.max ?? Math.max(1, (current['x'] ?? 0) * 2)
@@ -125,6 +135,10 @@ function createPadOverlay(
   area.style.height = `${PAD_SIZE}px`
   const overlay = h('div', 'tiao-scrub-overlay tiao-point-overlay', area)
   area.style.transform = 'translate(-50%, -50%)'
+  const tooltip = createOverlayTooltip(overlay)
+
+  const formatPoint = (v: PointValue) =>
+    `${formatNumber(v['x'] ?? 0, xStep)}, ${formatNumber(v['y'] ?? 0, yStep)}`
 
   const render = (v: PointValue) => {
     const left = clamp(mapRange(v['x'] ?? 0, xMin, xMax, 0, 100), 0, 100)
@@ -139,11 +153,13 @@ function createPadOverlay(
 
   // pad rect in screen space, rebuilt whenever the overlay is (re)centered
   let rect = { left: 0, right: 0, top: 0, bottom: 0 }
+  let originX = 0
+  let originY = 0
 
   const centerOnToggle = () => {
     const r = toggle.getBoundingClientRect()
-    const originX = r.left + r.width / 2
-    const originY = r.top + r.height / 2
+    originX = r.left + r.width / 2
+    originY = r.top + r.height / 2
     overlay.style.left = `${originX}px`
     overlay.style.top = `${originY}px`
     // virtual pad centered on the plus icon
@@ -157,13 +173,14 @@ function createPadOverlay(
   }
 
   const apply = (clientX: number, clientY: number, last: boolean) => {
-    const x = clamp(mapRange(clientX, rect.left, rect.right, xMin, xMax), xMin, xMax)
-    const y = clamp(mapRange(clientY, rect.bottom, rect.top, yMin, yMax), yMin, yMax)
-    ctx.value.set({ ...ctx.value.get(), x, y }, { source: 'ui', last })
+    const x = clamp(snap(mapRange(clientX, rect.left, rect.right, xMin, xMax), xStep), xMin, xMax)
+    const y = clamp(snap(mapRange(clientY, rect.bottom, rect.top, yMin, yMax), yStep), yMin, yMax)
+    const next = { ...ctx.value.get(), x, y }
+    ctx.value.set(next, { source: 'ui', last })
+    tooltip.place(originX, originY, clientX, clientY, formatPoint(next))
   }
 
-  // click / long-press both open the overlay editor; long-press keeps adjusting
-  // while the pointer stays down, then resumes hover-follow on release
+  // click → sticky hover-follow; long-press → drag and commit on release
   const pad = createStickyOverlay({
     document: doc,
     trigger: toggle,
@@ -173,9 +190,7 @@ function createPadOverlay(
     center: centerOnToggle,
     apply,
     onLongPress: (e) => {
-      pad.toggleSticky()
-      pad.setHoverFollow(false)
-      centerOnToggle()
+      pad.open({ sticky: false, follow: false })
       // don't apply at the icon center (pad origin) — wait until the pointer moves
       startDrag(e, {
         onMove: (s) => {
@@ -184,10 +199,12 @@ function createPadOverlay(
         },
         onEnd: (s) => {
           if (s.moved) apply(s.x, s.y, true)
-          if (pad.isOpen() && pad.isSticky()) pad.setHoverFollow(true)
+          pad.close()
         },
       })
     },
+    onOpen: () => tooltip.hide(),
+    onClose: () => tooltip.hide(),
     // follow moves only — don't jump to the icon center on open
     render: () => render(ctx.value.get()),
     onDispose: ctx.onDispose,
