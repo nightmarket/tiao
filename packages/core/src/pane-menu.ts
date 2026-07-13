@@ -1,5 +1,5 @@
 import { h, withDocument } from './dom'
-import type { Anchor, Pane, PaneOptions, PaneTheme } from './pane'
+import type { Anchor, Pane, PaneOptions, PaneStyle, PaneTheme } from './pane'
 
 export interface PaneMenuHost {
   element: HTMLElement
@@ -12,6 +12,8 @@ export interface PaneMenuHost {
   setAnchor(anchor: Anchor): void
   getTheme(): PaneTheme
   setTheme(theme: PaneTheme): void
+  getStyle(): PaneStyle
+  setStyle(style: PaneStyle): void
   getAccent(): string
   setAccent(accent: string): void
   getNumbers(): boolean
@@ -104,6 +106,7 @@ function buildMenu(host: PaneMenuHost): { shell: HTMLElement; refresh: () => voi
   const settings = {
     draggable: host.getDraggable(),
     theme: host.getTheme(),
+    style: host.getStyle(),
     accent: host.getAccent(),
     numbers: host.getNumbers(),
   }
@@ -111,9 +114,10 @@ function buildMenu(host: PaneMenuHost): { shell: HTMLElement; refresh: () => voi
   host.onDispose(() => menuPane.dispose())
 
   // the embedded pane re-declares the theme variables, so its chrome has to
-  // track the host's theme and accent explicitly
+  // track the host's theme, style, and accent explicitly
   const syncChrome = () => {
     menuPane.theme = host.getTheme()
+    menuPane.style = host.getStyle()
     menuPane.applyTheme({ accent: host.getAccent() })
   }
 
@@ -137,6 +141,18 @@ function buildMenu(host: PaneMenuHost): { shell: HTMLElement; refresh: () => voi
   })
   themeBinding.on('change', (ev) => {
     host.setTheme(ev.value)
+    syncChrome()
+  })
+
+  const styleBinding = menuPane.addBinding(settings, 'style', {
+    label: 'Style',
+    options: {
+      Bouba: 'bouba',
+      Kiki: 'kiki',
+    },
+  })
+  styleBinding.on('change', (ev) => {
+    host.setStyle(ev.value)
     syncChrome()
   })
 
@@ -197,10 +213,12 @@ function buildMenu(host: PaneMenuHost): { shell: HTMLElement; refresh: () => voi
   const refresh = () => {
     settings.draggable = host.getDraggable()
     settings.theme = host.getTheme()
+    settings.style = host.getStyle()
     settings.accent = host.getAccent()
     settings.numbers = host.getNumbers()
     dragBinding.refresh()
     themeBinding.refresh()
+    styleBinding.refresh()
     accentBinding.refresh()
     numbersBinding.refresh()
     renderAnchors()

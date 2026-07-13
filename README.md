@@ -72,9 +72,10 @@ All styling flows through CSS custom properties on `.tiao-pane` (`--tiao-bg`, `-
 new Pane({ theme: { accent: '#f0f', '--tiao-width': '320px' } })
 pane.theme = 'light'      // default 'dark'; also 'light' | 'solarized' | 'nord' | 'catppuccin'
 pane.accent = '#ff0080'   // sets --tiao-accent
+pane.style = 'kiki'       // 'bouba' (rounded glass, default) | 'kiki' (sharp / flat)
 ```
 
-Theme and accent are also editable from the Pane Settings panel (gear icon or right-click), and both persist to `localStorage` when the pane has an `id`.
+Theme, accent, and style are also editable from the Pane Settings panel (gear icon or right-click), and persist to `localStorage` when the pane has an `id`. Style is orthogonal to theme: **Bouba** = rounded glass; **Kiki** = sharp corners / hairline elevation / no blur.
 
 ## React
 

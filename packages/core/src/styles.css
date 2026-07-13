@@ -1,5 +1,4 @@
 .tiao-pane {
-  /* ---- neutral scale (tailwind neutral) ---- */
   --tiao-neutral-50: #fafafa;
   --tiao-neutral-100: #f5f5f5;
   --tiao-neutral-200: #e5e5e5;
@@ -11,33 +10,18 @@
   --tiao-neutral-800: #262626;
   --tiao-neutral-900: #171717;
   --tiao-neutral-950: #0a0a0a;
-
-  /* ---- theme tokens (light = base; dark is the pane default via class) ----
-     Light aims for crisp paper glass: white body, cool titleband, inkier
-     type, and multi-layer elevation so the pane floats over bright scenes
-     the way dark mode floats over canvases. */
   --tiao-bg: rgba(255, 255, 255, 0.94);
-  /* opaque variant for popups/editors that must not show content through */
   --tiao-bg-solid: #ffffff;
-  --tiao-fg: var(--tiao-neutral-950);
-  /* text hierarchy: fg (headers) > muted (row labels) > soft (values,
-     monitors) > dim (secondary hints) > faint (chrome like carets) */
-  --tiao-fg-muted: var(--tiao-neutral-700);
-  --tiao-fg-soft: var(--tiao-neutral-600);
-  --tiao-fg-dim: var(--tiao-neutral-500);
-  --tiao-fg-faint: var(--tiao-neutral-400);
-  /* cool slate wash so the titlebar reads as a distinct band on white */
+  --tiao-fg: #0a0a0a;
+  --tiao-fg-muted: #404040;
+  --tiao-fg-soft: #525252;
+  --tiao-fg-dim: #737373;
+  --tiao-fg-faint: #a3a3a3;
   --tiao-titlebar-bg: rgba(15, 23, 42, 0.055);
-  /* vertical guide marking folder nesting depth; -hover is the intermediate
-     section-wide hover state, -active is direct hover on the line itself.
-     opaque (mixed toward the pane background, not transparent) so the line
-     and its cap dots overlap without alpha-stacking artifacts; the fg/bg mix
-     adapts to both themes */
   --tiao-depth-line: color-mix(in srgb, var(--tiao-fg) 14%, var(--tiao-bg-solid));
   --tiao-depth-line-hover: color-mix(in srgb, var(--tiao-fg) 24%, var(--tiao-bg-solid));
   --tiao-depth-line-active: color-mix(in srgb, var(--tiao-fg) 40%, var(--tiao-bg-solid));
   --tiao-hover: rgba(15, 23, 42, 0.055);
-  /* softer section-wide highlight, one contrast step below row hover */
   --tiao-hover-soft: rgba(15, 23, 42, 0.03);
   --tiao-hover-strong: rgba(15, 23, 42, 0.09);
   --tiao-surface: rgba(15, 23, 42, 0.055);
@@ -45,57 +29,36 @@
   --tiao-button-bg: rgba(15, 23, 42, 0.07);
   --tiao-button-bg-hover: rgba(15, 23, 42, 0.12);
   --tiao-fill: rgba(15, 23, 42, 0.1);
-  /* palette yellow; dark label on accent chips for contrast */
   --tiao-accent: #facc15;
   --tiao-accent-fg: #171717;
   --tiao-border: rgba(15, 23, 42, 0.1);
-  --tiao-radius: 7px;
-  --tiao-radius-sm: 4px;
-  --tiao-width: 280px;
-  /* left inset for folder-header carets *inside* a rack; titlebar adds the
-     root rack's horizontal pad so depth-0 carets share one pane-edge axis */
-  --tiao-gutter: 2px;
-  --tiao-max-height: 500px;
-  --tiao-font:
-    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  --tiao-font-mono:
-    ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+  --tiao-graph-stroke: #a3a3a3;
+  --tiao-shadow: 0 0 0 1px var(--tiao-border), 0 2px 6px rgba(15, 23, 42, 0.05), 0 16px 40px rgba(15, 23, 42, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.85);
+  --tiao-shadow-popup: 0 0 0 1px var(--tiao-border), 0 10px 32px rgba(15, 23, 42, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  --tiao-shadow-raised: 0 1px 2px rgba(15, 23, 42, 0.12), 0 0 0 1px rgba(15, 23, 42, 0.05);
+  --tiao-backdrop-filter: blur(16px) saturate(1.2);
+  --tiao-overlay-filter: blur(3px) saturate(1.05);
+  --tiao-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --tiao-font-mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+  --tiao-line-height: 1.35;
   --tiao-font-size: 11px;
   --tiao-font-size-mono: 10px;
-  /* dimension tokens: the s/m/l size classes rescale the whole pane by
-     overriding these (see .tiao-size-s / .tiao-size-l) */
-  /* control-column height for single-line inputs; row min-height adds the
-     vertical padding around it, so shrinking this packs stacked rows tighter */
   --tiao-row-height: 18px;
   --tiao-titlebar-height: 24px;
   --tiao-header-height: 24px;
   --tiao-gap: 6px;
-  /* nesting offset per level; sized so a nested section's hover background
-     clears the parent depth line by ~5px */
   --tiao-indent: 16px;
   --tiao-icon-size: 12px;
-  /* multi-layer elevation: hairline ring matches titlebar border-bottom,
-     then near shadow + soft ambient + top-edge specular */
-  --tiao-shadow:
-    0 0 0 1px var(--tiao-border),
-    0 2px 6px rgba(15, 23, 42, 0.05),
-    0 16px 40px rgba(15, 23, 42, 0.12),
-    inset 0 1px 0 rgba(255, 255, 255, 0.85);
-  --tiao-shadow-popup:
-    0 0 0 1px var(--tiao-border),
-    0 10px 32px rgba(15, 23, 42, 0.16),
-    inset 0 1px 0 rgba(255, 255, 255, 0.9);
-  /* selected tabs / segmented cells that lift off their tray */
-  --tiao-shadow-raised:
-    0 1px 2px rgba(15, 23, 42, 0.12),
-    0 0 0 1px rgba(15, 23, 42, 0.05);
-  /* keep the stroke quieter than the readout number */
-  --tiao-graph-stroke: var(--tiao-fg-faint);
+  --tiao-width: 280px;
+  --tiao-gutter: 2px;
+  --tiao-max-height: 500px;
+  --tiao-radius: 7px;
+  --tiao-radius-sm: 4px;
 
   position: relative;
   font-family: var(--tiao-font);
   font-size: var(--tiao-font-size);
-  line-height: 1.35;
+  line-height: var(--tiao-line-height);
   color: var(--tiao-fg);
   background: var(--tiao-bg);
   border-radius: var(--tiao-radius);
@@ -104,20 +67,22 @@
   box-sizing: border-box;
   user-select: none;
   -webkit-user-select: none;
-  backdrop-filter: blur(16px) saturate(1.2);
-  -webkit-backdrop-filter: blur(16px) saturate(1.2);
+  backdrop-filter: var(--tiao-backdrop-filter);
+  -webkit-backdrop-filter: var(--tiao-backdrop-filter);
 }
 
 .tiao-pane.tiao-theme-dark {
   --tiao-bg: rgba(23, 23, 23, 0.95);
   --tiao-bg-solid: #171717;
-  --tiao-fg: var(--tiao-neutral-100);
-  --tiao-fg-muted: var(--tiao-neutral-300);
-  --tiao-fg-soft: var(--tiao-neutral-400);
-  --tiao-fg-dim: var(--tiao-neutral-500);
-  --tiao-fg-faint: var(--tiao-neutral-600);
+  --tiao-fg: #f5f5f5;
+  --tiao-fg-muted: #d4d4d4;
+  --tiao-fg-soft: #a3a3a3;
+  --tiao-fg-dim: #737373;
+  --tiao-fg-faint: #525252;
   --tiao-titlebar-bg: rgba(255, 255, 255, 0.06);
-  /* depth-line colors derive from fg/bg-solid, so they retheme automatically */
+  --tiao-depth-line: color-mix(in srgb, var(--tiao-fg) 14%, var(--tiao-bg-solid));
+  --tiao-depth-line-hover: color-mix(in srgb, var(--tiao-fg) 24%, var(--tiao-bg-solid));
+  --tiao-depth-line-active: color-mix(in srgb, var(--tiao-fg) 40%, var(--tiao-bg-solid));
   --tiao-hover: rgba(255, 255, 255, 0.09);
   --tiao-hover-soft: rgba(255, 255, 255, 0.045);
   --tiao-hover-strong: rgba(255, 255, 255, 0.14);
@@ -129,14 +94,12 @@
   --tiao-accent: #facc15;
   --tiao-accent-fg: #171717;
   --tiao-border: rgba(255, 255, 255, 0.08);
+  --tiao-graph-stroke: #525252;
   --tiao-shadow: 0 4px 28px rgba(0, 0, 0, 0.45), 0 0 0 1px var(--tiao-border);
   --tiao-shadow-popup: 0 8px 32px rgba(0, 0, 0, 0.55), 0 0 0 1px var(--tiao-border);
   --tiao-shadow-raised: 0 1px 3px rgba(0, 0, 0, 0.35);
-  --tiao-graph-stroke: var(--tiao-fg-faint);
 }
 
-/* Solarized Dark — teal-ink palette with a brighter text ladder than
-   classic Solarized (base1-as-body is too low-contrast for 11px UI) */
 .tiao-pane.tiao-theme-solarized {
   --tiao-bg: rgba(0, 43, 54, 0.96);
   --tiao-bg-solid: #002b36;
@@ -146,6 +109,9 @@
   --tiao-fg-dim: #839496;
   --tiao-fg-faint: #657b83;
   --tiao-titlebar-bg: rgba(7, 54, 66, 0.85);
+  --tiao-depth-line: color-mix(in srgb, var(--tiao-fg) 14%, var(--tiao-bg-solid));
+  --tiao-depth-line-hover: color-mix(in srgb, var(--tiao-fg) 24%, var(--tiao-bg-solid));
+  --tiao-depth-line-active: color-mix(in srgb, var(--tiao-fg) 40%, var(--tiao-bg-solid));
   --tiao-hover: rgba(253, 246, 227, 0.08);
   --tiao-hover-soft: rgba(253, 246, 227, 0.04);
   --tiao-hover-strong: rgba(253, 246, 227, 0.14);
@@ -157,14 +123,12 @@
   --tiao-accent: #2aa198;
   --tiao-accent-fg: #002b36;
   --tiao-border: rgba(147, 161, 161, 0.35);
+  --tiao-graph-stroke: #839496;
   --tiao-shadow: 0 4px 28px rgba(0, 21, 27, 0.55), 0 0 0 1px var(--tiao-border);
   --tiao-shadow-popup: 0 8px 32px rgba(0, 21, 27, 0.65), 0 0 0 1px var(--tiao-border);
   --tiao-shadow-raised: 0 1px 3px rgba(0, 21, 27, 0.4);
-  --tiao-graph-stroke: var(--tiao-fg-dim);
 }
 
-/* Nord — arctic bluish-gray; dim/faint use mid frost tones so secondary
-   text stays readable (polar-night colors sit too close to the bg) */
 .tiao-pane.tiao-theme-nord {
   --tiao-bg: rgba(46, 52, 64, 0.96);
   --tiao-bg-solid: #2e3440;
@@ -174,6 +138,9 @@
   --tiao-fg-dim: #9aa3b5;
   --tiao-fg-faint: #7b849c;
   --tiao-titlebar-bg: rgba(59, 66, 82, 0.85);
+  --tiao-depth-line: color-mix(in srgb, var(--tiao-fg) 14%, var(--tiao-bg-solid));
+  --tiao-depth-line-hover: color-mix(in srgb, var(--tiao-fg) 24%, var(--tiao-bg-solid));
+  --tiao-depth-line-active: color-mix(in srgb, var(--tiao-fg) 40%, var(--tiao-bg-solid));
   --tiao-hover: rgba(236, 239, 244, 0.1);
   --tiao-hover-soft: rgba(236, 239, 244, 0.05);
   --tiao-hover-strong: rgba(236, 239, 244, 0.16);
@@ -185,13 +152,12 @@
   --tiao-accent: #88c0d0;
   --tiao-accent-fg: #2e3440;
   --tiao-border: rgba(216, 222, 233, 0.18);
+  --tiao-graph-stroke: #9aa3b5;
   --tiao-shadow: 0 4px 28px rgba(25, 28, 35, 0.55), 0 0 0 1px var(--tiao-border);
   --tiao-shadow-popup: 0 8px 32px rgba(25, 28, 35, 0.65), 0 0 0 1px var(--tiao-border);
   --tiao-shadow-raised: 0 1px 3px rgba(25, 28, 35, 0.4);
-  --tiao-graph-stroke: var(--tiao-fg-dim);
 }
 
-/* Catppuccin Mocha — soft pastel-on-lavender dark */
 .tiao-pane.tiao-theme-catppuccin {
   --tiao-bg: rgba(30, 30, 46, 0.96);
   --tiao-bg-solid: #1e1e2e;
@@ -201,6 +167,9 @@
   --tiao-fg-dim: #6c7086;
   --tiao-fg-faint: #585b70;
   --tiao-titlebar-bg: rgba(49, 50, 68, 0.85);
+  --tiao-depth-line: color-mix(in srgb, var(--tiao-fg) 14%, var(--tiao-bg-solid));
+  --tiao-depth-line-hover: color-mix(in srgb, var(--tiao-fg) 24%, var(--tiao-bg-solid));
+  --tiao-depth-line-active: color-mix(in srgb, var(--tiao-fg) 40%, var(--tiao-bg-solid));
   --tiao-hover: rgba(205, 214, 244, 0.09);
   --tiao-hover-soft: rgba(205, 214, 244, 0.045);
   --tiao-hover-strong: rgba(205, 214, 244, 0.14);
@@ -212,14 +181,12 @@
   --tiao-accent: #cba6f7;
   --tiao-accent-fg: #1e1e2e;
   --tiao-border: rgba(69, 71, 90, 0.7);
+  --tiao-graph-stroke: #6c7086;
   --tiao-shadow: 0 4px 28px rgba(17, 17, 27, 0.55), 0 0 0 1px var(--tiao-border);
   --tiao-shadow-popup: 0 8px 32px rgba(17, 17, 27, 0.65), 0 0 0 1px var(--tiao-border);
   --tiao-shadow-raised: 0 1px 3px rgba(17, 17, 27, 0.4);
-  --tiao-graph-stroke: var(--tiao-fg-dim);
 }
 
-/* ---- sizes: s/m/l rescale every dimension token together (m is the
-   defaults above); s doubles as the pane-settings subpane scale ---- */
 .tiao-pane.tiao-size-s {
   --tiao-font-size: 10px;
   --tiao-font-size-mono: 9px;
@@ -232,6 +199,7 @@
   --tiao-width: 240px;
   --tiao-radius: 6px;
 }
+
 .tiao-pane.tiao-size-l {
   --tiao-font-size: 12px;
   --tiao-font-size-mono: 11px;
@@ -243,6 +211,16 @@
   --tiao-icon-size: 14px;
   --tiao-width: 320px;
   --tiao-radius: 8px;
+}
+
+.tiao-pane.tiao-style-kiki {
+  --tiao-radius: 0;
+  --tiao-radius-sm: 0;
+  --tiao-shadow: 0 0 0 1px var(--tiao-border);
+  --tiao-shadow-popup: 0 0 0 1px var(--tiao-border);
+  --tiao-shadow-raised: 0 0 0 1px var(--tiao-border);
+  --tiao-backdrop-filter: none;
+  --tiao-overlay-filter: none;
 }
 
 .tiao-pane *,
@@ -473,7 +451,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 4px;
+  border-radius: var(--tiao-radius-sm);
   color: var(--tiao-fg-dim);
   opacity: 0;
   transition: opacity 0.12s ease, color 0.12s ease;
@@ -1302,7 +1280,7 @@ html.tiao-cursor-ew * {
 .tiao-accent-swatch {
   flex: 1;
   aspect-ratio: 1;
-  border-radius: 3px;
+  border-radius: var(--tiao-radius-sm);
   box-shadow: inset 0 0 0 1px var(--tiao-border);
   transition: filter 0.1s ease;
 }
@@ -1318,7 +1296,7 @@ html.tiao-cursor-ew * {
 }
 .tiao-anchor-cell {
   height: 14px;
-  border-radius: 3px;
+  border-radius: var(--tiao-radius-sm);
   background: var(--tiao-button-bg);
   transition: background 0.12s ease;
 }
@@ -1358,7 +1336,7 @@ html.tiao-cursor-ew * {
   width: 16px;
   height: 16px;
   flex: none;
-  border-radius: 4px;
+  border-radius: var(--tiao-radius-sm);
   box-shadow: inset 0 0 0 1px var(--tiao-border);
   transition: transform 0.1s ease;
 }
@@ -1431,7 +1409,7 @@ html.tiao-cursor-ew * {
 .tiao-color-alpha {
   position: relative;
   height: 12px;
-  border-radius: 6px;
+  border-radius: var(--tiao-radius-sm);
   cursor: ew-resize;
   touch-action: none;
 }
@@ -1663,7 +1641,7 @@ html.tiao-cursor-ew * {
 }
 .tiao-monitor-log::-webkit-scrollbar-thumb {
   background: var(--tiao-fg-faint);
-  border-radius: 3px;
+  border-radius: var(--tiao-radius-sm);
 }
 
 /* ---- edge resize: invisible strips straddling the pane edges ---- */
