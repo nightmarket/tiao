@@ -58,7 +58,8 @@ const CSS = `
   border-radius: var(--tiao-radius-sm);
 }
 .tiao-radiogrid-cell {
-  height: 22px;
+  /* 2px frame padding + cell = button height (row-height + 2px) */
+  height: calc(var(--tiao-row-height) - 2px);
   border-radius: calc(var(--tiao-radius-sm) - 2px);
   color: var(--tiao-fg-dim);
 }

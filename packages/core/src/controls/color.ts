@@ -1,4 +1,4 @@
-import { draggable, h, icon } from '../dom'
+import { draggable, h } from '../dom'
 import { clamp } from '../util'
 import {
   formatHasAlpha,
@@ -18,6 +18,7 @@ import {
   type Rgba,
 } from './color-model'
 import { createPopup } from './popup'
+import { createSelectMenu } from './select'
 import type { InputPlugin, PluginContext } from '../plugin'
 
 /**
@@ -231,7 +232,7 @@ function createColorView(ctx: PluginContext<unknown>) {
   const modeRow = h(
     'div',
     'tiao-color-mode',
-    h('div', 'tiao-select-wrap', modeSelect, icon('chevron')),
+    createSelectMenu(modeSelect, ctx.onDispose).wrap,
     pickerText,
   )
 

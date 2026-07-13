@@ -2,9 +2,9 @@ import {
   clamp,
   createComponentScrubber,
   createPopup,
+  createSelectMenu,
   draggable,
   h,
-  icon,
   injectCss,
   mapRange,
   registerPlugin,
@@ -194,7 +194,9 @@ export const bezierPlugin: InputPlugin<BezierValue> = {
       opt.textContent = name
       presetSelect.append(opt)
     })
-    const presetWrap = h('div', 'tiao-select-wrap tiao-bezier-presets', presetSelect, icon('chevron'))
+    const presetMenu = createSelectMenu(presetSelect, ctx.onDispose)
+    const presetWrap = presetMenu.wrap
+    presetWrap.classList.add('tiao-bezier-presets')
     const onPresetChange = () => {
       const preset = PRESETS[Number(presetSelect.value)]
       if (preset) ctx.value.set([...preset[1]], { source: 'ui', last: true })

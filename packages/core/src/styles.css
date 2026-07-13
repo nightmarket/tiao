@@ -1226,8 +1226,8 @@ html.tiao-cursor-ew * {
 .tiao-select:hover {
   background: var(--tiao-surface-hover);
 }
-/* the open menu is native (only the closed field is custom-drawn); give its
-   rows the UI font at normal metrics so text and checkmarks center cleanly */
+/* fallback metrics in case the native picker ever opens (e.g. keyboard paths
+   the custom menu doesn't intercept) */
 .tiao-select option {
   font-family: var(--tiao-font);
   font-size: var(--tiao-font-size);
@@ -1238,6 +1238,61 @@ html.tiao-cursor-ew * {
   right: 6px;
   color: var(--tiao-fg-dim);
   pointer-events: none;
+}
+/* the open menu is custom-drawn (the OS picker ignores the pane font and
+   misaligns its check gutter); above sibling popups since a select can live
+   inside the color picker / bezier editor */
+.tiao-select-menu {
+  z-index: 110;
+  padding: 3px;
+}
+.tiao-select-menu.tiao-open {
+  gap: 1px;
+  max-height: 240px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  /* thumb only, no track — matches .tiao-monitor-log */
+  scrollbar-width: thin;
+  scrollbar-color: var(--tiao-fg-faint) transparent;
+}
+.tiao-select-menu::-webkit-scrollbar {
+  width: 6px;
+  background: transparent;
+}
+.tiao-select-menu::-webkit-scrollbar-track {
+  background: transparent;
+}
+.tiao-select-menu::-webkit-scrollbar-thumb {
+  background: var(--tiao-fg-faint);
+  border-radius: var(--tiao-radius-sm);
+}
+.tiao-select-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  height: calc(var(--tiao-row-height) + 4px);
+  padding: 0 6px;
+  border-radius: var(--tiao-radius-sm);
+  color: var(--tiao-fg-soft);
+  white-space: nowrap;
+  text-align: left;
+}
+/* trailing check: only the selected row renders it, so unselected rows
+   don't carry a blank gutter */
+.tiao-select-option .tiao-icon-check {
+  display: none;
+  margin-left: auto;
+}
+.tiao-select-option.tiao-selected {
+  color: var(--tiao-fg);
+}
+.tiao-select-option.tiao-selected .tiao-icon-check {
+  display: block;
+}
+.tiao-select-option.tiao-highlight {
+  background: var(--tiao-hover);
+  color: var(--tiao-fg);
 }
 
 /* ---- pane settings menu: a real embedded Pane beside the host pane ---- */

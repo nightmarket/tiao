@@ -38,7 +38,7 @@ export function h<K extends keyof HTMLElementTagNameMap>(
 
 const SVG_NS = 'http://www.w3.org/2000/svg'
 
-export function icon(name: 'chevron' | 'plus' | 'triangle'): SVGSVGElement {
+export function icon(name: 'chevron' | 'plus' | 'triangle' | 'check'): SVGSVGElement {
   const doc = creationDoc()
   const svg = doc.createElementNS(SVG_NS, 'svg')
   svg.setAttribute('viewBox', '0 0 12 12')
@@ -48,6 +48,7 @@ export function icon(name: 'chevron' | 'plus' | 'triangle'): SVGSVGElement {
   const d = {
     chevron: 'M3.5 4.5 L6 7.5 L8.5 4.5',
     plus: 'M6 2.5 V9.5 M2.5 6 H9.5',
+    check: 'M2.75 6.5 L5 8.75 L9.25 3.75',
     // leva-style filled collapse caret, pointing down; the glyph is centered
     // in the viewBox so rotating it while collapsed keeps it optically aligned
     triangle: 'M3.2 4.25 L8.8 4.25 L6 7.75 Z',

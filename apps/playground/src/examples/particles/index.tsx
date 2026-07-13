@@ -117,6 +117,8 @@ function buildKitchenSink(pane: Pane): Pane {
     label: 'hello tiao',
     enabled: true,
     blend: 'multiply',
+    // long list to pressure-test the custom select menu (scroll, highlight, pick)
+    city: 'tokyo',
     tint: '#ff8800',
     fade: '#22d3ee',
     glow: 'rgba(120, 200, 255, 0.5)',
@@ -176,6 +178,21 @@ function buildKitchenSink(pane: Pane): Pane {
   basics.addBinding(params, 'enabled')
   basics.addBinding(params, 'blend', {
     options: { Multiply: 'multiply', Screen: 'screen', Overlay: 'overlay' },
+  })
+  basics.addBinding(params, 'city', {
+    options: Object.fromEntries(
+      [
+        'Amsterdam', 'Athens', 'Auckland', 'Bangkok', 'Barcelona', 'Beijing',
+        'Berlin', 'Bogotá', 'Boston', 'Brussels', 'Buenos Aires', 'Cairo',
+        'Cape Town', 'Chicago', 'Copenhagen', 'Dubai', 'Dublin', 'Helsinki',
+        'Hong Kong', 'Istanbul', 'Jakarta', 'Johannesburg', 'Kyoto', 'Lagos',
+        'Lisbon', 'London', 'Los Angeles', 'Madrid', 'Melbourne', 'Mexico City',
+        'Milan', 'Montreal', 'Mumbai', 'Nairobi', 'New York', 'Oslo', 'Paris',
+        'Prague', 'Rio de Janeiro', 'Rome', 'San Francisco', 'Santiago',
+        'São Paulo', 'Seoul', 'Shanghai', 'Singapore', 'Stockholm', 'Sydney',
+        'Taipei', 'Tokyo', 'Toronto', 'Vancouver', 'Vienna', 'Warsaw', 'Zurich',
+      ].map((name) => [name, name.toLowerCase().replace(/\s+/g, '-')]),
+    ),
   })
   basics.addButton({ title: 'Log params' }).on('click', () => console.log({ ...params }))
 

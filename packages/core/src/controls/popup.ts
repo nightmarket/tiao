@@ -29,6 +29,9 @@ export function createPopup(
 
   const onPointerDown = (e: PointerEvent) => {
     const t = e.target as Node
+    // select menus portal to the pane root, so a click on one lands outside
+    // the popup that hosts the select; it must not dismiss that popup
+    if (t instanceof Element && t.closest('.tiao-select-menu')) return
     if (!popup.contains(t) && !anchor.contains(t)) close()
   }
   const onKeyDown = (e: KeyboardEvent) => {
