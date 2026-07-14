@@ -18,7 +18,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@tiao/core": "*",
+    "@tiao/core": "file:../core",
     "mediabunny": "^1.6.1"
   },
   "devDependencies": {
