@@ -9,6 +9,7 @@ import {
 
 const DEFAULT_SAMPLE_MS = 250
 const SAMPLE_META = { source: 'monitor', sample: true } as const
+const formatFps = (value: number) => String(Math.round(value))
 
 /**
  * FPS graph blade. Usage:
@@ -36,7 +37,7 @@ export const fpsPlugin: BladePlugin = {
         min: 0,
         max,
         unit: 'FPS',
-        format: (v: number) => String(Math.round(v)),
+        format: formatFps,
         ...(label !== undefined && { label }),
         ...(bufferSize !== undefined && { bufferSize }),
       },

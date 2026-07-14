@@ -94,21 +94,27 @@ export function createGraph(
 
   const explicitMin = ctx.options.min
   const explicitMax = ctx.options.max
-  const format = ctx.options.format ?? ((v: number) => formatNumber(v))
+  const hasMin = typeof explicitMin === 'number' && Number.isFinite(explicitMin)
+  const hasMax = typeof explicitMax === 'number' && Number.isFinite(explicitMax)
+  const format = ctx.options.format ?? formatNumber
 
   let width = 0
   let height = 0
   let dirty = false
+  let observedMin = Infinity
+  let observedMax = -Infinity
+  let observedMinCount = 0
+  let observedMaxCount = 0
   // getComputedStyle returns a live declaration; resolve it once, read per draw
   let computed: CSSStyleDeclaration | null = null
   let c2d: CanvasRenderingContext2D | null = null
   const dpr = typeof devicePixelRatio === 'number' ? devicePixelRatio : 1
 
-  const resize = () => {
-    const rect = canvas.getBoundingClientRect()
+  const resize = (rect: Pick<DOMRectReadOnly, 'width' | 'height'>) => {
     // zero size means collapsed/hidden: stop drawing until visible again
-    if (rect.width === 0) {
+    if (rect.width === 0 || rect.height === 0) {
       width = 0
+      height = 0
       return
     }
     width = Math.round(rect.width * dpr)
@@ -117,7 +123,13 @@ export function createGraph(
     if (canvas.height !== height) canvas.height = height
     if (dirty) draw()
   }
-  const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(resize) : null
+  const ro =
+    typeof ResizeObserver === 'function'
+      ? new ResizeObserver((entries) => {
+          const rect = entries[0]?.contentRect
+          if (rect) resize(rect)
+        })
+      : null
   ro?.observe(canvas)
   ctx.onDispose(() => ro?.disconnect())
 
@@ -130,14 +142,8 @@ export function createGraph(
     if (!c2d) return
     const c = c2d
     dirty = false
-    const hasMin = typeof explicitMin === 'number' && Number.isFinite(explicitMin)
-    const hasMax = typeof explicitMax === 'number' && Number.isFinite(explicitMax)
-    let min = hasMin ? explicitMin : Infinity
-    let max = hasMax ? explicitMax : -Infinity
-    for (const v of buffer) {
-      if (!hasMin && v < min) min = v
-      if (!hasMax && v > max) max = v
-    }
+    let min = hasMin ? explicitMin : observedMin
+    let max = hasMax ? explicitMax : observedMax
     if (!Number.isFinite(min) || !Number.isFinite(max)) return
     // stats.js graphs use zero as their baseline. Keep zero in automatically
     // derived ranges so area height represents value instead of window variance.
@@ -168,25 +174,26 @@ export function createGraph(
       ? Math.min(1, Math.max(0, configuredOpacity))
       : 0.28
     c.beginPath()
-    const step = width / Math.max(bufferSize - 1, 1)
+    const step = width / (bufferSize - 1)
     const firstX = width - (buffer.length - 1) * step
-    const yFor = (v: number) => {
-      const ratio = Math.min(1, Math.max(0, (v - min) / (max - min)))
-      return (1 - ratio) * height
-    }
+    const range = max - min
     if (buffer.length === 1) {
       const left = Math.max(0, width - Math.max(step, dpr))
-      c.moveTo(left, yFor(buffer[0]!))
-      c.lineTo(width, yFor(buffer[0]!))
+      const ratio = Math.min(1, Math.max(0, (buffer[0]! - min) / range))
+      const y = (1 - ratio) * height
+      c.moveTo(left, y)
+      c.lineTo(width, y)
       c.lineTo(width, height)
       c.lineTo(left, height)
     } else {
-      buffer.forEach((v, i) => {
+      for (let i = 0; i < buffer.length; i++) {
+        const v = buffer[i]!
         const x = firstX + i * step
-        const y = yFor(v)
+        const ratio = Math.min(1, Math.max(0, (v - min) / range))
+        const y = (1 - ratio) * height
         if (i === 0) c.moveTo(x, y)
         else c.lineTo(x, y)
-      })
+      }
       c.lineTo(width, height)
       c.lineTo(Math.max(0, firstX), height)
     }
@@ -200,14 +207,8 @@ export function createGraph(
   // what's on screen; the monitor interval determines its elapsed duration.
   const updateLabel = () => {
     if (!labelEl || buffer.length === 0) return
-    let lo = buffer[0]!
-    let hi = lo
-    for (const v of buffer) {
-      if (v < lo) lo = v
-      if (v > hi) hi = v
-    }
-    const loText = format(lo)
-    const hiText = format(hi)
+    const loText = format(observedMin)
+    const hiText = format(observedMax)
     const next = loText === hiText ? `${label} (${loText})` : `${label} (${loText}-${hiText})`
     if (next !== labelText) {
       labelText = next
@@ -217,12 +218,46 @@ export function createGraph(
 
   ctx.onDispose(
     ctx.value.subscribe((v) => {
-      numberEl.textContent = format(v)
+      const text = format(v)
+      if (numberEl.textContent !== text) numberEl.textContent = text
       // Keep a transient invalid reading from poisoning the rolling scale.
       if (!Number.isFinite(v)) return
+      const removed = buffer.length === bufferSize ? buffer.shift() : undefined
+      if (removed === observedMin) observedMinCount--
+      if (removed === observedMax) observedMaxCount--
       buffer.push(v)
-      // at most one over per sample; shift avoids splice's discard-array allocation
-      while (buffer.length > bufferSize) buffer.shift()
+      if (v < observedMin) {
+        observedMin = v
+        observedMinCount = 1
+      } else if (v === observedMin) {
+        observedMinCount++
+      }
+      if (v > observedMax) {
+        observedMax = v
+        observedMaxCount = 1
+      } else if (v === observedMax) {
+        observedMaxCount++
+      }
+      if (observedMinCount === 0 || observedMaxCount === 0) {
+        observedMin = buffer[0]!
+        observedMax = observedMin
+        observedMinCount = 0
+        observedMaxCount = 0
+        for (const sample of buffer) {
+          if (sample < observedMin) {
+            observedMin = sample
+            observedMinCount = 1
+          } else if (sample === observedMin) {
+            observedMinCount++
+          }
+          if (sample > observedMax) {
+            observedMax = sample
+            observedMaxCount = 1
+          } else if (sample === observedMax) {
+            observedMaxCount++
+          }
+        }
+      }
       updateLabel()
       draw()
     }),

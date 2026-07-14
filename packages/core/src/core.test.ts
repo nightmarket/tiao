@@ -460,6 +460,26 @@ describe('Pane registry and chrome', () => {
     pane.dispose()
   })
 
+  it('defers the OKLCH gamut canvas until its picker opens', () => {
+    let planeContexts = 0
+    const contextSpy = vi
+      .spyOn(HTMLCanvasElement.prototype, 'getContext')
+      .mockImplementation(function (this: HTMLCanvasElement) {
+        if (this.classList.contains('tiao-ok-canvas')) planeContexts++
+        return null
+      } as typeof HTMLCanvasElement.prototype.getContext)
+    try {
+      const pane = new Pane()
+      const binding = pane.addBinding({ color: 'oklch(0.7 0.12 200)' }, 'color')
+      expect(planeContexts).toBe(0)
+      binding.element.querySelector<HTMLButtonElement>('.tiao-color-swatch')?.click()
+      expect(planeContexts).toBe(1)
+      pane.dispose()
+    } finally {
+      contextSpy.mockRestore()
+    }
+  })
+
   it('clamps free positions and re-clamps on window resize', () => {
     const pane = new Pane()
     Object.defineProperty(pane.element, 'offsetWidth', { value: 300, configurable: true })
@@ -606,9 +626,6 @@ describe('Pane registry and chrome', () => {
       closePath: vi.fn(),
       fill: vi.fn(() => fillAlphas.push(context.globalAlpha)),
     }
-    const rectSpy = vi
-      .spyOn(HTMLCanvasElement.prototype, 'getBoundingClientRect')
-      .mockReturnValue(rect)
     const contextSpy = vi
       .spyOn(HTMLCanvasElement.prototype, 'getContext')
       .mockReturnValue(context as unknown as CanvasRenderingContext2D)
@@ -617,7 +634,10 @@ describe('Pane registry and chrome', () => {
       class {
         constructor(private callback: ResizeObserverCallback) {}
         observe(target: Element) {
-          this.callback([{ target } as ResizeObserverEntry], this as unknown as ResizeObserver)
+          this.callback(
+            [{ target, contentRect: rect } as ResizeObserverEntry],
+            this as unknown as ResizeObserver,
+          )
         }
         disconnect() {}
         unobserve() {}
@@ -650,7 +670,6 @@ describe('Pane registry and chrome', () => {
     expect(onChange).not.toHaveBeenCalled()
 
     pane.dispose()
-    rectSpy.mockRestore()
     contextSpy.mockRestore()
     vi.unstubAllGlobals()
   })

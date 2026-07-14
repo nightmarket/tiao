@@ -38,7 +38,12 @@ export class ControlStore {
       set.add(fn)
     }
     return () => {
-      for (const k of keys) this.listeners.get(k)?.delete(fn)
+      for (const k of keys) {
+        const set = this.listeners.get(k)
+        if (!set) continue
+        set.delete(fn)
+        if (set.size === 0) this.listeners.delete(k)
+      }
     }
   }
 }

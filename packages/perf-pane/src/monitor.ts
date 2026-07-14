@@ -90,6 +90,102 @@ export interface PerfMonitor {
 
 const MB = 1024 * 1024
 
+type RenderMethod = NonNullable<RendererLike['render']>
+type InfoTick = (time: number) => void
+
+interface RenderHook {
+  begin(): void
+  end(): void
+}
+
+interface RenderInstrumentation {
+  original: RenderMethod
+  wrapper: RenderMethod
+  hooks: Set<RenderHook>
+}
+
+interface InfoTicker {
+  ticks: Set<InfoTick>
+  stop(): void
+  reset: (() => void) | null
+  autoResetDescriptor: PropertyDescriptor | undefined
+}
+
+const renderInstrumentations = new WeakMap<RendererLike, RenderInstrumentation>()
+const infoTickers = new WeakMap<RendererInfoLike, InfoTicker>()
+
+function instrumentRenderer(renderer: RendererLike, hook: RenderHook): () => void {
+  const current = renderer.render
+  if (typeof current !== 'function') return () => {}
+
+  let instrumentation = renderInstrumentations.get(renderer)
+  // A host replacement detaches the prior wrapper. Preserve it and instrument
+  // the new method without letting an older monitor restore over the host.
+  if (!instrumentation || current !== instrumentation.wrapper) {
+    const hooks = new Set<RenderHook>()
+    const original = current
+    const wrapper: RenderMethod = function (this: unknown) {
+      try {
+        for (const entry of hooks) entry.begin()
+        return Reflect.apply(original, this, arguments)
+      } finally {
+        for (const entry of hooks) entry.end()
+      }
+    }
+    instrumentation = { original, wrapper, hooks }
+    renderInstrumentations.set(renderer, instrumentation)
+    renderer.render = wrapper
+  }
+
+  instrumentation.hooks.add(hook)
+  let active = true
+  return () => {
+    if (!active) return
+    active = false
+    instrumentation.hooks.delete(hook)
+    if (instrumentation.hooks.size > 0) return
+    if (renderInstrumentations.get(renderer) !== instrumentation) return
+    if (renderer.render === instrumentation.wrapper) renderer.render = instrumentation.original
+    renderInstrumentations.delete(renderer)
+  }
+}
+
+function onInfoTick(info: RendererInfoLike, tick: InfoTick): () => void {
+  let ticker = infoTickers.get(info)
+  if (!ticker) {
+    const ticks = new Set<InfoTick>()
+    const reset = typeof info.reset === 'function' ? info.reset : null
+    const autoResetDescriptor = Object.getOwnPropertyDescriptor(info, 'autoReset')
+    if (reset) info.autoReset = false
+    ticker = {
+      ticks,
+      reset,
+      autoResetDescriptor,
+      stop: onTick((time) => {
+        for (const fn of ticks) fn(time)
+        reset?.call(info)
+      }),
+    }
+    infoTickers.set(info, ticker)
+  }
+
+  ticker.ticks.add(tick)
+  let active = true
+  return () => {
+    if (!active) return
+    active = false
+    ticker.ticks.delete(tick)
+    if (ticker.ticks.size > 0) return
+    ticker.stop()
+    if (ticker.reset && info.autoReset === false) {
+      if (ticker.autoResetDescriptor) {
+        Object.defineProperty(info, 'autoReset', ticker.autoResetDescriptor)
+      } else delete info.autoReset
+    }
+    infoTickers.delete(info)
+  }
+}
+
 /**
  * Headless perf sampler: fps and cpu/gpu ms from begin/end brackets
  * (auto-installed around `renderer.render`), and draw-call/memory counts read
@@ -149,31 +245,16 @@ export function createPerfMonitor(options: PerfMonitorOptions = {}): PerfMonitor
     timer?.end()
   }
 
-  let restoreRender: (() => void) | null = null
-  if (renderer && options.instrument !== false && typeof renderer.render === 'function') {
-    const original = renderer.render
-    renderer.render = function (this: unknown, ...args: never[]) {
-      begin()
-      try {
-        return original.apply(this, args)
-      } finally {
-        end()
-      }
-    }
-    restoreRender = () => {
-      renderer.render = original
-    }
-  }
+  const stopInstrumentation =
+    renderer && options.instrument !== false
+      ? instrumentRenderer(renderer, { begin, end })
+      : null
 
   // WebGPU/common Info only auto-resets inside setAnimationLoop. Apps that drive
   // their own rAF (r3f, sanwei RAF, etc.) never hit that path, so per-frame
   // counters accumulate forever unless we own the reset. Take over whenever a
   // reset() exists — also gives correct multi-pass totals on WebGL.
   const info = renderer?.info
-  const managedReset = typeof info?.reset === 'function'
-  const prevAutoReset = info?.autoReset
-  if (managedReset && info) info.autoReset = false
-
   const readCounts = () => {
     const current = renderer?.info
     if (!current) return
@@ -196,9 +277,8 @@ export function createPerfMonitor(options: PerfMonitorOptions = {}): PerfMonitor
 
   // Snapshot + reset every frame; report fps/cpu/gpu on the sampling window.
   let windowStart = typeof performance !== 'undefined' ? performance.now() : 0
-  const stopTick = onTick((t) => {
+  const tick = (t: number) => {
     readCounts()
-    if (managedReset) info?.reset?.()
 
     const elapsed = t - windowStart
     if (elapsed < sampleMs) return
@@ -225,8 +305,10 @@ export function createPerfMonitor(options: PerfMonitorOptions = {}): PerfMonitor
     const heap = readHeap()
     if (heap !== null) stats.jsHeap = heap
     if (options.gpuMemory) stats.gpuMemory = options.gpuMemory() / MB
-  })
+  }
+  const stopTick = info ? onInfoTick(info, tick) : onTick(tick)
 
+  let disposed = false
   return {
     stats,
     capabilities,
@@ -234,12 +316,11 @@ export function createPerfMonitor(options: PerfMonitorOptions = {}): PerfMonitor
     begin,
     end,
     dispose() {
+      if (disposed) return
+      disposed = true
       stopTick()
-      restoreRender?.()
+      stopInstrumentation?.()
       timer?.dispose()
-      if (managedReset && info && prevAutoReset !== undefined) {
-        info.autoReset = prevAutoReset
-      }
     },
   }
 }
@@ -279,13 +360,15 @@ function createGlTimer(gl: WebGL2RenderingContext): GlTimer | null {
   if (!ext) return null
 
   const pending: WebGLQuery[] = []
+  // Resolved query objects are reusable; pooling avoids per-render WebGL object churn.
+  const available: WebGLQuery[] = []
   let active: WebGLQuery | null = null
   const MAX_PENDING = 8
 
   return {
     begin() {
       if (active) return
-      const query = gl.createQuery()
+      const query = available.pop() ?? gl.createQuery()
       if (!query) return
       gl.beginQuery(ext.TIME_ELAPSED_EXT, query)
       active = query
@@ -314,8 +397,8 @@ function createGlTimer(gl: WebGL2RenderingContext): GlTimer | null {
         if (!gl.getQueryParameter(query, gl.QUERY_RESULT_AVAILABLE)) break
         sum += (gl.getQueryParameter(query, gl.QUERY_RESULT) as number) / 1e6
         count++
-        gl.deleteQuery(query)
         pending.shift()
+        available.push(query)
       }
       return count > 0 ? sum / count : -1
     },
@@ -326,6 +409,7 @@ function createGlTimer(gl: WebGL2RenderingContext): GlTimer | null {
         active = null
       }
       for (const q of pending.splice(0)) gl.deleteQuery(q)
+      for (const q of available.splice(0)) gl.deleteQuery(q)
     },
   }
 }

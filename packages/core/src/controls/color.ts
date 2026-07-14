@@ -137,6 +137,8 @@ function createColorView(ctx: PluginContext<unknown>) {
 
   let planeHue = -1
   let planeImg: ImageData | null = null
+  let srgbEdge: Float64Array | null = null
+  let p3Edge: Float64Array | null = null
   const strokeGamutEdge = (
     c2d: CanvasRenderingContext2D,
     xs: Float64Array,
@@ -164,8 +166,8 @@ function createColorView(ctx: PluginContext<unknown>) {
     // reuse one ImageData across redraws (hue drags redraw per pointermove)
     planeImg ??= c2d.createImageData(w, hgt)
     const data = planeImg.data
-    const srgbEdge = new Float64Array(hgt)
-    const p3Edge = new Float64Array(hgt)
+    srgbEdge ??= new Float64Array(hgt)
+    p3Edge ??= new Float64Array(hgt)
     // hue is constant across the plane; hoist its trig out of the pixel loop
     const hueRad = (ok.H * Math.PI) / 180
     const cosH = Math.cos(hueRad)
@@ -258,9 +260,13 @@ function createColorView(ctx: PluginContext<unknown>) {
   }
 
   const popup = createPopup(root, picker, ctx.onDispose)
-  const onSwatchClick = () => popup.toggle()
-  swatch.addEventListener('click', onSwatchClick)
-  ctx.onDispose(() => swatch.removeEventListener('click', onSwatchClick))
+  const togglePicker = () => {
+    const opening = !popup.isOpen()
+    popup.toggle()
+    if (opening && isOkMode() && ok.H !== planeHue) schedulePlaneDraw()
+  }
+  swatch.addEventListener('click', togglePicker)
+  ctx.onDispose(() => swatch.removeEventListener('click', togglePicker))
 
   const commit = (last: boolean) => {
     const fmt = stringWrite ? displayFormat(family, alpha) : writeFormat
@@ -283,7 +289,7 @@ function createColorView(ctx: PluginContext<unknown>) {
       pickerText.value = String(serializeColor(rgba, displayFormat(family, alpha)))
     }
     if (isOkMode()) {
-      if (ok.H !== planeHue) schedulePlaneDraw()
+      if (popup.isOpen() && ok.H !== planeHue) schedulePlaneDraw()
       okThumb.style.left = `${clamp(ok.C / OK_C_MAX, 0, 1) * 100}%`
       okThumb.style.top = `${clamp(1 - ok.L, 0, 1) * 100}%`
       okThumb.style.background = css
@@ -444,7 +450,7 @@ function createColorView(ctx: PluginContext<unknown>) {
   return {
     element: root,
     activate: () => {
-      if (!popup.isOpen()) popup.toggle()
+      if (!popup.isOpen()) togglePicker()
     },
   }
 }
