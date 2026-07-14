@@ -650,19 +650,26 @@
 .tiao-folder-static > .tiao-folder-header {
   cursor: default;
 }
-.tiao-folder-title {
+.tiao-folder-heading {
   flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  line-height: 1;
 }
-/* optional section number ("1.2"), subtler than the title */
+/* optional section number ("1.2"), subtler than the title.
+   inline with the title so they share a line box; mono face, no vertical
+   nudge (digits already sit correctly against the UI-font title here) */
 .tiao-folder-index {
+  display: inline-block;
+  margin-right: 4px;
   color: var(--tiao-fg-dim);
   font-weight: 400;
   font-family: var(--tiao-font-mono);
   font-variant-numeric: tabular-nums;
   font-feature-settings: 'tnum' 1;
+  line-height: 1;
 }
 .tiao-folder-header .tiao-icon-triangle {
   position: relative;

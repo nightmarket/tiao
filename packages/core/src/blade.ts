@@ -514,7 +514,7 @@ export class FolderApi extends Container {
       'button',
       'tiao-folder-header',
       icon('triangle'),
-      h('span', 'tiao-folder-title', params.title),
+      h('span', 'tiao-folder-heading', h('span', 'tiao-folder-title', params.title)),
     )
     this.headerEl.type = 'button'
     // the depth line doubles as a collapse control (keyboard users have the header)
@@ -556,14 +556,15 @@ export class FolderApi extends Container {
 
   /** internal: show/clear the section number before the title (pane "Numbers" setting) */
   setSectionIndex(index: string | null): void {
-    let el = this.headerEl.querySelector('.tiao-folder-index')
+    const heading = this.headerEl.querySelector('.tiao-folder-heading')
+    let el = heading?.querySelector('.tiao-folder-index')
     if (index === null) {
       el?.remove()
       return
     }
     if (!el) {
       el = h('span', 'tiao-folder-index')
-      this.headerEl.querySelector('.tiao-folder-title')?.before(el)
+      heading?.querySelector('.tiao-folder-title')?.before(el)
     }
     el.textContent = index
   }
