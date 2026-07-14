@@ -562,6 +562,26 @@ describe('Pane registry and chrome', () => {
     pane.dispose()
   })
 
+  it('appends the observed value range to graph labels', () => {
+    const params = { fps: 120 }
+    const pane = new Pane()
+    const binding = pane.addBinding(params, 'fps', {
+      readonly: true,
+      view: 'graph',
+      label: 'FPS',
+      format: (v: number) => String(Math.round(v)),
+    })
+    const labelEl = binding.element.querySelector('.tiao-graph-label')!
+    params.fps = 80
+    binding.refresh()
+    // one buffered value: show it without a dash
+    expect(labelEl.textContent).toBe('FPS (80)')
+    params.fps = 140
+    binding.refresh()
+    expect(labelEl.textContent).toBe('FPS (80-140)')
+    pane.dispose()
+  })
+
   it('renders button groups as equal siblings with independent callbacks', () => {
     const pane = new Pane()
     const onHalf = vi.fn()
