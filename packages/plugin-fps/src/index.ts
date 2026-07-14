@@ -8,6 +8,7 @@ import {
 } from '@tiao/core'
 
 const DEFAULT_SAMPLE_MS = 250
+const SAMPLE_META = { source: 'monitor', sample: true } as const
 
 /**
  * FPS graph blade. Usage:
@@ -26,7 +27,7 @@ export const fpsPlugin: BladePlugin = {
     const max = typeof ctx.params['max'] === 'number' ? ctx.params['max'] : 120
     const bufferSize = typeof ctx.params['bufferSize'] === 'number' ? ctx.params['bufferSize'] : undefined
     const value = new Value(0)
-    ctx.onDispose(onFpsSample(sampleMs, (fps) => value.set(fps)))
+    ctx.onDispose(onFpsSample(sampleMs, (fps) => value.set(fps, SAMPLE_META)))
 
     const label = typeof ctx.params['label'] === 'string' ? ctx.params['label'] : undefined
     const graph = createGraph({

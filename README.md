@@ -75,6 +75,8 @@ pane.accent = '#ff0080'   // sets --tiao-accent
 pane.style = 'kiki'       // 'bouba' (rounded glass, default) | 'kiki' (sharp / flat)
 ```
 
+Graph monitors use the theme's neutral gray independently of `pane.accent`, with a light fill (`--tiao-graph-fill-opacity`, default `0.28`) over a barely tinted plot background so overlay labels stay readable. Override `--tiao-graph-accent` or `--tiao-graph-fill-opacity` only when you want a custom look.
+
 Theme, accent, and style are also editable from the Pane Settings panel (gear icon or right-click), and persist to `localStorage` when the pane has an `id`. Style is orthogonal to theme: **Bouba** = rounded glass; **Kiki** = sharp corners / hairline elevation / no blur.
 
 ## React
@@ -190,6 +192,7 @@ const { pane, perf, dispose } = createPerfPane({ renderer })
 
 Anchored top-right by default: an All / FPS / Memory / Perf tab group for the graphs (FPS, CPU, GPU, JS heap), then flat three.js counters (calls, triangles, lines, points, geometries, textures, shaders). Rows without a data source skip themselves.
 
+- **FPS** — completed `renderer.render` calls per sampling window, matching the begin/end counting model used by stats.js.
 - **CPU ms** — `renderer.render` is wrapped automatically; pass `instrument: false` to opt out and bracket your frame manually with `perf.begin()` / `perf.end()`.
 - **GPU ms** — WebGL2 uses `EXT_disjoint_timer_query_webgl2`; three's WebGPURenderer works when created with `trackTimestamp: true`; or supply your own timer with `gpuTime: () => ms`.
 - **GPU memory** — pass `gpuMemory: () => bytes` from your own texture/buffer accounting to add a graph next to JS heap.

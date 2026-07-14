@@ -582,6 +582,79 @@ describe('Pane registry and chrome', () => {
     pane.dispose()
   })
 
+  it('plots finite samples against zero and keeps the newest sample at the right edge', () => {
+    const rect = {
+      left: 0,
+      right: 100,
+      top: 0,
+      bottom: 40,
+      width: 100,
+      height: 40,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    }
+    const moveTo = vi.fn()
+    const fillAlphas: number[] = []
+    const context = {
+      fillStyle: '',
+      globalAlpha: 1,
+      clearRect: vi.fn(),
+      beginPath: vi.fn(),
+      moveTo,
+      lineTo: vi.fn(),
+      closePath: vi.fn(),
+      fill: vi.fn(() => fillAlphas.push(context.globalAlpha)),
+    }
+    const rectSpy = vi
+      .spyOn(HTMLCanvasElement.prototype, 'getBoundingClientRect')
+      .mockReturnValue(rect)
+    const contextSpy = vi
+      .spyOn(HTMLCanvasElement.prototype, 'getContext')
+      .mockReturnValue(context as unknown as CanvasRenderingContext2D)
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        constructor(private callback: ResizeObserverCallback) {}
+        observe(target: Element) {
+          this.callback([{ target } as ResizeObserverEntry], this as unknown as ResizeObserver)
+        }
+        disconnect() {}
+        unobserve() {}
+      },
+    )
+
+    const params = { fps: 0 }
+    const pane = new Pane({ theme: { '--tiao-graph-accent': '#123456' } })
+    const binding = pane.addBinding(params, 'fps', {
+      readonly: true,
+      view: 'graph',
+      max: 100,
+      bufferSize: 4,
+    })
+    params.fps = 25
+    binding.refresh()
+    params.fps = 50
+    binding.refresh()
+
+    // Four samples span 100px, so two samples occupy the rightmost third.
+    expect(moveTo).toHaveBeenLastCalledWith(100 - 100 / 3, 30)
+    expect(context.fill).toHaveBeenCalledTimes(2)
+
+    const onChange = vi.fn()
+    binding.on('change', onChange)
+    binding.value.set(50, { source: 'monitor', sample: true })
+    expect(moveTo).toHaveBeenLastCalledWith(100 - (2 * 100) / 3, 30)
+    expect(context.fill).toHaveBeenCalledTimes(3)
+    expect(fillAlphas).toEqual([0.28, 0.28, 0.28])
+    expect(onChange).not.toHaveBeenCalled()
+
+    pane.dispose()
+    rectSpy.mockRestore()
+    contextSpy.mockRestore()
+    vi.unstubAllGlobals()
+  })
+
   it('renders button groups as equal siblings with independent callbacks', () => {
     const pane = new Pane()
     const onHalf = vi.fn()
@@ -1290,6 +1363,7 @@ describe('Pane registry and chrome', () => {
     text.value = '#ff0080'
     text.dispatchEvent(new Event('blur'))
     expect(pane.element.style.getPropertyValue('--tiao-accent')).toBe('#ff0080')
+    expect(pane.element.style.getPropertyValue('--tiao-graph-accent')).toBe('')
     expect(pane.accent).toBe('#ff0080')
     pane.dispose()
 

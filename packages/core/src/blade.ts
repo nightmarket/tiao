@@ -240,6 +240,7 @@ const DEFAULT_MONITOR_INTERVAL = 66
 
 /** shared meta objects so per-tick polling does not allocate */
 const MONITOR_META = { source: 'monitor' } as const
+const GRAPH_MONITOR_META = { source: 'monitor', sample: true } as const
 const REFRESH_META = { source: 'refresh' } as const
 
 interface BindingEvents<T> {
@@ -340,14 +341,21 @@ export class BindingApi<T> extends Item {
       const interval = options.interval ?? DEFAULT_MONITOR_INTERVAL
       this.disposers.push(
         onInterval(() => {
-          this.value.set(this.target[this.key] as T, MONITOR_META)
+          const next = this.target[this.key] as T
+          const meta =
+            options.view === 'graph' && Object.is(this.value.get(), next)
+              ? GRAPH_MONITOR_META
+              : MONITOR_META
+          this.value.set(next, meta)
         }, interval),
       )
     }
-    // monitors emit too (Value.set dedupes, so only actual poll changes fire);
-    // they never write back to their target
+    // Monitors emit actual changes too; repeated graph samples only advance
+    // the internal timeline and never write back or become public events.
     this.disposers.push(
       this.value.subscribe((v, meta) => {
+        // Repeated graph samples advance time without becoming public changes.
+        if (meta.sample) return
         if (!options.readonly && meta.source !== 'refresh') this.target[this.key] = v
         const ev: TiaoChangeEvent<T> = {
           value: v,
