@@ -1,4 +1,4 @@
-import { onFpsSample } from '@tiao/core'
+import { onTick } from '@tiao/core'
 
 /** Live sample values. Poll with readonly bindings or read directly. */
 export interface PerfStats {
@@ -22,8 +22,16 @@ export interface PerfStats {
 
 /** Structural subset of THREE.WebGLRenderer / WebGPURenderer `.info`. */
 export interface RendererInfoLike {
+  autoReset?: boolean
+  reset?: () => void
   render?: {
+    /**
+     * WebGLInfo: per-frame draw calls (reset each render).
+     * WebGPU/common Info: lifetime render() count — use `drawCalls` instead.
+     */
     calls?: number
+    /** WebGPU/common Info: per-frame draw calls */
+    drawCalls?: number
     triangles?: number
     points?: number
     lines?: number
@@ -155,13 +163,52 @@ export function createPerfMonitor(options: PerfMonitorOptions = {}): PerfMonitor
     }
   }
 
-  // --- sampling loop: everything reads once per window, not per frame ---
-  const stopTick = onFpsSample(sampleMs, (fps) => {
-    stats.fps = fps
+  // WebGPU/common Info only auto-resets inside setAnimationLoop. Apps that drive
+  // their own rAF (r3f, sanwei RAF, etc.) never hit that path, so per-frame
+  // counters accumulate forever unless we own the reset. Take over whenever a
+  // reset() exists — also gives correct multi-pass totals on WebGL.
+  const info = renderer?.info
+  const managedReset = typeof info?.reset === 'function'
+  const prevAutoReset = info?.autoReset
+  if (managedReset && info) info.autoReset = false
+
+  const readCounts = () => {
+    const current = renderer?.info
+    if (!current) return
+    const r = current.render
+    if (r) {
+      // WebGPU/common: drawCalls is per-frame; calls is lifetime render() count.
+      // WebGLInfo: calls is the per-frame draw counter (no drawCalls field).
+      stats.calls = r.drawCalls ?? r.calls ?? 0
+      stats.triangles = r.triangles ?? 0
+      stats.lines = r.lines ?? 0
+      stats.points = r.points ?? 0
+    }
+    const m = current.memory
+    if (m) {
+      stats.geometries = m.geometries ?? 0
+      stats.textures = m.textures ?? 0
+    }
+    if (Array.isArray(current.programs)) stats.shaders = current.programs.length
+  }
+
+  // Snapshot + reset every frame; report fps/cpu/gpu on the sampling window.
+  let frames = 0
+  let windowStart = typeof performance !== 'undefined' ? performance.now() : 0
+  const stopTick = onTick((t) => {
+    readCounts()
+    if (managedReset) info?.reset?.()
+
+    frames++
+    const elapsed = t - windowStart
+    if (elapsed < sampleMs) return
+
+    stats.fps = (frames * 1000) / elapsed
     stats.cpu = cpuCount > 0 ? cpuSum / cpuCount : 0
     cpuSum = 0
     cpuCount = 0
-    readCounts()
+    frames = 0
+    windowStart = t
 
     if (options.gpuTime) {
       stats.gpu = options.gpuTime()
@@ -180,24 +227,6 @@ export function createPerfMonitor(options: PerfMonitorOptions = {}): PerfMonitor
     if (options.gpuMemory) stats.gpuMemory = options.gpuMemory() / MB
   })
 
-  const readCounts = () => {
-    const info = renderer?.info
-    if (!info) return
-    const r = info.render
-    if (r) {
-      stats.calls = r.calls ?? 0
-      stats.triangles = r.triangles ?? 0
-      stats.lines = r.lines ?? 0
-      stats.points = r.points ?? 0
-    }
-    const m = info.memory
-    if (m) {
-      stats.geometries = m.geometries ?? 0
-      stats.textures = m.textures ?? 0
-    }
-    if (Array.isArray(info.programs)) stats.shaders = info.programs.length
-  }
-
   return {
     stats,
     capabilities,
@@ -208,6 +237,9 @@ export function createPerfMonitor(options: PerfMonitorOptions = {}): PerfMonitor
       stopTick()
       restoreRender?.()
       timer?.dispose()
+      if (managedReset && info && prevAutoReset !== undefined) {
+        info.autoReset = prevAutoReset
+      }
     },
   }
 }
@@ -248,6 +280,7 @@ function createGlTimer(gl: WebGL2RenderingContext): GlTimer | null {
 
   const pending: WebGLQuery[] = []
   let active: WebGLQuery | null = null
+  const MAX_PENDING = 8
 
   return {
     begin() {
@@ -262,6 +295,11 @@ function createGlTimer(gl: WebGL2RenderingContext): GlTimer | null {
       gl.endQuery(ext.TIME_ELAPSED_EXT)
       pending.push(active)
       active = null
+      // Drop unresolved queries if the GPU falls behind — prevents unbounded growth.
+      while (pending.length > MAX_PENDING) {
+        const q = pending.shift()
+        if (q) gl.deleteQuery(q)
+      }
     },
     poll() {
       if (gl.getParameter(ext.GPU_DISJOINT_EXT)) {
