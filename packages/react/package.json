@@ -20,7 +20,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@tiao/core": "*"
+    "@tiao/core": "file:../core"
   },
   "peerDependencies": {
     "react": ">=18"
