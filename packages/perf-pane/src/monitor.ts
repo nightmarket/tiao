@@ -91,9 +91,9 @@ export interface PerfMonitor {
 const MB = 1024 * 1024
 
 /**
- * Headless perf sampler: fps from the shared ticker, cpu/gpu ms from
- * begin/end brackets (auto-installed around `renderer.render`), and draw-call/
- * memory counts read straight from the renderer's `.info`.
+ * Headless perf sampler: fps and cpu/gpu ms from begin/end brackets
+ * (auto-installed around `renderer.render`), and draw-call/memory counts read
+ * straight from the renderer's `.info`.
  */
 export function createPerfMonitor(options: PerfMonitorOptions = {}): PerfMonitor {
   const stats: PerfStats = {
@@ -133,6 +133,7 @@ export function createPerfMonitor(options: PerfMonitorOptions = {}): PerfMonitor
   let cpuStart = -1
   let cpuSum = 0
   let cpuCount = 0
+  let frames = 0
 
   const begin = () => {
     if (cpuStart >= 0) return // ignore nested begins
@@ -143,6 +144,7 @@ export function createPerfMonitor(options: PerfMonitorOptions = {}): PerfMonitor
     if (cpuStart < 0) return
     cpuSum += performance.now() - cpuStart
     cpuCount++
+    frames++
     cpuStart = -1
     timer?.end()
   }
@@ -193,13 +195,11 @@ export function createPerfMonitor(options: PerfMonitorOptions = {}): PerfMonitor
   }
 
   // Snapshot + reset every frame; report fps/cpu/gpu on the sampling window.
-  let frames = 0
   let windowStart = typeof performance !== 'undefined' ? performance.now() : 0
   const stopTick = onTick((t) => {
     readCounts()
     if (managedReset) info?.reset?.()
 
-    frames++
     const elapsed = t - windowStart
     if (elapsed < sampleMs) return
 

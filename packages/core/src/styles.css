@@ -32,7 +32,8 @@
   --tiao-accent: #facc15;
   --tiao-accent-fg: #171717;
   --tiao-border: rgba(15, 23, 42, 0.1);
-  --tiao-graph-stroke: #a3a3a3;
+  --tiao-graph-accent: #a3a3a3;
+  --tiao-graph-fill-opacity: 0.28;
   --tiao-shadow: 0 0 0 1px var(--tiao-border), 0 2px 6px rgba(15, 23, 42, 0.05), 0 16px 40px rgba(15, 23, 42, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.85);
   --tiao-shadow-popup: 0 0 0 1px var(--tiao-border), 0 10px 32px rgba(15, 23, 42, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.9);
   --tiao-shadow-raised: 0 1px 2px rgba(15, 23, 42, 0.12), 0 0 0 1px rgba(15, 23, 42, 0.05);
@@ -94,7 +95,7 @@
   --tiao-accent: #facc15;
   --tiao-accent-fg: #171717;
   --tiao-border: rgba(255, 255, 255, 0.08);
-  --tiao-graph-stroke: #525252;
+  --tiao-graph-accent: #525252;
   --tiao-shadow: 0 4px 28px rgba(0, 0, 0, 0.45), 0 0 0 1px var(--tiao-border);
   --tiao-shadow-popup: 0 8px 32px rgba(0, 0, 0, 0.55), 0 0 0 1px var(--tiao-border);
   --tiao-shadow-raised: 0 1px 3px rgba(0, 0, 0, 0.35);
@@ -123,7 +124,7 @@
   --tiao-accent: #2aa198;
   --tiao-accent-fg: #002b36;
   --tiao-border: rgba(147, 161, 161, 0.35);
-  --tiao-graph-stroke: #839496;
+  --tiao-graph-accent: #839496;
   --tiao-shadow: 0 4px 28px rgba(0, 21, 27, 0.55), 0 0 0 1px var(--tiao-border);
   --tiao-shadow-popup: 0 8px 32px rgba(0, 21, 27, 0.65), 0 0 0 1px var(--tiao-border);
   --tiao-shadow-raised: 0 1px 3px rgba(0, 21, 27, 0.4);
@@ -152,7 +153,7 @@
   --tiao-accent: #88c0d0;
   --tiao-accent-fg: #2e3440;
   --tiao-border: rgba(216, 222, 233, 0.18);
-  --tiao-graph-stroke: #9aa3b5;
+  --tiao-graph-accent: #9aa3b5;
   --tiao-shadow: 0 4px 28px rgba(25, 28, 35, 0.55), 0 0 0 1px var(--tiao-border);
   --tiao-shadow-popup: 0 8px 32px rgba(25, 28, 35, 0.65), 0 0 0 1px var(--tiao-border);
   --tiao-shadow-raised: 0 1px 3px rgba(25, 28, 35, 0.4);
@@ -181,7 +182,7 @@
   --tiao-accent: #cba6f7;
   --tiao-accent-fg: #1e1e2e;
   --tiao-border: rgba(69, 71, 90, 0.7);
-  --tiao-graph-stroke: #6c7086;
+  --tiao-graph-accent: #6c7086;
   --tiao-shadow: 0 4px 28px rgba(17, 17, 27, 0.55), 0 0 0 1px var(--tiao-border);
   --tiao-shadow-popup: 0 8px 32px rgba(17, 17, 27, 0.65), 0 0 0 1px var(--tiao-border);
   --tiao-shadow-raised: 0 1px 3px rgba(17, 17, 27, 0.4);
@@ -1639,7 +1640,7 @@ html.tiao-cursor-ew * {
   width: 100%;
   height: 40px;
   border-radius: var(--tiao-radius-sm);
-  background: var(--tiao-surface);
+  background: color-mix(in srgb, var(--tiao-graph-accent) 3%, var(--tiao-surface));
   box-shadow: inset 0 0 0 1px var(--tiao-border);
   overflow: hidden;
 }

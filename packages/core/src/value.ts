@@ -3,6 +3,8 @@ export interface ValueMeta {
   last?: boolean
   /** where the change originated */
   source?: 'api' | 'ui' | 'refresh' | 'monitor'
+  /** notify view subscribers even when the value is unchanged */
+  sample?: boolean
 }
 
 export type ValueListener<T> = (value: T, meta: ValueMeta) => void
@@ -23,7 +25,7 @@ export class Value<T> {
 
   set(next: T, meta: ValueMeta = {}): void {
     // re-emit unchanged values when `last` is set so drag-end events fire
-    if (this.equals(this.raw, next) && !meta.last) return
+    if (this.equals(this.raw, next) && !meta.last && !meta.sample) return
     this.raw = next
     for (const fn of this.listeners) fn(next, meta)
   }

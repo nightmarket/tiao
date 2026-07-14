@@ -75,7 +75,11 @@ export const graphMonitorPlugin: MonitorPlugin<number> = {
 export function createGraph(
   ctx: Pick<PluginContext<number>, 'value' | 'options' | 'onDispose'>,
 ): HTMLElement {
-  const bufferSize = (ctx.options['bufferSize'] as number | undefined) ?? DEFAULT_BUFFER
+  const requestedBuffer = ctx.options['bufferSize']
+  const bufferSize =
+    typeof requestedBuffer === 'number' && Number.isFinite(requestedBuffer)
+      ? Math.max(2, Math.floor(requestedBuffer))
+      : DEFAULT_BUFFER
   const buffer: number[] = []
   const canvas = h('canvas', 'tiao-graph-canvas')
   const numberEl = h('span', 'tiao-graph-number')
@@ -118,7 +122,7 @@ export function createGraph(
   ctx.onDispose(() => ro?.disconnect())
 
   const draw = () => {
-    if (width === 0 || buffer.length < 2) {
+    if (width === 0 || buffer.length === 0) {
       dirty = true
       return
     }
@@ -126,37 +130,74 @@ export function createGraph(
     if (!c2d) return
     const c = c2d
     dirty = false
-    let min = typeof explicitMin === 'number' ? explicitMin : Infinity
-    let max = typeof explicitMax === 'number' ? explicitMax : -Infinity
-    if (!Number.isFinite(min) || !Number.isFinite(max)) {
-      for (const v of buffer) {
-        if (typeof explicitMin !== 'number' && v < min) min = v
-        if (typeof explicitMax !== 'number' && v > max) max = v
-      }
+    const hasMin = typeof explicitMin === 'number' && Number.isFinite(explicitMin)
+    const hasMax = typeof explicitMax === 'number' && Number.isFinite(explicitMax)
+    let min = hasMin ? explicitMin : Infinity
+    let max = hasMax ? explicitMax : -Infinity
+    for (const v of buffer) {
+      if (!hasMin && v < min) min = v
+      if (!hasMax && v > max) max = v
     }
+    if (!Number.isFinite(min) || !Number.isFinite(max)) return
+    // stats.js graphs use zero as their baseline. Keep zero in automatically
+    // derived ranges so area height represents value instead of window variance.
+    if (!hasMin && min > 0) min = 0
+    if (!hasMax && max < 0) max = 0
     if (min === max) {
-      min -= 1
-      max += 1
+      if (hasMin && !hasMax) max += 1
+      else if (!hasMin && hasMax) min -= 1
+      else {
+        min -= 1
+        max += 1
+      }
+    } else if (min > max) {
+      const lower = max
+      max = min
+      min = lower
     }
     c.clearRect(0, 0, width, height)
     computed ??= getComputedStyle(el)
-    c.strokeStyle = computed.getPropertyValue('--tiao-graph-stroke').trim() || computed.color
-    c.lineWidth = 1.5 * dpr
-    c.lineJoin = 'round'
+    c.fillStyle =
+      computed.getPropertyValue('--tiao-graph-accent').trim() ||
+      computed.getPropertyValue('--tiao-graph-stroke').trim() ||
+      computed.color
+    const configuredOpacity = Number.parseFloat(
+      computed.getPropertyValue('--tiao-graph-fill-opacity'),
+    )
+    c.globalAlpha = Number.isFinite(configuredOpacity)
+      ? Math.min(1, Math.max(0, configuredOpacity))
+      : 0.28
     c.beginPath()
-    const pad = 2 * dpr
-    buffer.forEach((v, i) => {
-      const x = (i / (bufferSize - 1)) * width
-      const y = pad + (1 - (v - min) / (max - min)) * (height - pad * 2)
-      if (i === 0) c.moveTo(x, y)
-      else c.lineTo(x, y)
-    })
-    c.stroke()
+    const step = width / Math.max(bufferSize - 1, 1)
+    const firstX = width - (buffer.length - 1) * step
+    const yFor = (v: number) => {
+      const ratio = Math.min(1, Math.max(0, (v - min) / (max - min)))
+      return (1 - ratio) * height
+    }
+    if (buffer.length === 1) {
+      const left = Math.max(0, width - Math.max(step, dpr))
+      c.moveTo(left, yFor(buffer[0]!))
+      c.lineTo(width, yFor(buffer[0]!))
+      c.lineTo(width, height)
+      c.lineTo(left, height)
+    } else {
+      buffer.forEach((v, i) => {
+        const x = firstX + i * step
+        const y = yFor(v)
+        if (i === 0) c.moveTo(x, y)
+        else c.lineTo(x, y)
+      })
+      c.lineTo(width, height)
+      c.lineTo(Math.max(0, firstX), height)
+    }
+    c.closePath()
+    c.fill()
+    c.globalAlpha = 1
   }
 
   // Label shows the observed range over the plotted window, e.g. "FPS (80-140)".
   // The buffer *is* the window — the parenthesized range always describes exactly
-  // what's on screen (bufferSize samples ≈ 32s at the default 250ms poll).
+  // what's on screen; the monitor interval determines its elapsed duration.
   const updateLabel = () => {
     if (!labelEl || buffer.length === 0) return
     let lo = buffer[0]!
@@ -176,10 +217,12 @@ export function createGraph(
 
   ctx.onDispose(
     ctx.value.subscribe((v) => {
+      numberEl.textContent = format(v)
+      // Keep a transient invalid reading from poisoning the rolling scale.
+      if (!Number.isFinite(v)) return
       buffer.push(v)
       // at most one over per sample; shift avoids splice's discard-array allocation
       while (buffer.length > bufferSize) buffer.shift()
-      numberEl.textContent = format(v)
       updateLabel()
       draw()
     }),
