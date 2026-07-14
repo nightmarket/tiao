@@ -86,6 +86,7 @@ export function createGraph(
   const label = typeof ctx.options.label === 'string' && ctx.options.label ? ctx.options.label : ''
   const labelEl = label ? h('span', 'tiao-graph-label', label) : null
   const el = h('div', 'tiao-graph', canvas, valueEl, labelEl)
+  let labelText = label
 
   const explicitMin = ctx.options.min
   const explicitMax = ctx.options.max
@@ -153,12 +154,33 @@ export function createGraph(
     c.stroke()
   }
 
+  // Label shows the observed range over the plotted window, e.g. "FPS (80-140)".
+  // The buffer *is* the window — the parenthesized range always describes exactly
+  // what's on screen (bufferSize samples ≈ 32s at the default 250ms poll).
+  const updateLabel = () => {
+    if (!labelEl || buffer.length === 0) return
+    let lo = buffer[0]!
+    let hi = lo
+    for (const v of buffer) {
+      if (v < lo) lo = v
+      if (v > hi) hi = v
+    }
+    const loText = format(lo)
+    const hiText = format(hi)
+    const next = loText === hiText ? `${label} (${loText})` : `${label} (${loText}-${hiText})`
+    if (next !== labelText) {
+      labelText = next
+      labelEl.textContent = next
+    }
+  }
+
   ctx.onDispose(
     ctx.value.subscribe((v) => {
       buffer.push(v)
       // at most one over per sample; shift avoids splice's discard-array allocation
       while (buffer.length > bufferSize) buffer.shift()
       numberEl.textContent = format(v)
+      updateLabel()
       draw()
     }),
   )
