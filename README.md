@@ -190,11 +190,12 @@ import { createPerfPane } from '@tiao/perf-pane'
 const { pane, perf, dispose } = createPerfPane({ renderer })
 ```
 
-Anchored top-right by default: an All / FPS / Memory / Perf tab group for the graphs (FPS, CPU, GPU, JS heap), then flat three.js counters (calls, triangles, lines, points, geometries, textures, shaders). Rows without a data source skip themselves.
+Anchored top-right by default: filled graphs for FPS, CPU, GPU, and JS heap (with observed range in the label), then flat three.js counters (calls, render calls, triangles, lines, points, geometries, textures, shaders). Rows without a data source skip themselves.
 
-- **FPS** — completed `renderer.render` calls per sampling window, matching the begin/end counting model used by stats.js.
-- **CPU ms** — `renderer.render` is wrapped automatically; pass `instrument: false` to opt out and bracket your frame manually with `perf.begin()` / `perf.end()`.
+- **FPS** — display frames via `requestAnimationFrame` (not nested `renderer.render` calls from post/shadow passes).
+- **CPU ms** — JS time for the full top-level render tree per display frame; pass `instrument: false` to opt out and bracket your frame manually with `perf.begin()` / `perf.end()`.
 - **GPU ms** — WebGL2 uses `EXT_disjoint_timer_query_webgl2`; three's WebGPURenderer works when created with `trackTimestamp: true`; or supply your own timer with `gpuTime: () => ms`.
+- **Render calls** — `info.render.frameCalls` (WebGPU): how many public `renderer.render()` invocations ran this frame (scene pass + shadow faces + post quads). Triangles/draw calls include all of those passes.
 - **GPU memory** — pass `gpuMemory: () => bytes` from your own texture/buffer accounting to add a graph next to JS heap.
 - `addPerfMonitors(container, perf)` drops the same rows into a pane or folder you already have; `createPerfMonitor(options)` is the headless sampler if you only want the numbers.
 

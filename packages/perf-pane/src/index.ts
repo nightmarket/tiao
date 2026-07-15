@@ -22,7 +22,7 @@ export interface PerfPaneApi {
 
 /**
  * Pre-configured pane (top-right by default) that monitors a canvas app:
- * fps / cpu / gpu / heap graphs in a tab group, plus flat three.js counters.
+ * fps / cpu / gpu / heap graphs, plus flat three.js counters.
  * Pass a three.js renderer and everything available lights up; rows without a
  * data source are skipped.
  */
@@ -61,33 +61,31 @@ export function addPerfMonitors(
 ): void {
   const { stats, capabilities, interval } = perf
   const graph = { readonly: true, view: 'graph', interval, min: 0 } as const
-  const fpsOpts = { ...graph, label: 'FPS', max: options.maxFps ?? 120, unit: 'FPS', format: round }
+  const fpsOpts = { ...graph, label: 'FPS', max: options.maxFps ?? 144, unit: 'FPS', format: round }
   const cpuOpts = { ...graph, label: 'CPU', unit: 'ms', format: ms }
   const gpuOpts = { ...graph, label: 'GPU', unit: 'ms', format: ms }
   const heapOpts = { ...graph, label: 'JS heap', unit: 'MB', format: mb }
 
-  const tabs = container.addTab({
-    pages: [{ title: 'All' }, { title: 'FPS' }, { title: 'Memory' }, { title: 'Perf' }],
-  })
-  const [all, fpsPage, memoryPage, perfPage] = tabs.pages
-
-  all!.addBinding(stats, 'fps', fpsOpts)
-  all!.addBinding(stats, 'cpu', cpuOpts)
-  if (capabilities.gpu) all!.addBinding(stats, 'gpu', gpuOpts)
-  if (capabilities.jsHeap) all!.addBinding(stats, 'jsHeap', heapOpts)
-
-  fpsPage!.addBinding(stats, 'fps', fpsOpts)
-
-  if (capabilities.jsHeap) memoryPage!.addBinding(stats, 'jsHeap', heapOpts)
+  container.addBinding(stats, 'fps', fpsOpts)
+  container.addBinding(stats, 'cpu', cpuOpts)
+  if (capabilities.gpu) container.addBinding(stats, 'gpu', gpuOpts)
+  if (capabilities.jsHeap) container.addBinding(stats, 'jsHeap', heapOpts)
   if (capabilities.gpuMemory) {
-    memoryPage!.addBinding(stats, 'gpuMemory', { ...graph, label: 'GPU mem', unit: 'MB', format: mb })
+    container.addBinding(stats, 'gpuMemory', {
+      ...graph,
+      label: 'GPU mem',
+      unit: 'MB',
+      format: mb,
+    })
   }
-
-  perfPage!.addBinding(stats, 'cpu', cpuOpts)
-  if (capabilities.gpu) perfPage!.addBinding(stats, 'gpu', gpuOpts)
 
   if (capabilities.counts) {
     container.addBinding(stats, 'calls', { readonly: true, format: int })
+    container.addBinding(stats, 'frameCalls', {
+      readonly: true,
+      format: int,
+      label: 'Render calls',
+    })
     container.addBinding(stats, 'triangles', { readonly: true, format: int })
     container.addBinding(stats, 'lines', { readonly: true, format: int })
     container.addBinding(stats, 'points', { readonly: true, format: int })

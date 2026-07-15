@@ -3,11 +3,13 @@ import { onTick } from '@tiao/core'
 /** Live sample values. Poll with readonly bindings or read directly. */
 export interface PerfStats {
   fps: number
-  /** JS time spent inside render calls, ms per frame */
+  /** JS time spent inside the top-level render tree, ms per display frame */
   cpu: number
   /** GPU time per frame, ms */
   gpu: number
   calls: number
+  /** Public renderer.render() invocations this frame (scene + shadows + passes) */
+  frameCalls: number
   triangles: number
   lines: number
   points: number
@@ -32,6 +34,8 @@ export interface RendererInfoLike {
     calls?: number
     /** WebGPU/common Info: per-frame draw calls */
     drawCalls?: number
+    /** WebGPU/common Info: public renderer.render() invocations this frame */
+    frameCalls?: number
     triangles?: number
     points?: number
     lines?: number
@@ -187,9 +191,9 @@ function onInfoTick(info: RendererInfoLike, tick: InfoTick): () => void {
 }
 
 /**
- * Headless perf sampler: fps and cpu/gpu ms from begin/end brackets
- * (auto-installed around `renderer.render`), and draw-call/memory counts read
- * straight from the renderer's `.info`.
+ * Headless perf sampler: display FPS from rAF ticks, cpu/gpu ms from begin/end
+ * brackets around `renderer.render` (including nested passes), and draw-call /
+ * memory counts from the renderer's `.info`.
  */
 export function createPerfMonitor(options: PerfMonitorOptions = {}): PerfMonitor {
   const stats: PerfStats = {
@@ -197,6 +201,7 @@ export function createPerfMonitor(options: PerfMonitorOptions = {}): PerfMonitor
     cpu: 0,
     gpu: 0,
     calls: 0,
+    frameCalls: 0,
     triangles: 0,
     lines: 0,
     points: 0,
@@ -226,23 +231,30 @@ export function createPerfMonitor(options: PerfMonitorOptions = {}): PerfMonitor
   }
 
   // --- cpu/gpu brackets ---
+  // WebGPU post/shadow pipelines nest renderer.render() (scene pass, cube
+  // shadow faces, fullscreen quad). Depth-track so CPU covers the whole tree
+  // once, and FPS is NOT derived from these brackets (that would report
+  // hundreds/thousands of "FPS").
+  let renderDepth = 0
   let cpuStart = -1
   let cpuSum = 0
-  let cpuCount = 0
-  let frames = 0
+  let displayFrames = 0
 
   const begin = () => {
-    if (cpuStart >= 0) return // ignore nested begins
-    cpuStart = performance.now()
-    timer?.begin()
+    if (renderDepth === 0) {
+      cpuStart = performance.now()
+      timer?.begin()
+    }
+    renderDepth++
   }
   const end = () => {
-    if (cpuStart < 0) return
-    cpuSum += performance.now() - cpuStart
-    cpuCount++
-    frames++
-    cpuStart = -1
-    timer?.end()
+    if (renderDepth === 0) return
+    renderDepth--
+    if (renderDepth === 0 && cpuStart >= 0) {
+      cpuSum += performance.now() - cpuStart
+      cpuStart = -1
+      timer?.end()
+    }
   }
 
   const stopInstrumentation =
@@ -263,6 +275,7 @@ export function createPerfMonitor(options: PerfMonitorOptions = {}): PerfMonitor
       // WebGPU/common: drawCalls is per-frame; calls is lifetime render() count.
       // WebGLInfo: calls is the per-frame draw counter (no drawCalls field).
       stats.calls = r.drawCalls ?? r.calls ?? 0
+      stats.frameCalls = r.frameCalls ?? 0
       stats.triangles = r.triangles ?? 0
       stats.lines = r.lines ?? 0
       stats.points = r.points ?? 0
@@ -275,19 +288,20 @@ export function createPerfMonitor(options: PerfMonitorOptions = {}): PerfMonitor
     if (Array.isArray(current.programs)) stats.shaders = current.programs.length
   }
 
-  // Snapshot + reset every frame; report fps/cpu/gpu on the sampling window.
+  // Snapshot + reset every display frame; report fps/cpu/gpu on the sampling window.
   let windowStart = typeof performance !== 'undefined' ? performance.now() : 0
   const tick = (t: number) => {
+    displayFrames++
     readCounts()
 
     const elapsed = t - windowStart
     if (elapsed < sampleMs) return
 
-    stats.fps = (frames * 1000) / elapsed
-    stats.cpu = cpuCount > 0 ? cpuSum / cpuCount : 0
+    stats.fps = (displayFrames * 1000) / elapsed
+    // cpuSum is total JS time in top-level render trees over the window
+    stats.cpu = displayFrames > 0 ? cpuSum / displayFrames : 0
     cpuSum = 0
-    cpuCount = 0
-    frames = 0
+    displayFrames = 0
     windowStart = t
 
     if (options.gpuTime) {
