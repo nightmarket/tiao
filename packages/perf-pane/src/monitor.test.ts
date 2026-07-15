@@ -6,7 +6,7 @@ afterEach(() => {
 })
 
 describe('createPerfMonitor', () => {
-  it('derives FPS from completed render brackets instead of display ticks', () => {
+  it('derives FPS from display ticks, not nested renderer.render calls', () => {
     let nextFrame: FrameRequestCallback | undefined
     let rafId = 0
     vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
@@ -25,21 +25,55 @@ describe('createPerfMonitor', () => {
     const monitor = createPerfMonitor({ renderer, interval: 100 })
 
     const render = renderer.render as unknown as (...args: unknown[]) => unknown
+    // Nested post/shadow pipelines fire many render()s per display frame —
+    // those must not inflate FPS.
     expect(render('scene', 'camera')).toBe(renderResult)
     renderer.render?.()
-    expect(originalRender).toHaveBeenNthCalledWith(1, 'scene', 'camera')
+    renderer.render?.()
+    renderer.render?.()
     nextFrame?.(beforeCreate + 200)
 
-    // Two completed renders over roughly 200ms is roughly 10 rendered FPS.
-    expect(monitor.stats.fps).toBeGreaterThan(9)
-    expect(monitor.stats.fps).toBeLessThan(11)
+    // One display tick over ~200ms is roughly 5 FPS.
+    expect(monitor.stats.fps).toBeGreaterThan(4)
+    expect(monitor.stats.fps).toBeLessThan(6)
 
-    // A display tick without an application render must report zero FPS.
     nextFrame?.(beforeCreate + 400)
-    expect(monitor.stats.fps).toBe(0)
+    expect(monitor.stats.fps).toBeGreaterThan(4)
+    expect(monitor.stats.fps).toBeLessThan(6)
 
     monitor.dispose()
     expect(renderer.render).toBe(originalRender)
+  })
+
+  it('times the full nested render tree once for CPU', () => {
+    let nextFrame: FrameRequestCallback | undefined
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      nextFrame = callback
+      return 1
+    })
+    vi.stubGlobal('cancelAnimationFrame', vi.fn())
+
+    let now = 1000
+    vi.spyOn(performance, 'now').mockImplementation(() => now)
+
+    const monitor = createPerfMonitor({ interval: 50, instrument: false })
+    const before = now
+    monitor.begin() // outer (post quad)
+    now += 1
+    monitor.begin() // nested scene pass
+    monitor.end()
+    now += 1
+    monitor.begin() // nested shadow face
+    monitor.end()
+    now += 1
+    monitor.end() // outer
+    // Outer tree spanned 3ms; nested begins must not split that into 1ms samples.
+    now = before + 100
+    nextFrame?.(now)
+    expect(monitor.stats.cpu).toBeGreaterThanOrEqual(2.5)
+    expect(monitor.stats.cpu).toBeLessThan(4)
+
+    monitor.dispose()
   })
 
   it('reuses resolved WebGL timer queries', () => {

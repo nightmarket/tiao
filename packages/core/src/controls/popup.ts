@@ -2,9 +2,10 @@ import { longPress, setRowActive } from '../dom'
 import { applyOverlayTheme } from './scrubber'
 
 /**
- * Floating popup anchored below an element. The popup node is re-parented to
- * the pane root so it escapes the collapse clip while staying inside the
- * theme scope (CSS variables live on .tiao-pane).
+ * Floating popup anchored below an element (flips above when the viewport
+ * lacks room). The popup node is re-parented to the pane root so it escapes
+ * the collapse clip while staying inside the theme scope (CSS variables live
+ * on .tiao-pane).
  */
 export function createPopup(
   anchor: HTMLElement,
@@ -13,6 +14,7 @@ export function createPopup(
 ): { toggle: () => void; close: () => void; isOpen: () => boolean } {
   let open = false
   popup.classList.add('tiao-popup')
+  const doc = anchor.ownerDocument
 
   const reposition = () => {
     const pane = anchor.closest('.tiao-pane') as HTMLElement | null
@@ -20,10 +22,19 @@ export function createPopup(
     if (popup.parentElement !== pane) pane.append(popup)
     const paneRect = pane.getBoundingClientRect()
     const rect = anchor.getBoundingClientRect()
+    const gap = 4
     popup.style.minWidth = `${rect.width}px`
-    popup.style.top = `${rect.bottom - paneRect.top + 4}px`
-    // right-align to the anchor (measured while open)
+    // measure while open (display:flex) so height/width are real
+    const height = popup.offsetHeight
     const width = popup.offsetWidth || rect.width
+    const viewportHeight = doc.defaultView?.innerHeight ?? Infinity
+    const spaceBelow = viewportHeight - rect.bottom - gap
+    const spaceAbove = rect.top - gap
+    const openAbove = height > spaceBelow && spaceAbove > spaceBelow
+    popup.style.top = openAbove
+      ? `${rect.top - paneRect.top - height - gap}px`
+      : `${rect.bottom - paneRect.top + gap}px`
+    // right-align to the anchor
     popup.style.left = `${Math.max(4, rect.right - paneRect.left - width)}px`
   }
 
@@ -38,7 +49,6 @@ export function createPopup(
     if (e.key === 'Escape') close()
   }
 
-  const doc = anchor.ownerDocument
   let stopScrollWatch: (() => void) | null = null
 
   const openPopup = () => {

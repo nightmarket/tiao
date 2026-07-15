@@ -1200,13 +1200,14 @@ html.tiao-cursor-ew * {
 .tiao-check::after {
   content: '';
   position: absolute;
-  inset: 5px;
+  inset: 4px;
   border-radius: 2px;
-  background: transparent;
-  transition: background 0.12s ease;
+  background: var(--tiao-accent);
+  transform: scale(0);
+  transition: transform 0.15s cubic-bezier(0.2, 0.85, 0.3, 1);
 }
 .tiao-check.tiao-checked::after {
-  background: var(--tiao-accent);
+  transform: scale(1);
 }
 
 /* ---- select ---- */
@@ -1537,9 +1538,10 @@ html.tiao-cursor-ew * {
   transition: background 0.12s ease, color 0.12s ease;
 }
 .tiao-point-pad-toggle:hover,
+.tiao-row:hover .tiao-point-pad-toggle,
 .tiao-row.tiao-row-active .tiao-point-pad-toggle {
-  background: var(--tiao-hover-strong);
-  color: var(--tiao-fg-soft);
+  background: var(--tiao-accent);
+  color: var(--tiao-accent-fg);
 }
 .tiao-point-pad-toggle .tiao-icon {
   width: 10px;
