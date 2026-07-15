@@ -594,8 +594,8 @@ describe('Pane registry and chrome', () => {
     const labelEl = binding.element.querySelector('.tiao-graph-label')!
     params.fps = 80
     binding.refresh()
-    // one buffered value: show it without a dash
-    expect(labelEl.textContent).toBe('FPS (80)')
+    // flat window: no variance across the buffer
+    expect(labelEl.textContent).toBe('FPS (No Change)')
     params.fps = 140
     binding.refresh()
     expect(labelEl.textContent).toBe('FPS (80-140)')

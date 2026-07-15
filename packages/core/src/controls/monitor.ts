@@ -203,13 +203,15 @@ export function createGraph(
   }
 
   // Label shows the observed range over the plotted window, e.g. "FPS (80-140)".
+  // Flat windows (no variance) show "(No Change)" instead of a single value.
   // The buffer *is* the window — the parenthesized range always describes exactly
   // what's on screen; the monitor interval determines its elapsed duration.
   const updateLabel = () => {
     if (!labelEl || buffer.length === 0) return
     const loText = format(observedMin)
     const hiText = format(observedMax)
-    const next = loText === hiText ? `${label} (${loText})` : `${label} (${loText}-${hiText})`
+    const next =
+      loText === hiText ? `${label} (No Change)` : `${label} (${loText}-${hiText})`
     if (next !== labelText) {
       labelText = next
       labelEl.textContent = next
