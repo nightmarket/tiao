@@ -3,10 +3,10 @@
   "compilerOptions": {
     "jsx": "react-jsx",
     "paths": {
-      "@tiao/core/styles.css": ["../../packages/core/src/styles.css"],
-      "@tiao/*": ["../../packages/*/src/index.ts"]
+      "tiao-tiao": ["../../packages/tiao/src/core/index.ts"],
+      "tiao-tiao/styles.css": ["../../packages/tiao/src/core/styles.css"],
+      "tiao-tiao/*": ["../../packages/tiao/src/*/index.ts"]
     }
   },
   "include": ["src", "vite.config.ts"]
 }
-

@@ -20,33 +20,6 @@ importers:
 
   apps/playground:
     dependencies:
-      '@tiao/core':
-        specifier: workspace:^
-        version: link:../../packages/core
-      '@tiao/export-pane':
-        specifier: workspace:^
-        version: link:../../packages/export-pane
-      '@tiao/perf-pane':
-        specifier: workspace:^
-        version: link:../../packages/perf-pane
-      '@tiao/plugin-bezier':
-        specifier: workspace:^
-        version: link:../../packages/plugin-bezier
-      '@tiao/plugin-camera':
-        specifier: workspace:^
-        version: link:../../packages/plugin-camera
-      '@tiao/plugin-fps':
-        specifier: workspace:^
-        version: link:../../packages/plugin-fps
-      '@tiao/plugin-media':
-        specifier: workspace:^
-        version: link:../../packages/plugin-media
-      '@tiao/plugin-radio-grid':
-        specifier: workspace:^
-        version: link:../../packages/plugin-radio-grid
-      '@tiao/react':
-        specifier: workspace:^
-        version: link:../../packages/react
       '@types/three':
         specifier: ^0.185.0
         version: 0.185.0
@@ -59,6 +32,9 @@ importers:
       three:
         specifier: ^0.185.1
         version: 0.185.1
+      tiao-tiao:
+        specifier: workspace:^
+        version: link:../../packages/tiao
     devDependencies:
       '@types/node':
         specifier: ^22.20.1
@@ -79,114 +55,11 @@ importers:
         specifier: ^6.0.11
         version: 6.4.3(@types/node@22.20.1)
 
-  packages/core:
-    devDependencies:
-      tsup:
-        specifier: ^8.3.6
-        version: 8.5.1(postcss@8.5.16)(typescript@5.9.3)
-      typescript:
-        specifier: ^5.7.3
-        version: 5.9.3
-
-  packages/export-pane:
+  packages/tiao:
     dependencies:
-      '@tiao/core':
-        specifier: file:../core
-        version: link:../core
       mediabunny:
         specifier: ^1.6.1
         version: 1.50.7
-    devDependencies:
-      tsup:
-        specifier: ^8.3.6
-        version: 8.5.1(postcss@8.5.16)(typescript@5.9.3)
-      typescript:
-        specifier: ^5.7.3
-        version: 5.9.3
-
-  packages/perf-pane:
-    dependencies:
-      '@tiao/core':
-        specifier: file:../core
-        version: link:../core
-    devDependencies:
-      tsup:
-        specifier: ^8.3.6
-        version: 8.5.1(postcss@8.5.16)(typescript@5.9.3)
-      typescript:
-        specifier: ^5.7.3
-        version: 5.9.3
-
-  packages/plugin-bezier:
-    dependencies:
-      '@tiao/core':
-        specifier: file:../core
-        version: link:../core
-    devDependencies:
-      tsup:
-        specifier: ^8.3.6
-        version: 8.5.1(postcss@8.5.16)(typescript@5.9.3)
-      typescript:
-        specifier: ^5.7.3
-        version: 5.9.3
-
-  packages/plugin-camera:
-    dependencies:
-      '@tiao/core':
-        specifier: file:../core
-        version: link:../core
-    devDependencies:
-      tsup:
-        specifier: ^8.3.6
-        version: 8.5.1(postcss@8.5.16)(typescript@5.9.3)
-      typescript:
-        specifier: ^5.7.3
-        version: 5.9.3
-
-  packages/plugin-fps:
-    dependencies:
-      '@tiao/core':
-        specifier: file:../core
-        version: link:../core
-    devDependencies:
-      tsup:
-        specifier: ^8.3.6
-        version: 8.5.1(postcss@8.5.16)(typescript@5.9.3)
-      typescript:
-        specifier: ^5.7.3
-        version: 5.9.3
-
-  packages/plugin-media:
-    dependencies:
-      '@tiao/core':
-        specifier: file:../core
-        version: link:../core
-    devDependencies:
-      tsup:
-        specifier: ^8.3.6
-        version: 8.5.1(postcss@8.5.16)(typescript@5.9.3)
-      typescript:
-        specifier: ^5.7.3
-        version: 5.9.3
-
-  packages/plugin-radio-grid:
-    dependencies:
-      '@tiao/core':
-        specifier: file:../core
-        version: link:../core
-    devDependencies:
-      tsup:
-        specifier: ^8.3.6
-        version: 8.5.1(postcss@8.5.16)(typescript@5.9.3)
-      typescript:
-        specifier: ^5.7.3
-        version: 5.9.3
-
-  packages/react:
-    dependencies:
-      '@tiao/core':
-        specifier: file:../core
-        version: link:../core
     devDependencies:
       '@types/react':
         specifier: ^18.3.18

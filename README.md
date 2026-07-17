@@ -2,21 +2,36 @@
 
 A themeable, draggable debug pane for tweaking parameters — tweakpane-style bindings with a modern look, a first-class React API, and a plug-and-play plugin system. Zero dependencies in core.
 
-| Package | What it is |
+## Install
+
+```sh
+npm install tiao-tiao
+```
+
+> **Note:** The bare name `tiao` is already taken on npm, so we publish as `tiao-tiao`. Import paths below use `tiao-tiao`.
+
+One package. Import what you need via subpaths:
+
+| Import | What it is |
 | --- | --- |
-| `@tiao/core` | Vanilla TS pane: bindings, folders, tabs, monitors, theming, drag/anchor/hide |
-| `@tiao/react` | Leva-style hooks on top of core; UI lazy-loads and tree-shakes out of prod |
-| `@tiao/plugin-fps` | FPS graph blade |
-| `@tiao/plugin-bezier` | Cubic-bezier easing editor input |
-| `@tiao/plugin-radio-grid` | Segmented radio grid input |
-| `@tiao/plugin-media` | Image/video upload input (drag & drop) for WebGL/WebGPU textures |
-| `@tiao/export-pane` | Pre-configured pane that exports a canvas to PNG / WebM / MP4 |
-| `@tiao/perf-pane` | Pre-configured pane for canvas/three.js perf: fps, cpu/gpu ms, draw calls, memory |
+| `tiao-tiao` | Vanilla TS pane: bindings, folders, tabs, monitors, theming, drag/anchor/hide |
+| `tiao-tiao/react` | Leva-style hooks; UI lazy-loads and tree-shakes out of prod |
+| `tiao-tiao/plugin-fps` | FPS graph blade |
+| `tiao-tiao/plugin-bezier` | Cubic-bezier easing editor input |
+| `tiao-tiao/plugin-radio-grid` | Segmented radio grid input |
+| `tiao-tiao/plugin-media` | Image/video upload input (drag & drop) for WebGL/WebGPU textures |
+| `tiao-tiao/plugin-camera` | Camera-style ring / wheel number inputs |
+| `tiao-tiao/export-pane` | Pre-configured pane that exports a canvas to PNG / WebM / MP4 |
+| `tiao-tiao/perf-pane` | Pre-configured pane for canvas/three.js perf: fps, cpu/gpu ms, draw calls, memory |
+
+`tiao-tiao` is ESM-only. Each subpath is a separate entry point, so unused plugins stay out of your bundle.
+
+React is an optional peer dependency and is only needed for `tiao-tiao/react`. The MP4 encoder is loaded lazily, so it stays out of your application bundle unless you use MP4 export.
 
 ## Quick start (vanilla)
 
 ```ts
-import { Pane } from '@tiao/core'
+import { Pane } from 'tiao-tiao'
 
 const params = {
   speed: 1,
@@ -50,7 +65,7 @@ pane.on('change', (ev) => console.log(ev.key, ev.value, ev.last))
 pane.dispose() // full cleanup
 ```
 
-Styles are injected automatically on first pane creation. To manage CSS yourself (e.g. CSP without inline styles), `import '@tiao/core/styles.css'` instead — auto-injection detects it and no-ops.
+Styles are injected automatically on first pane creation. To manage CSS yourself (e.g. CSP without inline styles), `import 'tiao-tiao/styles.css'` instead — auto-injection detects it and no-ops.
 
 ### Pane chrome
 
@@ -82,7 +97,7 @@ Theme, accent, and style are also editable from the Pane Settings panel (gear ic
 ## React
 
 ```tsx
-import { useControls, button, monitor } from '@tiao/react'
+import { useControls, button, monitor } from 'tiao-tiao/react'
 
 function ComponentA() {
   // creates the default pane
@@ -114,13 +129,13 @@ function ComponentC() {
 
 ### Production builds
 
-`useControls` is enabled when `NODE_ENV !== 'production'` (override per-hook with `enabled`, or globally with `setTiaoEnabled`). When disabled, hooks return plain default values and none of the DOM/UI code loads — `@tiao/core` is behind a dynamic `import()`, so bundlers split it into a chunk that prod users never download.
+`useControls` is enabled when `NODE_ENV !== 'production'` (override per-hook with `enabled`, or globally with `setTiaoEnabled`). When disabled, hooks return plain default values and none of the DOM/UI code loads — core is behind a dynamic `import()`, so bundlers split it into a chunk that prod users never download.
 
 The vanilla equivalent:
 
 ```ts
 if (import.meta.env.DEV) {
-  const { Pane } = await import('@tiao/core')
+  const { Pane } = await import('tiao-tiao')
   buildDebugPane(new Pane())
 }
 ```
@@ -128,10 +143,10 @@ if (import.meta.env.DEV) {
 ## Plugins
 
 ```ts
-import { addFpsGraph } from '@tiao/plugin-fps'
-import { registerBezierPlugin } from '@tiao/plugin-bezier'
-import { registerRadioGridPlugin } from '@tiao/plugin-radio-grid'
-import { registerMediaPlugin, type MediaValue } from '@tiao/plugin-media'
+import { addFpsGraph } from 'tiao-tiao/plugin-fps'
+import { registerBezierPlugin } from 'tiao-tiao/plugin-bezier'
+import { registerRadioGridPlugin } from 'tiao-tiao/plugin-radio-grid'
+import { registerMediaPlugin, type MediaValue } from 'tiao-tiao/plugin-media'
 
 addFpsGraph(pane)
 registerBezierPlugin()
@@ -149,7 +164,7 @@ The media input takes a png/jpeg/webp image or mp4/webm video via drag & drop or
 A plugin claims a `(value, options)` pair and renders a view around a reactive `Value`:
 
 ```ts
-import { registerPlugin, type InputPlugin } from '@tiao/core'
+import { registerPlugin, type InputPlugin } from 'tiao-tiao'
 
 const starsPlugin: InputPlugin<number> = {
   id: 'stars',
@@ -174,7 +189,7 @@ Registration is last-wins, so your plugin can override built-ins. Built-in contr
 ## Export pane
 
 ```ts
-import { createExportPane } from '@tiao/export-pane'
+import { createExportPane } from 'tiao-tiao/export-pane'
 
 const pane = createExportPane({ target: canvas, filename: 'scene' })
 ```
@@ -184,7 +199,7 @@ Anchored bottom-right by default: PNG export with scale, WebM recording via `Med
 ## Perf pane
 
 ```ts
-import { createPerfPane } from '@tiao/perf-pane'
+import { createPerfPane } from 'tiao-tiao/perf-pane'
 
 // renderer: three.js WebGLRenderer or WebGPURenderer (duck-typed — no three dependency)
 const { pane, perf, dispose } = createPerfPane({ renderer })
@@ -204,9 +219,16 @@ Anchored top-right by default: filled graphs for FPS, CPU, GPU, and JS heap (wit
 ```sh
 pnpm install
 pnpm dev          # playground at localhost:5173 (HMR over package sources)
-pnpm build        # build packages for publish / consumers of dist
+pnpm build        # build the tiao-tiao package for publish
 pnpm test         # vitest
 pnpm typecheck
 ```
 
-The playground Vite config aliases `@tiao/*` to each package's `src/`, so edits under `packages/` hot-reload without running `pnpm build`.
+The playground Vite config aliases `tiao-tiao` / `tiao-tiao/*` to `packages/tiao/src/`, so edits hot-reload without running `pnpm build`.
+
+### Publishing
+
+```sh
+npm login
+pnpm publish:packages
+```

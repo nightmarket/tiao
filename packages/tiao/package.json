@@ -1,0 +1,105 @@
+{
+  "name": "tiao-tiao",
+  "version": "0.1.0",
+  "description": "A themeable, draggable debug pane for tweaking parameters. Vanilla TS core, React hooks, and optional plugins.",
+  "keywords": [
+    "debug",
+    "controls",
+    "tweakpane",
+    "react",
+    "webgl",
+    "webgpu"
+  ],
+  "license": "MIT",
+  "author": "Chang Liu",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shampliu/tiao.git",
+    "directory": "packages/tiao"
+  },
+  "homepage": "https://github.com/shampliu/tiao#readme",
+  "bugs": {
+    "url": "https://github.com/shampliu/tiao/issues"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "type": "module",
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./styles.css": {
+      "types": "./dist/styles.d.ts",
+      "default": "./dist/tiao.css"
+    },
+    "./react": {
+      "types": "./dist/react.d.ts",
+      "import": "./dist/react.js"
+    },
+    "./perf-pane": {
+      "types": "./dist/perf-pane.d.ts",
+      "import": "./dist/perf-pane.js"
+    },
+    "./export-pane": {
+      "types": "./dist/export-pane.d.ts",
+      "import": "./dist/export-pane.js"
+    },
+    "./plugin-fps": {
+      "types": "./dist/plugin-fps.d.ts",
+      "import": "./dist/plugin-fps.js"
+    },
+    "./plugin-bezier": {
+      "types": "./dist/plugin-bezier.d.ts",
+      "import": "./dist/plugin-bezier.js"
+    },
+    "./plugin-radio-grid": {
+      "types": "./dist/plugin-radio-grid.d.ts",
+      "import": "./dist/plugin-radio-grid.js"
+    },
+    "./plugin-media": {
+      "types": "./dist/plugin-media.d.ts",
+      "import": "./dist/plugin-media.js"
+    },
+    "./plugin-camera": {
+      "types": "./dist/plugin-camera.d.ts",
+      "import": "./dist/plugin-camera.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup && cp src/core/styles.css dist/tiao.css && cp src/styles.d.ts dist/styles.d.ts",
+    "prepack": "pnpm run build",
+    "typecheck": "tsc --noEmit"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "mediabunny": "^1.6.1"
+  },
+  "peerDependencies": {
+    "react": ">=18"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.7",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tsup": "^8.3.6",
+    "typescript": "^5.7.3"
+  }
+}
