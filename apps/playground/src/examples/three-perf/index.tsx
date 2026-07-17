@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { Pane } from '@nightmarket/tiao'
+import { Pane } from '@nightmarket/tiao/core'
 import { createPerfPane } from '@nightmarket/tiao/perf-pane'
 import { startThreeScene } from './scene'
 

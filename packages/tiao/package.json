@@ -1,6 +1,6 @@
 {
   "name": "@nightmarket/tiao",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "A themeable, draggable debug pane for tweaking parameters. Vanilla TS core, React hooks, and optional plugins.",
   "keywords": [
     "debug",
@@ -33,7 +33,17 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "production": "./dist/index.production.js",
+      "default": "./dist/index.js"
+    },
+    "./core": {
+      "types": "./dist/core.d.ts",
+      "default": "./dist/core.js"
+    },
+    "./lazy": {
+      "types": "./dist/index.d.ts",
+      "production": "./dist/index.production.js",
+      "default": "./dist/index.js"
     },
     "./styles.css": {
       "types": "./dist/styles.d.ts",
@@ -57,7 +67,8 @@
     },
     "./plugin-bezier": {
       "types": "./dist/plugin-bezier.d.ts",
-      "import": "./dist/plugin-bezier.js"
+      "production": "./dist/plugin-bezier.production.js",
+      "default": "./dist/plugin-bezier.js"
     },
     "./plugin-radio-grid": {
       "types": "./dist/plugin-radio-grid.d.ts",
@@ -69,7 +80,8 @@
     },
     "./plugin-camera": {
       "types": "./dist/plugin-camera.d.ts",
-      "import": "./dist/plugin-camera.js"
+      "production": "./dist/plugin-camera.production.js",
+      "default": "./dist/plugin-camera.js"
     }
   },
   "files": [

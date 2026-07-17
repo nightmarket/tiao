@@ -10,15 +10,17 @@ npm install @nightmarket/tiao
 ```
 
 ```ts
-import { Pane } from '@nightmarket/tiao'
+import { mountPane } from '@nightmarket/tiao'
 
-const pane = new Pane({ title: 'Debug' })
-pane.addBinding(params, 'speed', { min: 0, max: 4 })
+const dispose = mountPane({ title: 'Debug' }, (pane) => {
+  pane.addBinding(params, 'speed', { min: 0, max: 4 })
+})
 ```
 
 Everything ships in one package with tree-shakeable subpath exports:
 
-- `@nightmarket/tiao` — core pane API
+- `@nightmarket/tiao` — production-safe lazy pane mounting
+- `@nightmarket/tiao/core` — eager pane API for production-visible tooling
 - `@nightmarket/tiao/react` — React hooks
 - `@nightmarket/tiao/perf-pane` — performance monitors
 - `@nightmarket/tiao/export-pane` — PNG, WebM, and MP4 export
@@ -34,5 +36,8 @@ The package is ESM-only.
 React is an optional peer dependency and is only required for
 `@nightmarket/tiao/react`. The core injects its styles automatically; importing
 `@nightmarket/tiao/styles.css` disables that runtime injection.
+
+`useControls` and `mountPane` work without application-level environment
+checks: they lazy-load the pane in development and become no-ops in production.
 
 See the [full documentation](https://github.com/nightmarket/tiao#readme).

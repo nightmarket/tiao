@@ -2,15 +2,19 @@ import { defineConfig } from 'tsup'
 
 export default defineConfig({
   entry: {
-    index: 'src/core/index.ts',
+    index: 'src/lazy/index.ts',
+    'index.production': 'src/lazy/production.ts',
+    core: 'src/core/index.ts',
     react: 'src/react/index.ts',
     'perf-pane': 'src/perf-pane/index.ts',
     'export-pane': 'src/export-pane/index.ts',
     'plugin-fps': 'src/plugin-fps/index.ts',
     'plugin-bezier': 'src/plugin-bezier/index.ts',
+    'plugin-bezier.production': 'src/plugin-bezier/production.ts',
     'plugin-radio-grid': 'src/plugin-radio-grid/index.ts',
     'plugin-media': 'src/plugin-media/index.ts',
     'plugin-camera': 'src/plugin-camera/index.ts',
+    'plugin-camera.production': 'src/plugin-camera/production.ts',
   },
   format: ['esm'],
   dts: true,

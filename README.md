@@ -16,7 +16,8 @@ One package. Import what you need via subpaths:
 
 | Import | What it is |
 | --- | --- |
-| `@nightmarket/tiao` | Vanilla TS pane: bindings, folders, tabs, monitors, theming, drag/anchor/hide |
+| `@nightmarket/tiao` | Production-safe `mountPane`; lazy in development and a no-op in production |
+| `@nightmarket/tiao/core` | Eager `Pane` API for panes that must exist in production |
 | `@nightmarket/tiao/react` | Leva-style hooks; UI lazy-loads and tree-shakes out of prod |
 | `@nightmarket/tiao/plugin-fps` | FPS graph blade |
 | `@nightmarket/tiao/plugin-bezier` | Cubic-bezier easing editor input |
@@ -33,7 +34,7 @@ React is an optional peer dependency and is only needed for `@nightmarket/tiao/r
 ## Quick start (vanilla)
 
 ```ts
-import { Pane } from '@nightmarket/tiao'
+import { mountPane } from '@nightmarket/tiao'
 
 const params = {
   speed: 1,
@@ -45,26 +46,29 @@ const params = {
   blend: 'multiply',
 }
 
-const pane = new Pane({ title: 'Scene', anchor: 'top-right', toggleKey: '`' })
+const disposePane = mountPane(
+  { title: 'Scene', anchor: 'top-right', toggleKey: '`' },
+  (pane) => {
+    pane.addBinding(params, 'speed', { min: 0, max: 4, step: 0.01 }) // fill slider
+    pane.addBinding(params, 'range', { min: 0, max: 100, step: 1 })  // interval ({ min, max } value)
+    pane.addBinding(params, 'enabled')                               // check toggle
+    pane.addBinding(params, 'label')                                 // text input
+    pane.addBinding(params, 'tint')                                  // color picker (auto-detected)
+    pane.addBinding(params, 'accent')                                // 'oklch(0.7 0.15 200)' / 'oklab(...)' open a gamut-aware OKLCH picker
+    pane.addBinding(params, 'offset', { x: { min: -1, max: 1 }, y: { min: -1, max: 1 } })
+    pane.addBinding(params, 'yaw', { view: 'angle' }) // circular angle overlay (degrees; unit: 'rad' for radians)
+    pane.addBinding(params, 'blend', { options: { Multiply: 'multiply', Screen: 'screen' } })
 
-pane.addBinding(params, 'speed', { min: 0, max: 4, step: 0.01 }) // fill slider
-pane.addBinding(params, 'range', { min: 0, max: 100, step: 1 })  // interval ({ min, max } value)
-pane.addBinding(params, 'enabled')                               // check toggle
-pane.addBinding(params, 'label')                                 // text input
-pane.addBinding(params, 'tint')                                  // color picker (auto-detected)
-pane.addBinding(params, 'accent')                                // 'oklch(0.7 0.15 200)' / 'oklab(...)' open a gamut-aware OKLCH picker
-pane.addBinding(params, 'offset', { x: { min: -1, max: 1 }, y: { min: -1, max: 1 } })
-pane.addBinding(params, 'yaw', { view: 'angle' }) // circular angle overlay (degrees; unit: 'rad' for radians)
-pane.addBinding(params, 'blend', { options: { Multiply: 'multiply', Screen: 'screen' } })
+    const folder = pane.addFolder({ title: 'Advanced', expanded: false }) // collapsible: false pins a section open
+    folder.addBinding(stats, 'fps', { readonly: true, view: 'graph', min: 0, max: 120 })
 
-const folder = pane.addFolder({ title: 'Advanced', expanded: false }) // collapsible: false pins a section open
-folder.addBinding(stats, 'fps', { readonly: true, view: 'graph', min: 0, max: 120 })
+    pane.addButton({ title: 'Reset' }).on('click', reset)
+    pane.addButtonGroup({ label: 'zoom', buttons: { '0.5x': () => zoom(0.5), '1x': () => zoom(1) } })
+    pane.on('change', (ev) => console.log(ev.key, ev.value, ev.last))
+  },
+)
 
-pane.addButton({ title: 'Reset' }).on('click', reset)
-pane.addButtonGroup({ label: 'zoom', buttons: { '0.5x': () => zoom(0.5), '1x': () => zoom(1) } })
-pane.on('change', (ev) => console.log(ev.key, ev.value, ev.last))
-
-pane.dispose() // full cleanup
+// Call disposePane() when the owning app/component unmounts.
 ```
 
 Styles are injected automatically on first pane creation. To manage CSS yourself (e.g. CSP without inline styles), `import '@nightmarket/tiao/styles.css'` instead — auto-injection detects it and no-ops.
@@ -86,10 +90,11 @@ Styles are injected automatically on first pane creation. To manage CSS yourself
 All styling flows through CSS custom properties on `.tiao-pane` (`--tiao-bg`, `--tiao-accent`, `--tiao-radius`, `--tiao-surface`, ...):
 
 ```ts
-new Pane({ theme: { accent: '#f0f', '--tiao-width': '320px' } })
-pane.theme = 'light'      // default 'dark'; also 'light' | 'solarized' | 'nord' | 'catppuccin'
-pane.accent = '#ff0080'   // sets --tiao-accent
-pane.style = 'kiki'       // 'bouba' (rounded glass, default) | 'kiki' (sharp / flat)
+mountPane({ theme: { accent: '#f0f', '--tiao-width': '320px' } }, (pane) => {
+  pane.theme = 'light'      // default 'dark'; also 'light' | 'solarized' | 'nord' | 'catppuccin'
+  pane.accent = '#ff0080'   // sets --tiao-accent
+  pane.style = 'kiki'       // 'bouba' (rounded glass, default) | 'kiki' (sharp / flat)
+})
 ```
 
 Graph monitors use the theme's neutral gray independently of `pane.accent`, with a light fill (`--tiao-graph-fill-opacity`, default `0.28`) over a barely tinted plot background so overlay labels stay readable. Override `--tiao-graph-accent` or `--tiao-graph-fill-opacity` only when you want a custom look.
@@ -131,16 +136,19 @@ function ComponentC() {
 
 ### Production builds
 
-`useControls` is enabled when `NODE_ENV !== 'production'` (override per-hook with `enabled`, or globally with `setTiaoEnabled`). When disabled, hooks return plain default values and none of the DOM/UI code loads — core is behind a dynamic `import()`, so bundlers split it into a chunk that prod users never download.
+`useControls` is enabled when `NODE_ENV !== 'production'` (override per-hook with `enabled`, or globally with `setTiaoEnabled`). When disabled, hooks return plain default values and none of the DOM/UI code loads — core is behind a dynamic `import()`, so bundlers split it into a chunk that production users never download. No environment checks are needed in application code.
 
-The vanilla equivalent:
+The root vanilla API has the same behavior:
 
 ```ts
-if (import.meta.env.DEV) {
-  const { Pane } = await import('@nightmarket/tiao')
-  buildDebugPane(new Pane())
-}
+import { mountPane } from '@nightmarket/tiao'
+
+const dispose = mountPane({ title: 'Debug' }, (pane) => {
+  buildDebugPane(pane)
+})
 ```
+
+Use `import { Pane } from '@nightmarket/tiao/core'` only when the pane must also exist in production.
 
 ## Plugins
 
@@ -166,7 +174,7 @@ The media input takes a png/jpeg/webp image or mp4/webm video via drag & drop or
 A plugin claims a `(value, options)` pair and renders a view around a reactive `Value`:
 
 ```ts
-import { registerPlugin, type InputPlugin } from '@nightmarket/tiao'
+import { registerPlugin, type InputPlugin } from '@nightmarket/tiao/core'
 
 const starsPlugin: InputPlugin<number> = {
   id: 'stars',

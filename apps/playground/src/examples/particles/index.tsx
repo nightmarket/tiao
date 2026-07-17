@@ -4,7 +4,7 @@ import { addFpsGraph } from '@nightmarket/tiao/plugin-fps'
 import { type MediaValue } from '@nightmarket/tiao/plugin-media'
 import { button, buttonGroup, monitor, useControls } from '@nightmarket/tiao/react'
 import { startScene, type SceneHandle, type SceneParams } from './scene'
-import type { Pane } from '@nightmarket/tiao'
+import type { Pane } from '@nightmarket/tiao/core'
 
 /** Contributes motion controls to the default pane from one component... */
 function useMotionControls() {
@@ -79,7 +79,7 @@ export function ParticlesExample() {
     let pane: Pane | undefined
     let disposed = false
     void (async () => {
-      const { Pane } = await import('@nightmarket/tiao')
+      const { Pane } = await import('@nightmarket/tiao/core')
       if (disposed) return
       pane = buildKitchenSink(new Pane({
         id: 'kitchen',
