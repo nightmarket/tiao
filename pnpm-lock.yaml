@@ -20,6 +20,9 @@ importers:
 
   apps/playground:
     dependencies:
+      '@nightmarket/tiao':
+        specifier: workspace:^
+        version: link:../../packages/tiao
       '@types/three':
         specifier: ^0.185.0
         version: 0.185.0
@@ -32,9 +35,6 @@ importers:
       three:
         specifier: ^0.185.1
         version: 0.185.1
-      tiao-tiao:
-        specifier: workspace:^
-        version: link:../../packages/tiao
     devDependencies:
       '@types/node':
         specifier: ^22.20.1

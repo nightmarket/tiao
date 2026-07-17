@@ -3,11 +3,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "pnpm --filter tiao-tiao build",
+    "build": "pnpm --filter '@nightmarket/tiao' build",
     "dev": "pnpm --filter playground dev",
     "test": "vitest run",
     "typecheck": "pnpm -r typecheck",
-    "publish:packages": "pnpm test && pnpm typecheck && pnpm --filter tiao-tiao publish --access public"
+    "publish:packages": "pnpm test && pnpm typecheck && pnpm --filter '@nightmarket/tiao' publish --access public"
   },
   "devDependencies": {
     "jsdom": "^25.0.1",

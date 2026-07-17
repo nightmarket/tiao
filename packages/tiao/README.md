@@ -4,11 +4,11 @@ A themeable, draggable debug pane with a vanilla TypeScript API, React hooks,
 performance and export panes, and optional input plugins.
 
 ```sh
-npm install tiao-tiao
+npm install @nightmarket/tiao
 ```
 
 ```ts
-import { Pane } from 'tiao-tiao'
+import { Pane } from '@nightmarket/tiao'
 
 const pane = new Pane({ title: 'Debug' })
 pane.addBinding(params, 'speed', { min: 0, max: 4 })
@@ -16,21 +16,21 @@ pane.addBinding(params, 'speed', { min: 0, max: 4 })
 
 Everything ships in one package with tree-shakeable subpath exports:
 
-- `tiao-tiao` — core pane API
-- `tiao-tiao/react` — React hooks
-- `tiao-tiao/perf-pane` — performance monitors
-- `tiao-tiao/export-pane` — PNG, WebM, and MP4 export
-- `tiao-tiao/plugin-fps`
-- `tiao-tiao/plugin-bezier`
-- `tiao-tiao/plugin-radio-grid`
-- `tiao-tiao/plugin-media`
-- `tiao-tiao/plugin-camera`
-- `tiao-tiao/styles.css` — optional static stylesheet
+- `@nightmarket/tiao` — core pane API
+- `@nightmarket/tiao/react` — React hooks
+- `@nightmarket/tiao/perf-pane` — performance monitors
+- `@nightmarket/tiao/export-pane` — PNG, WebM, and MP4 export
+- `@nightmarket/tiao/plugin-fps`
+- `@nightmarket/tiao/plugin-bezier`
+- `@nightmarket/tiao/plugin-radio-grid`
+- `@nightmarket/tiao/plugin-media`
+- `@nightmarket/tiao/plugin-camera`
+- `@nightmarket/tiao/styles.css` — optional static stylesheet
 
 The package is ESM-only.
 
 React is an optional peer dependency and is only required for
-`tiao-tiao/react`. The core injects its styles automatically; importing
-`tiao-tiao/styles.css` disables that runtime injection.
+`@nightmarket/tiao/react`. The core injects its styles automatically; importing
+`@nightmarket/tiao/styles.css` disables that runtime injection.
 
 See the [full documentation](https://github.com/shampliu/tiao#readme).

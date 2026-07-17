@@ -5,33 +5,33 @@ A themeable, draggable debug pane for tweaking parameters — tweakpane-style bi
 ## Install
 
 ```sh
-npm install tiao-tiao
+npm install @nightmarket/tiao
 ```
 
-> **Note:** The bare name `tiao` is already taken on npm, so we publish as `tiao-tiao`. Import paths below use `tiao-tiao`.
+> **Note:** Published as `@nightmarket/tiao` under the Nightmarket npm org.
 
 One package. Import what you need via subpaths:
 
 | Import | What it is |
 | --- | --- |
-| `tiao-tiao` | Vanilla TS pane: bindings, folders, tabs, monitors, theming, drag/anchor/hide |
-| `tiao-tiao/react` | Leva-style hooks; UI lazy-loads and tree-shakes out of prod |
-| `tiao-tiao/plugin-fps` | FPS graph blade |
-| `tiao-tiao/plugin-bezier` | Cubic-bezier easing editor input |
-| `tiao-tiao/plugin-radio-grid` | Segmented radio grid input |
-| `tiao-tiao/plugin-media` | Image/video upload input (drag & drop) for WebGL/WebGPU textures |
-| `tiao-tiao/plugin-camera` | Camera-style ring / wheel number inputs |
-| `tiao-tiao/export-pane` | Pre-configured pane that exports a canvas to PNG / WebM / MP4 |
-| `tiao-tiao/perf-pane` | Pre-configured pane for canvas/three.js perf: fps, cpu/gpu ms, draw calls, memory |
+| `@nightmarket/tiao` | Vanilla TS pane: bindings, folders, tabs, monitors, theming, drag/anchor/hide |
+| `@nightmarket/tiao/react` | Leva-style hooks; UI lazy-loads and tree-shakes out of prod |
+| `@nightmarket/tiao/plugin-fps` | FPS graph blade |
+| `@nightmarket/tiao/plugin-bezier` | Cubic-bezier easing editor input |
+| `@nightmarket/tiao/plugin-radio-grid` | Segmented radio grid input |
+| `@nightmarket/tiao/plugin-media` | Image/video upload input (drag & drop) for WebGL/WebGPU textures |
+| `@nightmarket/tiao/plugin-camera` | Camera-style ring / wheel number inputs |
+| `@nightmarket/tiao/export-pane` | Pre-configured pane that exports a canvas to PNG / WebM / MP4 |
+| `@nightmarket/tiao/perf-pane` | Pre-configured pane for canvas/three.js perf: fps, cpu/gpu ms, draw calls, memory |
 
-`tiao-tiao` is ESM-only. Each subpath is a separate entry point, so unused plugins stay out of your bundle.
+`@nightmarket/tiao` is ESM-only. Each subpath is a separate entry point, so unused plugins stay out of your bundle.
 
-React is an optional peer dependency and is only needed for `tiao-tiao/react`. The MP4 encoder is loaded lazily, so it stays out of your application bundle unless you use MP4 export.
+React is an optional peer dependency and is only needed for `@nightmarket/tiao/react`. The MP4 encoder is loaded lazily, so it stays out of your application bundle unless you use MP4 export.
 
 ## Quick start (vanilla)
 
 ```ts
-import { Pane } from 'tiao-tiao'
+import { Pane } from '@nightmarket/tiao'
 
 const params = {
   speed: 1,
@@ -65,7 +65,7 @@ pane.on('change', (ev) => console.log(ev.key, ev.value, ev.last))
 pane.dispose() // full cleanup
 ```
 
-Styles are injected automatically on first pane creation. To manage CSS yourself (e.g. CSP without inline styles), `import 'tiao-tiao/styles.css'` instead — auto-injection detects it and no-ops.
+Styles are injected automatically on first pane creation. To manage CSS yourself (e.g. CSP without inline styles), `import '@nightmarket/tiao/styles.css'` instead — auto-injection detects it and no-ops.
 
 ### Pane chrome
 
@@ -97,7 +97,7 @@ Theme, accent, and style are also editable from the Pane Settings panel (gear ic
 ## React
 
 ```tsx
-import { useControls, button, monitor } from 'tiao-tiao/react'
+import { useControls, button, monitor } from '@nightmarket/tiao/react'
 
 function ComponentA() {
   // creates the default pane
@@ -135,7 +135,7 @@ The vanilla equivalent:
 
 ```ts
 if (import.meta.env.DEV) {
-  const { Pane } = await import('tiao-tiao')
+  const { Pane } = await import('@nightmarket/tiao')
   buildDebugPane(new Pane())
 }
 ```
@@ -143,10 +143,10 @@ if (import.meta.env.DEV) {
 ## Plugins
 
 ```ts
-import { addFpsGraph } from 'tiao-tiao/plugin-fps'
-import { registerBezierPlugin } from 'tiao-tiao/plugin-bezier'
-import { registerRadioGridPlugin } from 'tiao-tiao/plugin-radio-grid'
-import { registerMediaPlugin, type MediaValue } from 'tiao-tiao/plugin-media'
+import { addFpsGraph } from '@nightmarket/tiao/plugin-fps'
+import { registerBezierPlugin } from '@nightmarket/tiao/plugin-bezier'
+import { registerRadioGridPlugin } from '@nightmarket/tiao/plugin-radio-grid'
+import { registerMediaPlugin, type MediaValue } from '@nightmarket/tiao/plugin-media'
 
 addFpsGraph(pane)
 registerBezierPlugin()
@@ -164,7 +164,7 @@ The media input takes a png/jpeg/webp image or mp4/webm video via drag & drop or
 A plugin claims a `(value, options)` pair and renders a view around a reactive `Value`:
 
 ```ts
-import { registerPlugin, type InputPlugin } from 'tiao-tiao'
+import { registerPlugin, type InputPlugin } from '@nightmarket/tiao'
 
 const starsPlugin: InputPlugin<number> = {
   id: 'stars',
@@ -189,7 +189,7 @@ Registration is last-wins, so your plugin can override built-ins. Built-in contr
 ## Export pane
 
 ```ts
-import { createExportPane } from 'tiao-tiao/export-pane'
+import { createExportPane } from '@nightmarket/tiao/export-pane'
 
 const pane = createExportPane({ target: canvas, filename: 'scene' })
 ```
@@ -199,7 +199,7 @@ Anchored bottom-right by default: PNG export with scale, WebM recording via `Med
 ## Perf pane
 
 ```ts
-import { createPerfPane } from 'tiao-tiao/perf-pane'
+import { createPerfPane } from '@nightmarket/tiao/perf-pane'
 
 // renderer: three.js WebGLRenderer or WebGPURenderer (duck-typed — no three dependency)
 const { pane, perf, dispose } = createPerfPane({ renderer })
@@ -219,12 +219,12 @@ Anchored top-right by default: filled graphs for FPS, CPU, GPU, and JS heap (wit
 ```sh
 pnpm install
 pnpm dev          # playground at localhost:5173 (HMR over package sources)
-pnpm build        # build the tiao-tiao package for publish
+pnpm build        # build the @nightmarket/tiao package for publish
 pnpm test         # vitest
 pnpm typecheck
 ```
 
-The playground Vite config aliases `tiao-tiao` / `tiao-tiao/*` to `packages/tiao/src/`, so edits hot-reload without running `pnpm build`.
+The playground Vite config aliases `@nightmarket/tiao` / `@nightmarket/tiao/*` to `packages/tiao/src/`, so edits hot-reload without running `pnpm build`.
 
 ### Publishing
 

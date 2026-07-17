@@ -3,9 +3,9 @@
   "compilerOptions": {
     "jsx": "react-jsx",
     "paths": {
-      "tiao-tiao": ["../../packages/tiao/src/core/index.ts"],
-      "tiao-tiao/styles.css": ["../../packages/tiao/src/core/styles.css"],
-      "tiao-tiao/*": ["../../packages/tiao/src/*/index.ts"]
+      "@nightmarket/tiao": ["../../packages/tiao/src/core/index.ts"],
+      "@nightmarket/tiao/styles.css": ["../../packages/tiao/src/core/styles.css"],
+      "@nightmarket/tiao/*": ["../../packages/tiao/src/*/index.ts"]
     }
   },
   "include": ["src", "vite.config.ts"]

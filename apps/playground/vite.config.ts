@@ -4,24 +4,24 @@ import { fileURLToPath } from 'node:url'
 import react from '@vitejs/plugin-react'
 import { defineConfig, type Plugin } from 'vite'
 
-// Alias tiao-tiao subpaths to package sources so edits HMR without a rebuild.
+// Alias @nightmarket/tiao subpaths to package sources so edits HMR without a rebuild.
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const tiaoSrc = path.join(repoRoot, 'packages/tiao/src')
 
 const aliases = [
-  { find: /^tiao-tiao$/, replacement: path.join(tiaoSrc, 'core/index.ts') },
-  { find: /^tiao-tiao\/styles\.css$/, replacement: path.join(tiaoSrc, 'core/styles.css') },
-  { find: /^tiao-tiao\/react$/, replacement: path.join(tiaoSrc, 'react/index.ts') },
-  { find: /^tiao-tiao\/perf-pane$/, replacement: path.join(tiaoSrc, 'perf-pane/index.ts') },
-  { find: /^tiao-tiao\/export-pane$/, replacement: path.join(tiaoSrc, 'export-pane/index.ts') },
-  { find: /^tiao-tiao\/plugin-fps$/, replacement: path.join(tiaoSrc, 'plugin-fps/index.ts') },
-  { find: /^tiao-tiao\/plugin-bezier$/, replacement: path.join(tiaoSrc, 'plugin-bezier/index.ts') },
+  { find: /^@nightmarket\/tiao$/, replacement: path.join(tiaoSrc, 'core/index.ts') },
+  { find: /^@nightmarket\/tiao\/styles\.css$/, replacement: path.join(tiaoSrc, 'core/styles.css') },
+  { find: /^@nightmarket\/tiao\/react$/, replacement: path.join(tiaoSrc, 'react/index.ts') },
+  { find: /^@nightmarket\/tiao\/perf-pane$/, replacement: path.join(tiaoSrc, 'perf-pane/index.ts') },
+  { find: /^@nightmarket\/tiao\/export-pane$/, replacement: path.join(tiaoSrc, 'export-pane/index.ts') },
+  { find: /^@nightmarket\/tiao\/plugin-fps$/, replacement: path.join(tiaoSrc, 'plugin-fps/index.ts') },
+  { find: /^@nightmarket\/tiao\/plugin-bezier$/, replacement: path.join(tiaoSrc, 'plugin-bezier/index.ts') },
   {
-    find: /^tiao-tiao\/plugin-radio-grid$/,
+    find: /^@nightmarket\/tiao\/plugin-radio-grid$/,
     replacement: path.join(tiaoSrc, 'plugin-radio-grid/index.ts'),
   },
-  { find: /^tiao-tiao\/plugin-media$/, replacement: path.join(tiaoSrc, 'plugin-media/index.ts') },
-  { find: /^tiao-tiao\/plugin-camera$/, replacement: path.join(tiaoSrc, 'plugin-camera/index.ts') },
+  { find: /^@nightmarket\/tiao\/plugin-media$/, replacement: path.join(tiaoSrc, 'plugin-media/index.ts') },
+  { find: /^@nightmarket\/tiao\/plugin-camera$/, replacement: path.join(tiaoSrc, 'plugin-camera/index.ts') },
 ]
 
 /** tsup loads .css as text (`loader: { '.css': 'text' }`); match that for package sources. */
