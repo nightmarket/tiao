@@ -1,4 +1,4 @@
-import type { MediaValue } from '@tiao/plugin-media'
+import type { MediaValue } from 'tiao-tiao/plugin-media'
 
 export interface SceneParams {
   speed: number

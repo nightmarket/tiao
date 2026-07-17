@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
-import { Pane } from '@tiao/core'
-import { createPerfPane } from '@tiao/perf-pane'
+import { Pane } from 'tiao-tiao'
+import { createPerfPane } from 'tiao-tiao/perf-pane'
 import { startThreeScene } from './scene'
 
 /**

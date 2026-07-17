@@ -1,8 +1,8 @@
 import { useEffect, useState, type CSSProperties } from 'react'
-import { registerBezierPlugin } from '@tiao/plugin-bezier'
-import { registerCameraPlugin } from '@tiao/plugin-camera'
-import { registerMediaPlugin } from '@tiao/plugin-media'
-import { registerRadioGridPlugin } from '@tiao/plugin-radio-grid'
+import { registerBezierPlugin } from 'tiao-tiao/plugin-bezier'
+import { registerCameraPlugin } from 'tiao-tiao/plugin-camera'
+import { registerMediaPlugin } from 'tiao-tiao/plugin-media'
+import { registerRadioGridPlugin } from 'tiao-tiao/plugin-radio-grid'
 import { examples } from './examples'
 
 registerRadioGridPlugin()
