@@ -26,7 +26,7 @@ One package. Import what you need via subpaths:
 
 `@nightmarket/tiao` is ESM-only. Each subpath is a separate entry point, so unused plugins stay out of your bundle.
 
-React is an optional peer dependency and is only needed for `@nightmarket/tiao/react`. The MP4 encoder is loaded lazily, so it stays out of your application bundle unless you use MP4 export.
+React is an optional peer dependency and is only needed for `@nightmarket/tiao/react`. MP4 export depends on [`mediabunny`](https://mediabunny.dev), which is loaded lazily so it stays out of your application bundle unless you record MP4.
 
 ## Quick start (vanilla)
 

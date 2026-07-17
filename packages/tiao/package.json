@@ -1,6 +1,6 @@
 {
   "name": "@nightmarket/tiao",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A themeable, draggable debug pane for tweaking parameters. Vanilla TS core, React hooks, and optional plugins.",
   "keywords": [
     "debug",
@@ -14,12 +14,12 @@
   "author": "Chang Liu",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/shampliu/tiao.git",
+    "url": "git+https://github.com/nightmarket/tiao.git",
     "directory": "packages/tiao"
   },
-  "homepage": "https://github.com/shampliu/tiao#readme",
+  "homepage": "https://github.com/nightmarket/tiao#readme",
   "bugs": {
-    "url": "https://github.com/shampliu/tiao/issues"
+    "url": "https://github.com/nightmarket/tiao/issues"
   },
   "engines": {
     "node": ">=18"
