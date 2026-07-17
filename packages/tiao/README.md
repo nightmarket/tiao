@@ -33,4 +33,4 @@ React is an optional peer dependency and is only required for
 `@nightmarket/tiao/react`. The core injects its styles automatically; importing
 `@nightmarket/tiao/styles.css` disables that runtime injection.
 
-See the [full documentation](https://github.com/shampliu/tiao#readme).
+See the [full documentation](https://github.com/nightmarket/tiao#readme).
