@@ -1,6 +1,6 @@
 {
   "name": "@nightmarket/tiao",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "A themeable, draggable debug pane for tweaking parameters. Vanilla TS core, React hooks, and optional plugins.",
   "keywords": [
     "debug",

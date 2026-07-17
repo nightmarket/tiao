@@ -3,6 +3,8 @@
 A themeable, draggable debug pane with a vanilla TypeScript API, React hooks,
 performance and export panes, and optional input plugins.
 
+Built on ideas and code from [tweakpane](https://github.com/cocopon/tweakpane) by [cocopon](https://github.com/cocopon), [leva](https://github.com/pmndrs/leva) by [pmndrs](https://github.com/pmndrs), and [baku89](https://github.com/baku89).
+
 ```sh
 npm install @nightmarket/tiao
 ```

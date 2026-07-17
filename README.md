@@ -2,6 +2,8 @@
 
 A themeable, draggable debug pane for tweaking parameters — tweakpane-style bindings with a modern look, a first-class React API, and a plug-and-play plugin system. Zero dependencies in core.
 
+Built on ideas and code from [tweakpane](https://github.com/cocopon/tweakpane) by [cocopon](https://github.com/cocopon), [leva](https://github.com/pmndrs/leva) by [pmndrs](https://github.com/pmndrs), and [baku89](https://github.com/baku89).
+
 ## Install
 
 ```sh

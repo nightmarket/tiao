@@ -5,8 +5,8 @@ export default defineConfig({
     jsx: 'automatic',
   },
   test: {
-    include: ['packages/*/src/**/*.test.{ts,tsx}'],
+    include: ['packages/tiao/src/**/*.test.{ts,tsx}'],
     environment: 'jsdom',
-    setupFiles: ['./test/setup.ts'],
+    setupFiles: ['./packages/tiao/vitest.setup.ts'],
   },
 })
