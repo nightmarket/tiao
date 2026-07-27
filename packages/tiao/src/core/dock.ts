@@ -28,6 +28,9 @@ const MIN_WIDTH = 180
 const MAX_WIDTH = 640
 const DEFAULT_WIDTH = 300
 
+/** live width, so a resize drag flows into the insets without extra work */
+const WIDTH_VAR = `var(--tiao-dock-width, ${DEFAULT_WIDTH}px)`
+
 const store = jsonStore<DockState>('tiao:dock')
 
 export function readDockState(): DockState {
@@ -152,6 +155,7 @@ export function ensureDock(host: DockHost): HTMLElement {
   entry.disposers.push(() => gear.removeEventListener('click', onGearClick))
 
   installResize(doc, entry, handle)
+  installFixedInsets(doc, entry)
 
   applyWidth(doc, readDockState().width)
   doc.body.prepend(entry.root)
@@ -166,7 +170,11 @@ export function closeDock(doc: Document): void {
   docks.delete(doc)
   for (const fn of entry.disposers) fn()
   entry.root.remove()
-  doc.documentElement.style.removeProperty('--tiao-dock-width')
+  const root = doc.documentElement
+  for (const prop of ['--tiao-dock-width', '--tiao-dock-inset-start', '--tiao-dock-inset-end']) {
+    root.style.removeProperty(prop)
+  }
+  root.classList.remove('tiao-docked')
   restorePadding(doc, entry)
 }
 
@@ -176,8 +184,7 @@ export function setDockVisible(doc: Document, visible: boolean): void {
   if (!entry || entry.visible === visible) return
   entry.visible = visible
   entry.root.classList.toggle('tiao-hidden', !visible)
-  if (visible) applyPadding(doc, entry)
-  else restorePadding(doc, entry)
+  applyLayout(doc, entry)
 }
 
 function dockSide(): DockSide {
@@ -187,7 +194,97 @@ function dockSide(): DockSide {
 /** Move the sidebar to its page edge and offset the page from that side. */
 function applySide(doc: Document, entry: DockEntry): void {
   entry.root.classList.toggle('tiao-dock-end', dockSide() === 'right')
+  applyLayout(doc, entry)
+}
+
+/**
+ * Reflow the page into what the sidebar leaves, then publish that footprint.
+ * Body padding only moves elements in normal flow: fixed page chrome is laid
+ * out against the viewport, so a navbar has to read the insets to step aside.
+ */
+function applyLayout(doc: Document, entry: DockEntry): void {
+  const root = doc.documentElement
+  const side = dockSide()
+  root.style.setProperty(
+    '--tiao-dock-inset-start',
+    entry.visible && side === 'left' ? WIDTH_VAR : '0px',
+  )
+  root.style.setProperty(
+    '--tiao-dock-inset-end',
+    entry.visible && side === 'right' ? WIDTH_VAR : '0px',
+  )
+  root.classList.toggle('tiao-docked', entry.visible)
   if (entry.visible) applyPadding(doc, entry)
+  else restorePadding(doc, entry)
+}
+
+/** marks page chrome the sidebar would cover; the CSS rule does the insetting */
+const INSET_ATTR = 'data-tiao-inset'
+/** opt a fixed element out of being inset */
+const SKIP_ATTR = 'data-tiao-no-inset'
+/** tiao's own UI sits beside the sidebar or inside it, never inset by it */
+const OWN_UI = '.tiao-dock, .tiao-notch, .tiao-pane'
+
+/**
+ * Inset the page's own fixed chrome. Body padding only moves elements in normal
+ * flow, so a fixed navbar would keep spanning the full viewport and the sidebar
+ * would cover one end of it. Marked elements read the inset variables from CSS,
+ * which leaves anchor changes, resizes, and `H` with no work to do here.
+ *
+ * Costs one style pass per dock toggle, then only the nodes the app adds.
+ */
+function installFixedInsets(doc: Document, entry: DockEntry): void {
+  const view = doc.defaultView
+  if (!view) return
+  const marked = new Set<Element>()
+
+  /** edge-to-edge fixed chrome; floating UI like a toast or modal is left be */
+  const spansViewport = (el: Element): boolean => {
+    if (marked.has(el) || el.hasAttribute(SKIP_ATTR) || el.closest(OWN_UI)) return false
+    const cs = view.getComputedStyle(el)
+    // parseFloat so '0', '0px', and '0%' all read as flush, and 'auto' does not
+    if (cs.position !== 'fixed' || parseFloat(cs.left) !== 0 || parseFloat(cs.right) !== 0) {
+      return false
+    }
+    // a fixed box inside a transformed ancestor is pinned to that ancestor, not
+    // the viewport, so make anything already rendered prove its width
+    const width = el.getBoundingClientRect().width
+    return width === 0 || width >= view.innerWidth - 1
+  }
+
+  // read every candidate before marking any, so styles settle once
+  const scan = (root: ParentNode) => {
+    const hits: Element[] = []
+    for (const el of root.querySelectorAll('*')) {
+      if (spansViewport(el)) hits.push(el)
+    }
+    for (const el of hits) {
+      el.setAttribute(INSET_ATTR, '')
+      marked.add(el)
+    }
+  }
+
+  scan(doc.body)
+
+  // the page may mount its navbar after the sidebar restores itself on load
+  const observer = new view.MutationObserver((records) => {
+    for (const record of records) {
+      for (const node of record.addedNodes) {
+        if (!(node instanceof view.HTMLElement) || node.closest(OWN_UI)) continue
+        if (spansViewport(node)) {
+          node.setAttribute(INSET_ATTR, '')
+          marked.add(node)
+        }
+        scan(node)
+      }
+    }
+  })
+  observer.observe(doc.body, { childList: true, subtree: true })
+
+  entry.disposers.push(() => {
+    observer.disconnect()
+    for (const el of marked) el.removeAttribute(INSET_ATTR)
+  })
 }
 
 /** Drag the sidebar's outer edge to resize it; the page padding tracks along. */
@@ -223,8 +320,8 @@ function applyWidth(doc: Document, width: number | undefined): void {
 
 function applyPadding(doc: Document, entry: DockEntry): void {
   restorePadding(doc, entry)
-  const edge = dockSide() === 'right' ? 'padding-inline-end' : 'padding-inline-start'
-  doc.body.style.setProperty(edge, 'var(--tiao-dock-width, 300px)')
+  const edge = dockSide() === 'right' ? 'end' : 'start'
+  doc.body.style.setProperty(`padding-inline-${edge}`, `var(--tiao-dock-inset-${edge})`)
 }
 
 function restorePadding(doc: Document, entry: DockEntry): void {

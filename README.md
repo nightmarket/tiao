@@ -90,6 +90,14 @@ Storage stays out of the way of the frame budget: each key is parsed once rather
 - A small notch at the top edge of the window holds the global controls: hide/show every floating pane (same as `H`), dock/undock them into an inline sidebar the page lays out beside (`Pane.toggleDock()` / `Pane.docked`), a settings gear, and reset every bound value to its code default (`Pane.resetValues()`). `notch: false` keeps a pane from mounting it.
 - The notch gear opens the global settings panel: font size, either `Small` (each pane's own declared size, the default) or `Normal` (every floating pane at size `l`) via `Pane.setFontSize()` / `Pane.fontSize`; hiding, on by default, which makes the notch fully invisible until the pointer comes near the top edge anywhere across the window; plus one theme, style, accent, and numbering for every pane in both views. Each change is broadcast — floating panes, docked panes, and the sidebar all take it and save it as their own, so a later per-pane tweak still sticks, and panes mounted afterwards inherit it unless they have saved chrome of their own. All of it persists under `tiao:notch`.
 - Docked panes stack flush and square in the sidebar and hand their chrome over to it: one header search filters every pane at once, one settings menu sets theme, style, accent, and numbering for all of them, and anchors the sidebar left or right. Its outer edge drags to resize (width in `--tiao-dock-width`, default `300px`). All of it is separate state under `tiao:dock` — each pane keeps its floating theme and numbering and gets them back on undock.
+- The sidebar pads `<body>` to reflow the page, which only moves elements in normal flow. Fixed page chrome is laid out against the viewport, so the sidebar insets it directly: any `position: fixed` element that spans the viewport edge to edge (a navbar, a bottom bar) is inset to the remaining width for as long as the panes stay docked, including ones the page mounts later. A corner toast, a centered modal, and anything narrower is left alone, and `data-tiao-no-inset` opts a single element out. Nothing is written to your inline styles — undocking removes the marker and the page is exactly as it was.
+- Both are driven by `--tiao-dock-inset-start` and `--tiao-dock-inset-end` on `<html>`, which hold the sidebar's width on the edge it occupies and `0px` on the other, tracking the anchor, live resizes, and `H`. Read them for chrome the heuristic misses — a sidebar of your own, say — alongside `html.tiao-docked` for anything a length can't express.
+
+  ```css
+  .my-own-sidebar {
+    left: var(--tiao-dock-inset-start, 0px);
+  }
+  ```
 - `maxHeight: 500` (default) caps the pane height; content scrolls when it overflows
 - Clicking a pane brings it above other overlapping panes
 - Multiple panes are independent; `new Pane({ id: 'export' })` registers it for `Pane.get('export')`

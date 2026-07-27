@@ -1,5 +1,8 @@
 :root {
   --tiao-styles-loaded: 1;
+  /* the docked sidebar's footprint, for fixed page chrome body padding can't reach */
+  --tiao-dock-inset-start: 0px;
+  --tiao-dock-inset-end: 0px;
 }
 
 .tiao-pane,
@@ -253,6 +256,17 @@
 
 .tiao-hidden {
   display: none !important;
+}
+
+/*
+ * fixed page chrome the docked sidebar would cover. !important because these
+ * have to beat the page's own rules, and width goes auto so a bar sized to the
+ * viewport (width: 100%) fills the gap instead of overflowing past it.
+ */
+[data-tiao-inset] {
+  left: var(--tiao-dock-inset-start) !important;
+  right: var(--tiao-dock-inset-end) !important;
+  width: auto !important;
 }
 
 /* ---- notch: global pane controls, flush against the top edge ---- */
