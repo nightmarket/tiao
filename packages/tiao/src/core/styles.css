@@ -2,7 +2,9 @@
   --tiao-styles-loaded: 1;
 }
 
-.tiao-pane {
+.tiao-pane,
+.tiao-notch,
+.tiao-dock {
   --tiao-neutral-50: #fafafa;
   --tiao-neutral-100: #f5f5f5;
   --tiao-neutral-200: #e5e5e5;
@@ -76,7 +78,9 @@
   -webkit-backdrop-filter: var(--tiao-backdrop-filter);
 }
 
-.tiao-pane.tiao-theme-dark {
+.tiao-pane.tiao-theme-dark,
+.tiao-notch.tiao-theme-dark,
+.tiao-dock.tiao-theme-dark {
   --tiao-bg: rgba(23, 23, 23, 0.95);
   --tiao-bg-solid: #171717;
   --tiao-fg: #f5f5f5;
@@ -105,7 +109,9 @@
   --tiao-shadow-raised: 0 1px 3px rgba(0, 0, 0, 0.35);
 }
 
-.tiao-pane.tiao-theme-solarized {
+.tiao-pane.tiao-theme-solarized,
+.tiao-notch.tiao-theme-solarized,
+.tiao-dock.tiao-theme-solarized {
   --tiao-bg: rgba(0, 43, 54, 0.96);
   --tiao-bg-solid: #002b36;
   --tiao-fg: #fdf6e3;
@@ -134,7 +140,9 @@
   --tiao-shadow-raised: 0 1px 3px rgba(0, 21, 27, 0.4);
 }
 
-.tiao-pane.tiao-theme-nord {
+.tiao-pane.tiao-theme-nord,
+.tiao-notch.tiao-theme-nord,
+.tiao-dock.tiao-theme-nord {
   --tiao-bg: rgba(46, 52, 64, 0.96);
   --tiao-bg-solid: #2e3440;
   --tiao-fg: #eceff4;
@@ -163,7 +171,9 @@
   --tiao-shadow-raised: 0 1px 3px rgba(25, 28, 35, 0.4);
 }
 
-.tiao-pane.tiao-theme-catppuccin {
+.tiao-pane.tiao-theme-catppuccin,
+.tiao-notch.tiao-theme-catppuccin,
+.tiao-dock.tiao-theme-catppuccin {
   --tiao-bg: rgba(30, 30, 46, 0.96);
   --tiao-bg-solid: #1e1e2e;
   --tiao-fg: #cdd6f4;
@@ -218,7 +228,9 @@
   --tiao-radius: 8px;
 }
 
-.tiao-pane.tiao-style-kiki {
+.tiao-pane.tiao-style-kiki,
+.tiao-notch.tiao-style-kiki,
+.tiao-dock.tiao-style-kiki {
   --tiao-radius: 0;
   --tiao-radius-sm: 0;
   --tiao-shadow: 0 0 0 1px var(--tiao-border);
@@ -243,69 +255,155 @@
   display: none !important;
 }
 
-/* tip after H hides all floating panes — compact chrome, OS light/dark */
-.tiao-hide-hint {
-  --tiao-hint-bg: rgba(255, 255, 255, 0.94);
-  --tiao-hint-fg: #171717;
-  --tiao-hint-muted: #525252;
-  --tiao-hint-kbd-bg: rgba(15, 23, 42, 0.07);
-  --tiao-hint-kbd-border: rgba(15, 23, 42, 0.12);
-  --tiao-hint-shadow:
-    0 0 0 1px rgba(15, 23, 42, 0.1),
-    0 2px 6px rgba(15, 23, 42, 0.05),
-    0 10px 24px rgba(15, 23, 42, 0.1);
+/* ---- notch: global pane controls, flush against the top edge ---- */
+.tiao-notch {
+  --tiao-notch-height: 22px;
 
   position: fixed;
-  top: 8px;
+  top: 0;
   left: 50%;
-  z-index: 2147483647;
-  transform: translate(-50%, calc(-100% - 12px));
-  padding: 4px 8px;
-  background: var(--tiao-hint-bg);
-  color: var(--tiao-hint-muted);
-  font:
-    11px/1.35 -apple-system,
-    BlinkMacSystemFont,
-    'Segoe UI',
-    Roboto,
-    'Helvetica Neue',
-    Arial,
-    sans-serif;
-  border-radius: 7px;
-  box-shadow: var(--tiao-hint-shadow);
-  backdrop-filter: blur(16px) saturate(1.2);
-  -webkit-backdrop-filter: blur(16px) saturate(1.2);
-  opacity: 0;
-  pointer-events: none;
-  white-space: nowrap;
+  /* clear of the floating pane band, which climbs from 9999 on every click */
+  z-index: 20000;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  width: auto;
+  height: var(--tiao-notch-height);
+  padding: 0 4px;
+  border-radius: 0 0 var(--tiao-radius) var(--tiao-radius);
+  box-shadow: var(--tiao-shadow-raised);
   transition:
-    transform 0.2s ease,
-    opacity 0.2s ease;
+    transform 0.16s ease,
+    opacity 0.16s ease;
 }
-@media (prefers-color-scheme: dark) {
-  .tiao-hide-hint {
-    --tiao-hint-bg: rgba(23, 23, 23, 0.95);
-    --tiao-hint-fg: #f5f5f5;
-    --tiao-hint-muted: #a3a3a3;
-    --tiao-hint-kbd-bg: rgba(255, 255, 255, 0.08);
-    --tiao-hint-kbd-border: rgba(255, 255, 255, 0.12);
-    --tiao-hint-shadow: 0 4px 20px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.08);
-  }
+/* armed to hide: retreat to a sliver, but stay put while hovered or in use */
+.tiao-notch-auto-hide:not(:hover):not(:has(.tiao-pane-menu.tiao-open)) {
+  transform: translate(-50%, -70%);
+  opacity: 0.4;
 }
-.tiao-hide-hint.tiao-hide-hint-show {
-  transform: translate(-50%, 0);
+.tiao-notch-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  color: var(--tiao-fg-dim);
+  border-radius: var(--tiao-radius-sm);
+  transition:
+    color 0.12s ease,
+    background 0.12s ease;
+}
+.tiao-notch-btn:hover {
+  color: var(--tiao-fg);
+  background: var(--tiao-hover);
+}
+.tiao-notch-btn.tiao-notch-on {
+  color: var(--tiao-accent);
+}
+.tiao-notch-hidden-panes .tiao-notch-hide {
+  color: var(--tiao-fg-faint);
+}
+.tiao-notch-sep {
+  width: 1px;
+  height: 11px;
+  margin: 0 2px;
+  background: var(--tiao-border);
+}
+
+/* ---- dock: panes collected in a sidebar the page lays out beside ---- */
+.tiao-dock {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  inset-inline-start: 0;
+  z-index: 9998;
+  display: flex;
+  flex-direction: column;
+  width: var(--tiao-dock-width, 300px);
+  border-radius: 0;
+  border-inline-end: 1px solid var(--tiao-border);
+  box-shadow: none;
+  /* the page is padded clear of the sidebar, so there is nothing to blur */
+  background: var(--tiao-bg-solid);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+/* the sidebar's own chrome: one search + settings for every pane inside */
+.tiao-dock-header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex: none;
+  height: var(--tiao-titlebar-height);
+  background: var(--tiao-titlebar-bg);
+  border-bottom: 1px solid var(--tiao-border);
+}
+.tiao-dock-header .tiao-titlebar-btn {
   opacity: 1;
 }
-.tiao-hide-hint kbd {
-  display: inline-block;
-  margin: 0 1px;
-  padding: 0 4px;
-  color: var(--tiao-hint-fg);
-  font: inherit;
-  font-weight: 600;
-  background: var(--tiao-hint-kbd-bg);
-  border: 1px solid var(--tiao-hint-kbd-border);
-  border-radius: 4px;
+.tiao-dock.tiao-search-on .tiao-dock-search {
+  color: var(--tiao-accent);
+}
+.tiao-dock-searchbar {
+  flex: none;
+}
+.tiao-dock-searchbar.tiao-open {
+  border-bottom: 1px solid var(--tiao-border);
+}
+.tiao-dock-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+.tiao-dock-body::-webkit-scrollbar {
+  display: none;
+}
+/* invisible strip along the sidebar's page-facing edge; dragging it resizes */
+.tiao-dock-resize {
+  top: 0;
+  bottom: 0;
+  inset-inline-end: -3px;
+  width: 7px;
+  cursor: ew-resize;
+}
+/* anchored to the far edge instead: mirror the border and the drag strip */
+.tiao-dock.tiao-dock-end {
+  inset-inline-start: auto;
+  inset-inline-end: 0;
+  border-inline-end: none;
+  border-inline-start: 1px solid var(--tiao-border);
+}
+.tiao-dock.tiao-dock-end > .tiao-dock-resize {
+  inset-inline-end: auto;
+  inset-inline-start: -3px;
+}
+
+/* docked panes read as one continuous list: square, flush, hairline-separated */
+.tiao-pane.tiao-docked {
+  flex: none;
+  width: 100%;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+.tiao-pane.tiao-docked + .tiao-pane.tiao-docked {
+  border-top: 1px solid var(--tiao-border);
+}
+/* both states, or the collapsed rule further down rounds the hover highlight */
+.tiao-pane.tiao-docked > .tiao-titlebar,
+.tiao-pane.tiao-docked:not(.tiao-expanded) > .tiao-titlebar {
+  border-radius: 0;
+}
+/* placement, search, and theming all move to the sidebar header */
+.tiao-pane.tiao-docked > .tiao-titlebar > .tiao-titlebar-actions,
+.tiao-pane.tiao-docked > .tiao-searchbar,
+.tiao-pane.tiao-docked .tiao-resize {
+  display: none;
 }
 
 .tiao-disabled {
@@ -314,7 +412,7 @@
 }
 
 /* ---- reset (:where keeps specificity at zero so component classes win) ---- */
-.tiao-pane :where(button, input, select) {
+:where(.tiao-pane, .tiao-notch, .tiao-dock) :where(button, input, select) {
   font: inherit;
   color: inherit;
   background: none;
@@ -322,14 +420,14 @@
   padding: 0;
   margin: 0;
 }
-.tiao-pane :where(button) {
+:where(.tiao-pane, .tiao-notch, .tiao-dock) :where(button) {
   cursor: pointer;
 }
-.tiao-pane :where(button, select):focus-visible {
+:where(.tiao-pane, .tiao-notch, .tiao-dock) :where(button, select):focus-visible {
   outline: 1.5px solid var(--tiao-accent);
   outline-offset: 1px;
 }
-.tiao-pane input {
+:where(.tiao-pane, .tiao-dock) input {
   outline: none;
   caret-color: var(--tiao-accent);
 }
@@ -1329,6 +1427,13 @@ html.tiao-cursor-ew * {
   left: auto;
   right: calc(100% + 6px);
 }
+/* the notch bar is too narrow to open beside: drop centered underneath it */
+.tiao-pane-menu.tiao-menu-below {
+  top: calc(100% + 6px);
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
+}
 /* the embedded settings pane inherits the shell's chrome; it is created at
    size s so it reads as a subpane of the host */
 .tiao-pane-menu > .tiao-pane {
@@ -1361,6 +1466,10 @@ html.tiao-cursor-ew * {
   grid-template-columns: repeat(3, 1fr);
   gap: 2px;
   width: 100%;
+}
+/* the dock only picks a page edge, so its grid is one row of two */
+.tiao-anchor-grid.tiao-anchor-sides {
+  grid-template-columns: repeat(2, 1fr);
 }
 .tiao-anchor-cell {
   height: 14px;

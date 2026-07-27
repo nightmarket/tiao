@@ -1,11 +1,31 @@
-import { Container, FolderApi, TabApi, markPointerBlur, type BladeHost } from './blade'
+import {
+  Container,
+  FolderApi,
+  TabApi,
+  markPointerBlur,
+  walkBindings,
+  type BladeHost,
+} from './blade'
 import { ensureBuiltins } from './controls/index'
 import { installCaret } from './controls/caret'
+import {
+  closeDock,
+  dockBody,
+  dockRoot,
+  ensureDock,
+  readDockState,
+  setDockVisible,
+  writeDockState,
+  type DockHost,
+  type DockState,
+} from './dock'
 import { collapseSelection, draggable, gearIcon, h, icon, searchIcon, withDocument } from './dom'
+import { createNotch, type Notch } from './notch'
 import { createPaneMenu } from './pane-menu'
 import { PluginRegistry, globalRegistry, type TiaoPlugin } from './plugin'
 import { injectStyles } from './styles'
-import { clamp } from './util'
+import { clamp, jsonStore, type JSONStore } from './util'
+import { createValueStore, type ValueStore } from './values'
 
 export type Anchor =
   | 'top-left'
@@ -47,6 +67,8 @@ export interface PaneOptions {
   document?: Document
   /** internal: set false to omit the settings menu (used by the menu's own pane) */
   menu?: boolean
+  /** set false to keep this pane from mounting the global notch bar */
+  notch?: boolean
 }
 
 /** explicit `undefined` clears a key on save (JSON.stringify drops it) */
@@ -93,8 +115,17 @@ function normalizeStyle(v: string | undefined | null): PaneStyle {
 
 export type PaneSize = 's' | 'm' | 'l'
 
+/**
+ * How big every floating pane draws, set once for all of them from the notch.
+ * 'small' is each pane's own declared size — the default this library ships.
+ */
+export type PaneFontSize = 'small' | 'normal'
+
 /** default --tiao-accent, used when the computed style is unavailable (e.g. jsdom) */
 const DEFAULT_ACCENT = '#facc15'
+
+/** inline styles a floating pane owns; parked and restored around docking */
+const FREE_PROPS = ['left', 'top', 'right', 'bottom', 'transform', 'width', 'z-index']
 
 /** edge-resize bounds */
 const MIN_WIDTH = 200
@@ -110,46 +141,12 @@ const floatingPanes = new Set<Pane>()
 /** one global-toggle listener per document */
 const globalToggleInstalled = new WeakSet<Document>()
 
-/** auto-dismiss timers for the "press H to show" hint */
-const hideHintTimers = new WeakMap<Document, ReturnType<typeof setTimeout>>()
-
 /** shared stacking counter so the last-interacted floating pane wins */
 let zTop = 9999
 
 function isTypingTarget(t: EventTarget | null): boolean {
   if (!(t instanceof HTMLElement)) return false
   return t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable
-}
-
-/** show a browser-fullscreen-style tip after hiding all panes */
-function showHideHint(doc: Document): void {
-  let el = doc.querySelector('.tiao-hide-hint') as HTMLElement | null
-  if (!el) {
-    el = withDocument(doc, () => {
-      const tip = h('div', 'tiao-hide-hint')
-      tip.setAttribute('role', 'status')
-      tip.append('Press ', h('kbd', undefined, 'H'), ' to show debug panes')
-      return tip
-    })
-    doc.body.append(el)
-  }
-  // restart the slide-in so repeated hides re-show the tip
-  el.classList.remove('tiao-hide-hint-show')
-  void el.offsetWidth
-  el.classList.add('tiao-hide-hint-show')
-  const prev = hideHintTimers.get(doc)
-  if (prev) clearTimeout(prev)
-  hideHintTimers.set(
-    doc,
-    setTimeout(() => el.classList.remove('tiao-hide-hint-show'), 3200),
-  )
-}
-
-function dismissHideHint(doc: Document): void {
-  const prev = hideHintTimers.get(doc)
-  if (prev) clearTimeout(prev)
-  hideHintTimers.delete(doc)
-  doc.querySelector('.tiao-hide-hint')?.classList.remove('tiao-hide-hint-show')
 }
 
 function ensureGlobalToggle(doc: Document): void {
@@ -161,6 +158,223 @@ function ensureGlobalToggle(doc: Document): void {
     if (isTypingTarget(e.target)) return
     Pane.toggleAll(doc)
   })
+}
+
+/** one notch bar per document, mounted with the first floating pane */
+const notches = new WeakMap<Document, Notch>()
+
+/**
+ * Notch state shared by every pane in the page. The chrome keys are the global
+ * settings panel's last broadcast: live panes take them immediately, and panes
+ * mounted later inherit them unless they carry saved chrome of their own.
+ */
+interface NotchState {
+  fontSize?: PaneFontSize | undefined
+  /** the notch retreats to a sliver until the pointer finds it */
+  hiding?: boolean | undefined
+  theme?: PaneTheme | undefined
+  style?: PaneStyle | undefined
+  accent?: string | undefined
+  numbers?: boolean | undefined
+}
+
+const notchStore = jsonStore<NotchState>('tiao:notch')
+
+function readNotchState(): NotchState {
+  return notchStore.get()
+}
+
+function panesIn(doc: Document): Pane[] {
+  return [...floatingPanes].filter((p) => p.element.ownerDocument === doc)
+}
+
+/** persistence is opt-out, but needs a stable id to key on */
+function paneStorageKey(options: PaneOptions): string | null {
+  if (!options.id || options.storage === false) return null
+  return `tiao:${options.id}`
+}
+
+function ensureNotch(doc: Document): void {
+  if (notches.has(doc)) return
+  notches.set(
+    doc,
+    createNotch({
+      document: doc,
+      getHidden: () => {
+        const list = panesIn(doc)
+        return list.length > 0 && list.every((p) => p.hidden)
+      },
+      toggleHidden: () => {
+        Pane.toggleAll(doc)
+      },
+      getDocked: () => dockBody(doc) !== null,
+      toggleDocked: () => {
+        Pane.toggleDock(doc)
+      },
+      reset: () => {
+        Pane.resetValues(doc)
+      },
+      createPane: (options) => new Pane(options),
+      getTheme: () => globalChrome(doc).theme,
+      setTheme: (theme) => setGlobalChrome(doc, { theme }),
+      getStyle: () => globalChrome(doc).style,
+      setStyle: (style) => setGlobalChrome(doc, { style }),
+      getAccent: () => {
+        const first = panesIn(doc)[0]
+        return first ? resolvedAccent(first.element) : globalChrome(doc).accent
+      },
+      setAccent: (accent) => setGlobalChrome(doc, { accent }),
+      getNumbers: () => globalChrome(doc).numbers,
+      setNumbers: (numbers) => setGlobalChrome(doc, { numbers }),
+      fontSize: {
+        get: () => Pane.fontSize,
+        set: (v) => Pane.setFontSize(v, doc),
+      },
+      hiding: {
+        get: () => readNotchState().hiding ?? true,
+        set: (hiding) => {
+          notchStore.patch({ hiding })
+          syncNotch(doc)
+        },
+      },
+    }),
+  )
+}
+
+/**
+ * The look the global settings panel shows: what it last broadcast, or the
+ * primary pane's own chrome until something is set.
+ */
+function globalChrome(doc: Document): PaneChrome {
+  const saved = readNotchState()
+  const first = panesIn(doc)[0]
+  return {
+    theme: saved.theme ?? first?.theme ?? 'dark',
+    style: normalizeStyle(saved.style ?? first?.style),
+    accent: saved.accent ?? first?.chrome.accent ?? '',
+    numbers: saved.numbers ?? first?.numbers ?? false,
+  }
+}
+
+/**
+ * Broadcast part of the chrome to every pane in both views. Each pane saves it
+ * as its own, so a later per-pane tweak still sticks, and the stored copy seeds
+ * panes mounted after this.
+ */
+function setGlobalChrome(doc: Document, patch: Partial<PaneChrome>): void {
+  notchStore.patch(patch)
+  writeDockState(patch)
+  for (const p of panesIn(doc)) p.adoptGlobalChrome(patch)
+  applyDockChrome(doc)
+  syncNotch(doc)
+}
+
+function syncNotch(doc: Document): void {
+  const notch = notches.get(doc)
+  if (!notch) return
+  // the notch re-declares the theme tokens, so it tracks the look the panes wear
+  applyChrome(notch.element, globalChrome(doc))
+  notch.sync()
+}
+
+/** tear the notch and dock down once the last floating pane is gone */
+function releaseNotch(doc: Document): void {
+  if (panesIn(doc).length > 0) return
+  notches.get(doc)?.dispose()
+  notches.delete(doc)
+  closeDock(doc)
+}
+
+/** the look of a pane, applied as a unit so the dock can swap it wholesale */
+export interface PaneChrome {
+  theme: PaneTheme
+  style: PaneStyle
+  accent: string
+  numbers: boolean
+}
+
+/** theme tokens only; `numbers` needs a Pane and is applied by setChrome */
+function applyChrome(el: HTMLElement, chrome: PaneChrome): void {
+  applyThemeClass(el, chrome.theme)
+  applyStyleClass(el, chrome.style)
+  if (chrome.accent) el.style.setProperty('--tiao-accent', chrome.accent)
+  else el.style.removeProperty('--tiao-accent')
+}
+
+function applyThemeClass(el: HTMLElement, theme: PaneTheme): void {
+  for (const cls of Object.values(THEME_CLASS)) {
+    if (cls) el.classList.remove(cls)
+  }
+  const next = THEME_CLASS[theme]
+  if (next) el.classList.add(next)
+}
+
+function applyStyleClass(el: HTMLElement, style: PaneStyle): void {
+  for (const cls of Object.values(STYLE_CLASS)) {
+    if (cls) el.classList.remove(cls)
+  }
+  const next = STYLE_CLASS[style]
+  if (next) el.classList.add(next)
+}
+
+/** inline --tiao-accent if set, else the value the current theme resolves to */
+function resolvedAccent(el: HTMLElement): string {
+  const inline = el.style.getPropertyValue('--tiao-accent').trim()
+  if (inline) return inline
+  const win = el.ownerDocument.defaultView
+  const computed = win?.getComputedStyle(el).getPropertyValue('--tiao-accent').trim()
+  return computed || DEFAULT_ACCENT
+}
+
+/**
+ * The sidebar's shared chrome. Docked panes all render with it and keep their
+ * own floating chrome aside, so the two views theme independently. Seeded from
+ * the first pane the first time the sidebar opens.
+ */
+function dockChrome(doc: Document): PaneChrome {
+  const saved = readDockState()
+  const first = panesIn(doc)[0]
+  return {
+    theme: saved.theme ?? first?.theme ?? 'dark',
+    style: normalizeStyle(saved.style ?? first?.style),
+    accent: saved.accent ?? first?.chrome.accent ?? '',
+    numbers: saved.numbers ?? first?.numbers ?? false,
+  }
+}
+
+function applyDockChrome(doc: Document): void {
+  const chrome = dockChrome(doc)
+  const root = dockRoot(doc)
+  if (root) applyChrome(root, chrome)
+  for (const p of panesIn(doc)) {
+    if (p.docked) p.setChrome(chrome)
+  }
+  syncNotch(doc)
+}
+
+function createDockHost(doc: Document): DockHost {
+  const update = (patch: DockState) => {
+    writeDockState(patch)
+    applyDockChrome(doc)
+  }
+  return {
+    document: doc,
+    filter: (query) => {
+      for (const p of panesIn(doc)) p.filter(query)
+    },
+    createPane: (options) => new Pane(options),
+    getTheme: () => dockChrome(doc).theme,
+    setTheme: (theme) => update({ theme }),
+    getStyle: () => dockChrome(doc).style,
+    setStyle: (style) => update({ style }),
+    getAccent: () => {
+      const root = dockRoot(doc)
+      return root ? resolvedAccent(root) : dockChrome(doc).accent
+    },
+    setAccent: (accent) => update({ accent }),
+    getNumbers: () => dockChrome(doc).numbers,
+    setNumbers: (numbers) => update({ numbers }),
+  }
 }
 
 export class Pane extends Container {
@@ -175,28 +389,85 @@ export class Pane extends Container {
   private _anchor: Anchor | null = null
   private margin: number
   private readonly doc: Document
+  /** created without a container: owns its own window position and joins the H toggle */
   private readonly floating: boolean
+  /** the free position and theme parked while docked; non-null means docked */
+  private free: { styles: Record<string, string>; chrome: PaneChrome } | null = null
+  /** where this pane's own chrome and geometry persist; null without an id */
+  private readonly store: JSONStore<PersistedState> | null
   private options: PaneOptions
   private paneRegistry: PluginRegistry
+  /** persisted bound values; null when the pane has no id or storage is off */
+  private readonly values: ValueStore | null
 
   /** look up a live pane by id */
   static get(id: string): Pane | undefined {
     return panes.get(id)
   }
 
+  /** whether floating panes are currently collected in the dock sidebar */
+  static get docked(): boolean {
+    return dockBody(document) !== null
+  }
+
+  /**
+   * Move every floating pane into an inline sidebar (page content reflows
+   * beside it) or back out to their free positions. Returns the new state.
+   */
+  static toggleDock(doc: Document = document): boolean {
+    if (dockBody(doc)) {
+      for (const p of panesIn(doc)) p.undock()
+      closeDock(doc)
+    } else {
+      const body = ensureDock(createDockHost(doc))
+      for (const p of panesIn(doc)) p.dockInto(body)
+      applyDockChrome(doc)
+    }
+    const docked = dockBody(doc) !== null
+    writeDockState({ docked })
+    syncNotch(doc)
+    return docked
+  }
+
+  /** how big floating panes currently draw */
+  static get fontSize(): PaneFontSize {
+    return readNotchState().fontSize ?? 'small'
+  }
+
+  /** Draw every floating pane at `size`; 'small' restores each declared size. */
+  static setFontSize(size: PaneFontSize, doc: Document = document): void {
+    notchStore.patch({ fontSize: size })
+    for (const p of panesIn(doc)) p.applyFontSize(size)
+    syncNotch(doc)
+  }
+
   /**
    * Hide or show every floating pane in `doc`.
-   * If any are visible → hide all (and show a "Press H" tip); otherwise show all.
+   * If any are visible → hide all; otherwise show all.
    * Returns whether panes are now hidden.
    */
   static toggleAll(doc: Document = document): boolean {
-    const list = [...floatingPanes].filter((p) => p.element.ownerDocument === doc)
+    const list = panesIn(doc)
     if (list.length === 0) return false
     const hide = list.some((p) => !p.hidden)
     for (const p of list) p.hidden = hide
-    if (hide) showHideHint(doc)
-    else dismissHideHint(doc)
+    setDockVisible(doc, !hide)
+    syncNotch(doc)
     return hide
+  }
+
+  /**
+   * Restore every bound value in `doc` to the default its code declared and
+   * forget the persisted copies. Layout, theme, and dock state stay as they are.
+   */
+  static resetValues(doc: Document = document): void {
+    // floating panes plus every id'd pane: inline panes without an id (the
+    // settings menu's own pane) drive the chrome and must keep their values
+    for (const p of new Set([...floatingPanes, ...panes.values()])) {
+      if (p.element.ownerDocument !== doc) continue
+      walkBindings(p, (b) => b.reset())
+      p.values?.clear()
+    }
   }
 
   constructor(options: PaneOptions = {}) {
@@ -204,7 +475,11 @@ export class Pane extends Container {
     const doc = options.document ?? document
     const registry = new PluginRegistry(globalRegistry)
     const host: BladeHost = { document: doc, registry }
+    const storageKey = paneStorageKey(options)
+    if (storageKey) host.values = createValueStore(storageKey)
     super(host)
+    this.values = host.values ?? null
+    this.store = storageKey ? jsonStore<PersistedState>(storageKey) : null
     this.options = options
     this.paneRegistry = registry
     this.doc = doc
@@ -263,25 +538,33 @@ export class Pane extends Container {
       this.element.style.setProperty('--tiao-max-height', `${options.maxHeight}px`)
     }
     if (options.theme) this.applyTheme(options.theme)
-    if (options.size) this.size = options.size
+    // the global font size covers floating panes; inline ones keep their own
+    const notchState = readNotchState()
+    if (this.floating) this.applyFontSize(notchState.fontSize ?? 'small')
+    else if (options.size) this.size = options.size
 
-    // restore persisted state before first paint
+    // restore persisted state before first paint: this pane's own saved chrome
+    // wins, then whatever the global settings panel last broadcast
     const persisted = this.loadState()
-    if (persisted?.w !== undefined) this.element.style.width = `${persisted.w}px`
-    if (persisted?.hMax !== undefined) {
+    if (persisted.w !== undefined) this.element.style.width = `${persisted.w}px`
+    if (persisted.hMax !== undefined) {
       this.element.style.setProperty('--tiao-max-height', `${persisted.hMax}px`)
     }
-    if (persisted?.expanded !== undefined) this._expanded = persisted.expanded
-    this.applyThemeMode(persisted?.theme ?? 'dark')
-    this.applyStyleMode(normalizeStyle(persisted?.style ?? options.style))
-    if (persisted?.accent) this.applyTheme({ accent: persisted.accent })
-    if (persisted?.draggable !== undefined && this.floating) this._draggable = persisted.draggable
-    if (persisted?.numbers !== undefined) this._numbers = persisted.numbers
+    if (persisted.expanded !== undefined) this._expanded = persisted.expanded
+    applyThemeClass(this.element, persisted.theme ?? notchState.theme ?? 'dark')
+    applyStyleClass(
+      this.element,
+      normalizeStyle(persisted.style ?? notchState.style ?? options.style),
+    )
+    const accent = persisted.accent ?? notchState.accent
+    if (accent) this.applyTheme({ accent })
+    if (persisted.draggable !== undefined && this.floating) this._draggable = persisted.draggable
+    this._numbers = persisted.numbers ?? notchState.numbers ?? false
     if (this.floating) {
-      if (persisted?.x !== undefined && persisted?.y !== undefined) {
+      if (persisted.x !== undefined && persisted.y !== undefined) {
         this.moveTo(persisted.x, persisted.y)
       } else {
-        if (persisted?.anchor) this._anchor = persisted.anchor
+        if (persisted.anchor) this._anchor = persisted.anchor
         this.applyAnchor()
       }
     }
@@ -327,6 +610,8 @@ export class Pane extends Container {
 
     if (this.floating) {
       const bringToFront = () => {
+        // a docked pane has no stacking of its own; it would cover the resize strip
+        if (!this.movable) return
         if (this.element.style.zIndex !== String(zTop)) {
           this.element.style.zIndex = String(++zTop)
         }
@@ -355,12 +640,12 @@ export class Pane extends Container {
             suppressClick = false
           },
           onMove: (s) => {
-            if (!this._draggable || !s.moved) return
+            if (!this.movable || !this._draggable || !s.moved) return
             suppressClick = true
             this.setPosition(baseX + s.dx, baseY + s.dy, baseW, baseH)
           },
           onEnd: (s) => {
-            if (!this._draggable || !s.moved) return
+            if (!this.movable || !this._draggable || !s.moved) return
             // moved can become true on pointerup alone (no prior moved onMove)
             suppressClick = true
             // persist the clamped position applied by moveTo, not the raw drag
@@ -391,14 +676,6 @@ export class Pane extends Container {
         element: this.element,
         document: doc,
         createPane: (o) => new Pane(o),
-        getDraggable: () => this._draggable,
-        setDraggable: (v) => {
-          this.draggable = v
-        },
-        getAnchor: () => this._anchor,
-        setAnchor: (anchor) => {
-          this.anchor = anchor
-        },
         getTheme: () => this.theme,
         setTheme: (theme) => {
           this.theme = theme
@@ -415,12 +692,24 @@ export class Pane extends Container {
         setNumbers: (v) => {
           this.numbers = v
         },
+        placement: {
+          getDraggable: () => this._draggable,
+          setDraggable: (v) => {
+            this.draggable = v
+          },
+          getAnchor: () => this._anchor,
+          setAnchor: (anchor) => {
+            this.anchor = anchor
+          },
+        },
         onDispose: (fn) => this.disposers.push(fn),
       })
       const onGearClick = () => menu.toggle()
       gear.addEventListener('click', onGearClick)
       const onContextMenu = (e: MouseEvent) => {
         e.preventDefault()
+        // docked panes are themed and searched from the sidebar header instead
+        if (this.docked) return
         // right-clicking the open menu itself shouldn't toggle it closed
         if ((e.target as Element | null)?.closest?.('.tiao-pane-menu')) return
         menu.toggle()
@@ -465,12 +754,29 @@ export class Pane extends Container {
     if (this.floating) {
       floatingPanes.add(this)
       ensureGlobalToggle(doc)
-      this.disposers.push(() => floatingPanes.delete(this))
+      if (options.notch !== false) {
+        // a previously docked session re-opens the sidebar before the first mount
+        if (readDockState().docked) ensureDock(createDockHost(doc))
+        ensureNotch(doc)
+      }
+      this.disposers.push(() => {
+        floatingPanes.delete(this)
+        releaseNotch(doc)
+        syncNotch(doc)
+      })
     }
 
-    ;(options.container ?? doc.body).append(this.element)
+    const dock = this.floating ? dockBody(doc) : null
+    if (dock) {
+      this.dockInto(dock)
+      // also themes the sidebar shell, which a restored dock has not seen yet
+      applyDockChrome(doc)
+    } else {
+      ;(options.container ?? doc.body).append(this.element)
+    }
     // a persisted free position may be off-screen on a smaller window
     this.clampToViewport()
+    syncNotch(doc)
 
     const id = options.id
     if (id) {
@@ -501,6 +807,24 @@ export class Pane extends Container {
     this._expanded = v
     this.applyExpanded()
     this.saveState({ expanded: v })
+  }
+
+  /** free to be positioned: floating and not currently parked in the dock */
+  private get movable(): boolean {
+    return this.floating && this.free === null
+  }
+
+  get docked(): boolean {
+    return this.free !== null
+  }
+
+  override get hidden(): boolean {
+    return super.hidden
+  }
+  override set hidden(v: boolean) {
+    if (super.hidden === v) return
+    super.hidden = v
+    syncNotch(this.doc)
   }
 
   get draggable(): boolean {
@@ -550,7 +874,7 @@ export class Pane extends Container {
     return this._anchor
   }
   set anchor(anchor: Anchor | null) {
-    if (!this.floating || anchor === null) return
+    if (!this.movable || anchor === null) return
     this._anchor = anchor
     this.applyAnchor()
     this.saveState({ anchor, x: undefined, y: undefined })
@@ -573,7 +897,7 @@ export class Pane extends Container {
     return 'light' // no theme class → light (base tokens)
   }
   set theme(v: PaneTheme) {
-    this.applyThemeMode(v)
+    applyThemeClass(this.element, v)
     this.saveState({ theme: v })
   }
 
@@ -584,17 +908,14 @@ export class Pane extends Container {
     return 'bouba'
   }
   set style(v: PaneStyle) {
-    this.applyStyleMode(normalizeStyle(v))
-    this.saveState({ style: normalizeStyle(v) })
+    const style = normalizeStyle(v)
+    applyStyleClass(this.element, style)
+    this.saveState({ style })
   }
 
   /** current --tiao-accent (inline override, else the themed default) */
   get accent(): string {
-    const inline = this.element.style.getPropertyValue('--tiao-accent').trim()
-    if (inline) return inline
-    const win = this.doc.defaultView
-    const computed = win?.getComputedStyle(this.element).getPropertyValue('--tiao-accent').trim()
-    return computed || DEFAULT_ACCENT
+    return resolvedAccent(this.element)
   }
   set accent(v: string) {
     this.applyTheme({ accent: v })
@@ -706,7 +1027,7 @@ export class Pane extends Container {
 
   /** re-clamp a free-positioned pane into the viewport (anchored panes track their edges) */
   private clampToViewport(): void {
-    if (!this.floating || this._anchor) return
+    if (!this.movable || this._anchor) return
     const win = this.doc.defaultView
     if (!win) return
     const rect = this.element.getBoundingClientRect()
@@ -775,24 +1096,83 @@ export class Pane extends Container {
     }
   }
 
-  private applyThemeMode(theme: PaneTheme): void {
-    for (const cls of Object.values(THEME_CLASS)) {
-      if (cls) this.element.classList.remove(cls)
-    }
-    const next = THEME_CLASS[theme]
-    if (next) this.element.classList.add(next)
-  }
-
-  private applyStyleMode(style: PaneStyle): void {
-    for (const cls of Object.values(STYLE_CLASS)) {
-      if (cls) this.element.classList.remove(cls)
-    }
-    const next = STYLE_CLASS[style]
-    if (next) this.element.classList.add(next)
-  }
-
   private applyDraggable(): void {
-    this.element.classList.toggle('tiao-draggable', this._draggable)
+    this.element.classList.toggle('tiao-draggable', this._draggable && this.movable)
+  }
+
+  /** internal: the look currently applied to this pane */
+  get chrome(): PaneChrome {
+    return {
+      theme: this.theme,
+      style: this.style,
+      accent: this.element.style.getPropertyValue('--tiao-accent'),
+      numbers: this._numbers,
+    }
+  }
+
+  /** internal: apply chrome visually, leaving this pane's saved state alone */
+  setChrome(chrome: PaneChrome): void {
+    applyChrome(this.element, chrome)
+    if (this._numbers !== chrome.numbers) {
+      this._numbers = chrome.numbers
+      this.renumber()
+    }
+  }
+
+  /**
+   * internal: take chrome the global settings panel broadcast and save it as
+   * this pane's own. While docked the visible look belongs to the sidebar, so
+   * the parked floating chrome is patched instead of the element.
+   */
+  adoptGlobalChrome(patch: Partial<PaneChrome>): void {
+    if (patch.theme !== undefined) this.theme = patch.theme
+    if (patch.style !== undefined) this.style = patch.style
+    if (patch.accent !== undefined) this.accent = patch.accent
+    if (patch.numbers !== undefined) this.numbers = patch.numbers
+    if (this.free) this.free.chrome = { ...this.free.chrome, ...patch }
+  }
+
+  /**
+   * internal: park this pane in the dock sidebar, stacked with its siblings.
+   * The sidebar's shared chrome lands via applyDockChrome once all panes moved.
+   */
+  dockInto(container: HTMLElement): void {
+    if (!this.floating || this.free) return
+    this.searchOpen = false
+    const s = this.element.style
+    const styles: Record<string, string> = {}
+    for (const prop of FREE_PROPS) {
+      styles[prop] = s.getPropertyValue(prop)
+      s.removeProperty(prop)
+    }
+    this.free = { styles, chrome: this.chrome }
+    this.element.classList.remove('tiao-floating')
+    this.element.classList.add('tiao-docked')
+    this.applyDraggable()
+    container.append(this.element)
+  }
+
+  /** internal: return this pane to its floating position and its own theme */
+  undock(): void {
+    const free = this.free
+    if (!free) return
+    this.free = null
+    this.filter('')
+    this.setChrome(free.chrome)
+    this.element.classList.remove('tiao-docked')
+    this.element.classList.add('tiao-floating')
+    for (const [prop, value] of Object.entries(free.styles)) {
+      this.element.style.setProperty(prop, value)
+    }
+    this.doc.body.append(this.element)
+    this.applyAnchor()
+    this.applyDraggable()
+    this.clampToViewport()
+  }
+
+  /** internal: follow the global font size, falling back to the declared `size` */
+  private applyFontSize(size: PaneFontSize): void {
+    this.size = size === 'normal' ? 'l' : this.options.size ?? 'm'
   }
 
   private applyExpanded(): void {
@@ -802,30 +1182,11 @@ export class Pane extends Container {
       ?.setAttribute('aria-expanded', String(this._expanded))
   }
 
-  private storageKey(): string | null {
-    if (!this.options.id || this.options.storage === false) return null
-    return `tiao:${this.options.id}`
-  }
-
-  private loadState(): PersistedState | null {
-    const key = this.storageKey()
-    if (!key) return null
-    try {
-      const raw = localStorage.getItem(key)
-      return raw ? (JSON.parse(raw) as PersistedState) : null
-    } catch {
-      return null
-    }
+  private loadState(): PersistedState {
+    return this.store?.get() ?? {}
   }
 
   private saveState(patch: PersistedState): void {
-    const key = this.storageKey()
-    if (!key) return
-    try {
-      // JSON.stringify drops keys explicitly set to undefined, clearing them
-      localStorage.setItem(key, JSON.stringify({ ...this.loadState(), ...patch }))
-    } catch {
-      /* storage unavailable */
-    }
+    this.store?.patch(patch)
   }
 }

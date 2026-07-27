@@ -84,3 +84,117 @@ export function round2(n: number): number {
 export function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v)
 }
+
+/**
+ * The three ways storage fails in the wild, all swallowed: localStorage
+ * blocked outright (Safari private mode, disabled cookies), a quota rejection,
+ * and a stale or hand-edited value that no longer parses.
+ */
+function rawGet(key: string): string | null {
+  try {
+    return localStorage.getItem(key)
+  } catch {
+    return null
+  }
+}
+
+function rawSet(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value)
+  } catch {
+    /* unavailable or over quota */
+  }
+}
+
+/**
+ * Live previews — dragging the accent picker, say — run through the same
+ * setters as a settled change, which would put every intermediate frame in
+ * storage only to overwrite it on the next one. Inside this call the stores
+ * still update in memory, so the UI reads the new value, but nothing is
+ * written until the settled change arrives.
+ */
+let writesSuspended = 0
+
+export function withoutPersisting(fn: () => void): void {
+  writesSuspended++
+  try {
+    fn()
+  } finally {
+    writesSuspended--
+  }
+}
+
+/** Persisted UI state, held as an object rather than re-parsed on every touch. */
+export interface JSONStore<T extends object> {
+  get(): Readonly<Partial<T>>
+  /** Merge `patch` in; keys set to undefined are dropped. */
+  patch(patch: Partial<T>): void
+  clear(): void
+}
+
+/**
+ * A localStorage-backed object. Parsing the blob on every read costs O(blob)
+ * per binding at mount, so the parsed form is kept and reused as long as the
+ * raw string is unchanged — which also catches a page (or another tab)
+ * clearing storage behind us, so cleared state is never resurrected.
+ */
+export function jsonStore<T extends object>(key: string): JSONStore<T> {
+  let raw: string | null = null
+  let value: Partial<T> = {}
+  /** previewed changes memory holds but storage has not seen yet */
+  let pending = false
+
+  /** re-parse only when storage no longer holds what we last saw */
+  function sync(): Partial<T> {
+    const current = rawGet(key)
+    if (current === raw) return value
+    raw = current
+    pending = false
+    try {
+      value = current ? (JSON.parse(current) as Partial<T>) : {}
+    } catch {
+      value = {}
+    }
+    return value
+  }
+
+  return {
+    get: sync,
+    patch(patch) {
+      const state = sync()
+      let changed = false
+      for (const k in patch) {
+        const v = patch[k]
+        if (v === undefined) {
+          if (k in state) {
+            delete state[k]
+            changed = true
+          }
+        } else if (!Object.is(state[k], v)) {
+          state[k] = v
+          changed = true
+        }
+      }
+      if (writesSuspended) {
+        pending ||= changed
+        return
+      }
+      // a settled change often repeats the last previewed one, so `pending`
+      // rather than `changed` decides whether the preview still owes a write
+      if (!changed && !pending) return
+      pending = false
+      raw = JSON.stringify(state)
+      rawSet(key, raw)
+    },
+    clear() {
+      raw = null
+      value = {}
+      pending = false
+      try {
+        localStorage.removeItem(key)
+      } catch {
+        /* storage unavailable */
+      }
+    },
+  }
+}

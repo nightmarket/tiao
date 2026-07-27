@@ -95,6 +95,16 @@ function svgCircle(cx: number, cy: number, r: number): SVGCircleElement {
   return circle
 }
 
+function svgRect(x: number, y: number, w: number, h: number, rx: number): SVGRectElement {
+  const rect = creationDoc().createElementNS(SVG_NS, 'rect')
+  rect.setAttribute('x', String(x))
+  rect.setAttribute('y', String(y))
+  rect.setAttribute('width', String(w))
+  rect.setAttribute('height', String(h))
+  rect.setAttribute('rx', String(rx))
+  return rect
+}
+
 /** Lucide "settings" gear (ISC licensed path data, embedded to stay zero-dep). */
 export function gearIcon(): SVGSVGElement {
   return lucideIcon('gear', [
@@ -108,6 +118,43 @@ export function gearIcon(): SVGSVGElement {
 /** Lucide "search" magnifier. */
 export function searchIcon(): SVGSVGElement {
   return lucideIcon('search', [svgCircle(11, 11, 8), svgPath('m21 21-4.3-4.3')])
+}
+
+/** Lucide "eye". */
+export function eyeIcon(): SVGSVGElement {
+  return lucideIcon('eye', [
+    svgPath(
+      'M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0',
+    ),
+    svgCircle(12, 12, 3),
+  ])
+}
+
+/** Lucide "eye-off". */
+export function eyeOffIcon(): SVGSVGElement {
+  return lucideIcon('eye-off', [
+    svgPath(
+      'M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49',
+    ),
+    svgPath('M14.084 14.158a3 3 0 0 1-4.242-4.242'),
+    svgPath(
+      'M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143',
+    ),
+    svgPath('m2 2 20 20'),
+  ])
+}
+
+/** Lucide "panel-left". */
+export function panelLeftIcon(): SVGSVGElement {
+  return lucideIcon('panel-left', [svgRect(3, 3, 18, 18, 2), svgPath('M9 3v18')])
+}
+
+/** Lucide "rotate-ccw". */
+export function rotateCcwIcon(): SVGSVGElement {
+  return lucideIcon('rotate-ccw', [
+    svgPath('M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8'),
+    svgPath('M3 3v5h5'),
+  ])
 }
 
 /** Collapse a text selection without moving focus. */

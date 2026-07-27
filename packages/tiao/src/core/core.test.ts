@@ -2,12 +2,41 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { Pane } from './pane'
 import { registerPlugin } from './plugin'
 import { maxChroma, maxChromaP3, oklchInGamut, oklchInP3Gamut, parseColor, serializeColor } from './controls/color-model'
-import { snap, formatNumber } from './util'
+import { jsonStore, snap, formatNumber, withoutPersisting } from './util'
 
 beforeEach(() => {
   document.body.innerHTML = ''
   localStorage.clear()
 })
+
+/** open the notch's global settings panel, or return the one already open */
+function openNotchMenu(): HTMLElement {
+  if (!document.querySelector('.tiao-notch .tiao-pane-menu.tiao-open')) {
+    ;(document.querySelector('.tiao-notch-gear') as HTMLButtonElement).click()
+  }
+  return document.querySelector('.tiao-notch .tiao-pane-menu') as HTMLElement
+}
+
+/** the notch settings row with this label */
+function notchMenuRow(label: string): HTMLElement {
+  const rows = [...openNotchMenu().querySelectorAll('.tiao-row')]
+  return rows.find((r) => r.querySelector('.tiao-label')?.textContent === label) as HTMLElement
+}
+
+function notchMenuCheck(label: string): HTMLElement {
+  return notchMenuRow(label).querySelector('.tiao-check') as HTMLElement
+}
+
+function notchMenuSelect(label: string): HTMLSelectElement {
+  return notchMenuRow(label).querySelector('.tiao-select') as HTMLSelectElement
+}
+
+/** pick an option by its visible label, the way a user would */
+function selectOption(select: HTMLSelectElement, label: string): void {
+  const option = [...select.options].find((o) => o.textContent === label)
+  select.value = option!.value
+  select.dispatchEvent(new Event('change'))
+}
 
 describe('Pane bindings', () => {
   it('writes slider changes back to the target object and emits change events', () => {
@@ -360,7 +389,7 @@ describe('Pane registry and chrome', () => {
     expect(Pane.get('main')).toBeUndefined()
   })
 
-  it('H toggles all floating panes and shows a restore hint', () => {
+  it('H toggles all floating panes but leaves inline ones alone', () => {
     const a = new Pane({ title: 'A' })
     const b = new Pane({ title: 'B' })
     const inline = new Pane({ title: 'Inline', container: document.body.appendChild(document.createElement('div')) })
@@ -369,12 +398,10 @@ describe('Pane registry and chrome', () => {
     expect(a.hidden).toBe(true)
     expect(b.hidden).toBe(true)
     expect(inline.hidden).toBe(false)
-    expect(document.querySelector('.tiao-hide-hint.tiao-hide-hint-show')).not.toBeNull()
 
     expect(Pane.toggleAll()).toBe(false)
     expect(a.hidden).toBe(false)
     expect(b.hidden).toBe(false)
-    expect(document.querySelector('.tiao-hide-hint.tiao-hide-hint-show')).toBeNull()
 
     a.dispose()
     b.dispose()
@@ -393,6 +420,297 @@ describe('Pane registry and chrome', () => {
     expect(pane.hidden).toBe(false)
 
     input.remove()
+    pane.dispose()
+  })
+
+  it('mounts one notch with the first floating pane and drops it with the last', () => {
+    expect(document.querySelector('.tiao-notch')).toBeNull()
+    const a = new Pane()
+    const b = new Pane()
+    expect(document.querySelectorAll('.tiao-notch')).toHaveLength(1)
+
+    a.dispose()
+    expect(document.querySelector('.tiao-notch')).not.toBeNull()
+    b.dispose()
+    expect(document.querySelector('.tiao-notch')).toBeNull()
+  })
+
+  it('notch hide button toggles all panes and swaps the eye icon', () => {
+    const pane = new Pane()
+    const hide = document.querySelector('.tiao-notch-hide') as HTMLButtonElement
+
+    hide.click()
+    expect(pane.hidden).toBe(true)
+    expect(hide.querySelector('.tiao-icon-eye-off')).not.toBeNull()
+
+    hide.click()
+    expect(pane.hidden).toBe(false)
+    expect(hide.querySelector('.tiao-icon-eye')).not.toBeNull()
+    pane.dispose()
+  })
+
+  it('notch buttons carry an accessible name that follows their state', () => {
+    const pane = new Pane()
+    const label = (cls: string) =>
+      (document.querySelector(cls) as HTMLElement).getAttribute('aria-label')
+
+    expect(label('.tiao-notch-hide')).toBe('Hide debug panes')
+    expect(label('.tiao-notch-dock')).toBe('Dock panes to sidebar')
+    expect(label('.tiao-notch-gear')).toBe('Global settings')
+    expect(label('.tiao-notch-reset')).toBe('Reset values to defaults')
+
+    ;(document.querySelector('.tiao-notch-hide') as HTMLButtonElement).click()
+    ;(document.querySelector('.tiao-notch-dock') as HTMLButtonElement).click()
+    expect(label('.tiao-notch-hide')).toBe('Show debug panes')
+    expect(label('.tiao-notch-dock')).toBe('Undock panes')
+
+    Pane.toggleDock()
+    pane.dispose()
+  })
+
+  it('notch font size draws every floating pane larger and persists', () => {
+    const pane = new Pane({ size: 's' })
+    const inline = new Pane({ container: document.body.appendChild(document.createElement('div')) })
+    expect(pane.size).toBe('s')
+
+    const fontSize = notchMenuSelect('Font Size')
+    expect(fontSize.selectedOptions[0]?.textContent).toBe('Small')
+
+    selectOption(fontSize, 'Normal')
+    expect(pane.size).toBe('l')
+    // the global size covers floating panes; inline ones keep their own
+    expect(inline.size).toBe('m')
+    expect(JSON.parse(localStorage.getItem('tiao:notch')!).fontSize).toBe('normal')
+
+    // panes created at Normal match, and fall back to their declared size after
+    const later = new Pane()
+    expect(later.size).toBe('l')
+
+    selectOption(fontSize, 'Small')
+    expect(pane.size).toBe('s')
+    expect(later.size).toBe('m')
+    expect(JSON.parse(localStorage.getItem('tiao:notch')!).fontSize).toBe('small')
+
+    pane.dispose()
+    inline.dispose()
+    later.dispose()
+  })
+
+  it('the notch arms itself to hide by default and the toggle disarms it', () => {
+    const pane = new Pane()
+    const notch = document.querySelector('.tiao-notch') as HTMLElement
+    expect(notch.classList.contains('tiao-notch-auto-hide')).toBe(true)
+
+    notchMenuCheck('Hiding').click()
+    expect(notch.classList.contains('tiao-notch-auto-hide')).toBe(false)
+    expect(JSON.parse(localStorage.getItem('tiao:notch')!).hiding).toBe(false)
+
+    pane.dispose()
+  })
+
+  it('notch settings theme every pane in both views and seed later panes', () => {
+    const a = new Pane({ id: 'globe-a' })
+    const b = new Pane({ id: 'globe-b' })
+    b.theme = 'nord'
+
+    selectOption(notchMenuSelect('Theme'), 'Catppuccin')
+
+    // every live pane takes it and saves it as its own
+    expect(a.theme).toBe('catppuccin')
+    expect(b.theme).toBe('catppuccin')
+    expect(JSON.parse(localStorage.getItem('tiao:globe-b')!).theme).toBe('catppuccin')
+    // both views: the sidebar shares the same setting
+    expect(JSON.parse(localStorage.getItem('tiao:dock')!).theme).toBe('catppuccin')
+    expect(JSON.parse(localStorage.getItem('tiao:notch')!).theme).toBe('catppuccin')
+
+    // a pane with no saved chrome of its own inherits the global one
+    const later = new Pane()
+    expect(later.theme).toBe('catppuccin')
+
+    // and a per-pane tweak afterwards still sticks
+    b.theme = 'solarized'
+    expect(b.theme).toBe('solarized')
+    expect(a.theme).toBe('catppuccin')
+
+    a.dispose()
+    b.dispose()
+    later.dispose()
+  })
+
+  it('notch settings survive docking, so panes undock with the global look', () => {
+    const pane = new Pane()
+    ;(document.querySelector('.tiao-notch-dock') as HTMLButtonElement).click()
+
+    selectOption(notchMenuSelect('Theme'), 'Nord')
+    expect(pane.element.classList.contains('tiao-theme-nord')).toBe(true)
+
+    ;(document.querySelector('.tiao-notch-dock') as HTMLButtonElement).click()
+    expect(pane.theme).toBe('nord')
+    pane.dispose()
+  })
+
+  it('docks panes into the sidebar and restores the page layout on undock', () => {
+    document.body.style.setProperty('padding-inline-start', '10px')
+    const pane = new Pane({ anchor: 'top-right' })
+    const dockBtn = document.querySelector('.tiao-notch-dock') as HTMLButtonElement
+
+    dockBtn.click()
+    const dock = document.querySelector('.tiao-dock-body')
+    expect(dock).not.toBeNull()
+    expect(pane.element.parentElement).toBe(dock)
+    expect(pane.docked).toBe(true)
+    expect(pane.element.classList.contains('tiao-floating')).toBe(false)
+    expect(document.body.style.getPropertyValue('padding-inline-start')).toBe(
+      'var(--tiao-dock-width, 300px)',
+    )
+    // panes created while docked join the sidebar
+    const later = new Pane()
+    expect(later.element.parentElement).toBe(dock)
+
+    dockBtn.click()
+    expect(document.querySelector('.tiao-dock')).toBeNull()
+    expect(pane.element.parentElement).toBe(document.body)
+    expect(pane.docked).toBe(false)
+    expect(pane.element.classList.contains('tiao-floating')).toBe(true)
+    expect(pane.element.style.right).toBe('8px')
+    expect(document.body.style.getPropertyValue('padding-inline-start')).toBe('10px')
+
+    pane.dispose()
+    later.dispose()
+    document.body.style.removeProperty('padding-inline-start')
+  })
+
+  it('moves search and settings to the sidebar header while docked', () => {
+    const params = { speed: 1, gamma: 2 }
+    const pane = new Pane()
+    pane.addBinding(params, 'speed')
+    const gamma = pane.addBinding(params, 'gamma')
+    ;(document.querySelector('.tiao-notch-dock') as HTMLButtonElement).click()
+
+    // the pane's own chrome steps aside for one sidebar-wide set
+    expect(pane.element.querySelector('.tiao-pane-search')).not.toBeNull()
+    expect(document.querySelectorAll('.tiao-dock-search')).toHaveLength(1)
+    expect(document.querySelectorAll('.tiao-dock-gear')).toHaveLength(1)
+    pane.element.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))
+    expect(pane.element.querySelector('.tiao-pane-menu.tiao-open')).toBeNull()
+
+    const search = document.querySelector('.tiao-dock-search') as HTMLButtonElement
+    search.click()
+    const input = document.querySelector('.tiao-dock-searchbar .tiao-search-input') as HTMLInputElement
+    input.value = 'gamma'
+    input.dispatchEvent(new Event('input'))
+    expect(gamma.element.classList.contains('tiao-search-miss')).toBe(false)
+    expect(pane.element.querySelector('.tiao-row')?.classList.contains('tiao-search-miss')).toBe(
+      true,
+    )
+
+    search.click()
+    expect(pane.element.querySelector('.tiao-row')?.classList.contains('tiao-search-miss')).toBe(
+      false,
+    )
+    pane.dispose()
+  })
+
+  it('themes docked panes as one group and hands each pane back its own theme', () => {
+    const a = new Pane()
+    const b = new Pane()
+    a.theme = 'nord'
+    b.theme = 'solarized'
+    ;(document.querySelector('.tiao-notch-dock') as HTMLButtonElement).click()
+
+    // seeded from the first pane, then shared by every pane in the sidebar
+    expect(b.element.classList.contains('tiao-theme-nord')).toBe(true)
+    const gear = document.querySelector('.tiao-dock-gear') as HTMLButtonElement
+    gear.click()
+    const select = document.querySelector('.tiao-dock .tiao-pane-menu .tiao-select') as HTMLSelectElement
+    select.value = '4' // catppuccin
+    select.dispatchEvent(new Event('change'))
+    expect(a.element.classList.contains('tiao-theme-catppuccin')).toBe(true)
+    expect(b.element.classList.contains('tiao-theme-catppuccin')).toBe(true)
+    expect(JSON.parse(localStorage.getItem('tiao:dock')!).theme).toBe('catppuccin')
+
+    // floating theme is a separate state and comes back on undock
+    ;(document.querySelector('.tiao-notch-dock') as HTMLButtonElement).click()
+    expect(a.theme).toBe('nord')
+    expect(b.theme).toBe('solarized')
+
+    a.dispose()
+    b.dispose()
+  })
+
+  it('numbers every docked pane at once and anchors the sidebar to either edge', () => {
+    const a = new Pane()
+    a.addFolder({ title: 'Motion' })
+    const b = new Pane()
+    b.addFolder({ title: 'Look' })
+    ;(document.querySelector('.tiao-notch-dock') as HTMLButtonElement).click()
+    ;(document.querySelector('.tiao-dock-gear') as HTMLButtonElement).click()
+    const menu = document.querySelector('.tiao-dock .tiao-pane-menu')!
+
+    // numbers is one switch for the whole sidebar
+    const numbers = menu.querySelector('.tiao-check') as HTMLElement
+    numbers.click()
+    expect(a.element.querySelector('.tiao-folder-index')?.textContent).toBe('1')
+    expect(b.element.querySelector('.tiao-folder-index')?.textContent).toBe('1')
+    expect(JSON.parse(localStorage.getItem('tiao:dock')!).numbers).toBe(true)
+
+    // anchor is left/right only, and moves the page offset to that edge
+    const cells = menu.querySelectorAll('.tiao-anchor-sides .tiao-anchor-cell')
+    expect(cells).toHaveLength(2)
+    expect(cells[0]!.classList.contains('tiao-selected')).toBe(true)
+    ;(cells[1] as HTMLButtonElement).click()
+    const dock = document.querySelector('.tiao-dock')!
+    expect(dock.classList.contains('tiao-dock-end')).toBe(true)
+    expect(document.body.style.paddingInlineStart).toBe('')
+    expect(document.body.style.paddingInlineEnd).toBe('var(--tiao-dock-width, 300px)')
+
+    // both are sidebar state: panes come back unnumbered
+    ;(document.querySelector('.tiao-notch-dock') as HTMLButtonElement).click()
+    expect(a.numbers).toBe(false)
+    expect(a.element.querySelector('.tiao-folder-index')).toBeNull()
+    expect(document.body.style.paddingInlineEnd).toBe('')
+
+    a.dispose()
+    b.dispose()
+  })
+
+  it('resizes the sidebar by dragging its outer edge and persists the width', () => {
+    const pane = new Pane()
+    ;(document.querySelector('.tiao-notch-dock') as HTMLButtonElement).click()
+    const dock = document.querySelector('.tiao-dock') as HTMLElement
+    dock.getBoundingClientRect = () => ({ width: 300, height: 800 }) as DOMRect
+
+    const handle = dock.querySelector('.tiao-dock-resize') as HTMLElement
+    const drag = (dx: number) => {
+      handle.dispatchEvent(new MouseEvent('pointerdown', { button: 0, clientX: 0, clientY: 0 }))
+      handle.dispatchEvent(new MouseEvent('pointermove', { clientX: dx, clientY: 0, buttons: 1 }))
+      handle.dispatchEvent(new MouseEvent('pointerup', { clientX: dx, clientY: 0 }))
+    }
+
+    drag(90)
+    expect(document.documentElement.style.getPropertyValue('--tiao-dock-width')).toBe('390px')
+    expect(JSON.parse(localStorage.getItem('tiao:dock')!).width).toBe(390)
+
+    drag(5000)
+    expect(document.documentElement.style.getPropertyValue('--tiao-dock-width')).toBe('640px')
+
+    pane.dispose()
+    expect(document.documentElement.style.getPropertyValue('--tiao-dock-width')).toBe('')
+  })
+
+  it('hiding all panes also folds the dock away without losing dock state', () => {
+    const pane = new Pane()
+    const dock = document.querySelector('.tiao-notch-dock') as HTMLButtonElement
+    dock.click()
+
+    Pane.toggleAll()
+    expect(document.querySelector('.tiao-dock')?.classList.contains('tiao-hidden')).toBe(true)
+    expect(document.body.style.getPropertyValue('padding-inline-start')).toBe('')
+
+    Pane.toggleAll()
+    expect(document.querySelector('.tiao-dock')?.classList.contains('tiao-hidden')).toBe(false)
+    expect(pane.docked).toBe(true)
+
     pane.dispose()
   })
 
@@ -1411,6 +1729,90 @@ describe('Pane registry and chrome', () => {
     expect(pane.anchor).toBeNull()
     expect(pane.element.style.left).toBe('10px')
     pane.dispose()
+  })
+
+  it('bound values persist per pane id and come back on the next mount', () => {
+    const params = { speed: 1, tint: { r: 255, g: 0, b: 0 }, fps: 60 }
+    const pane = new Pane({ id: 'valued' })
+    const speed = pane.addBinding(params, 'speed')
+    const tint = pane.addFolder({ title: 'Render' }).addBinding(params, 'tint')
+    pane.addBinding(params, 'fps', { readonly: true })
+
+    speed.value.set(4)
+    tint.value.set({ r: 0, g: 0, b: 255 })
+    expect(params.speed).toBe(4)
+
+    const saved = JSON.parse(localStorage.getItem('tiao:valued:values')!)
+    expect(saved.speed).toBe(4)
+    expect(saved['Render/tint']).toEqual({ r: 0, g: 0, b: 255 })
+    // monitors read from the app; they never write back
+    expect(saved.fps).toBeUndefined()
+    pane.dispose()
+
+    const next = { speed: 1, tint: { r: 255, g: 0, b: 0 } }
+    const revived = new Pane({ id: 'valued' })
+    revived.addBinding(next, 'speed')
+    revived.addFolder({ title: 'Render' }).addBinding(next, 'tint')
+    expect(next.speed).toBe(4)
+    expect(next.tint).toEqual({ r: 0, g: 0, b: 255 })
+    revived.dispose()
+  })
+
+  it('skips saved values that no longer fit and honors persist: false', () => {
+    localStorage.setItem(
+      'tiao:mismatch:values',
+      JSON.stringify({ speed: { r: 1, g: 2, b: 3 }, seed: 9 }),
+    )
+    const params = { speed: 1, seed: 1 }
+    const pane = new Pane({ id: 'mismatch' })
+    pane.addBinding(params, 'speed')
+    const seed = pane.addBinding(params, 'seed', { persist: false })
+    expect(params.speed).toBe(1)
+    expect(params.seed).toBe(1)
+
+    seed.value.set(5)
+    expect(JSON.parse(localStorage.getItem('tiao:mismatch:values')!).seed).toBe(9)
+    pane.dispose()
+  })
+
+  it('notch reset restores code defaults and clears the saved values', () => {
+    const params = { speed: 1 }
+    const pane = new Pane({ id: 'resettable' })
+    const binding = pane.addBinding(params, 'speed')
+    binding.value.set(7)
+    expect(localStorage.getItem('tiao:resettable:values')).not.toBeNull()
+
+    ;(document.querySelector('.tiao-notch-reset') as HTMLButtonElement).click()
+    expect(params.speed).toBe(1)
+    expect(binding.value.get()).toBe(1)
+    expect(localStorage.getItem('tiao:resettable:values')).toBeNull()
+    pane.dispose()
+  })
+
+  it('keeps previewed values out of storage until the change settles', () => {
+    const store = jsonStore<{ accent: string }>('tiao:preview')
+
+    // a drag: every frame updates what the UI reads, none of them write
+    for (const accent of ['#111111', '#222222', '#333333']) {
+      withoutPersisting(() => store.patch({ accent }))
+      expect(store.get().accent).toBe(accent)
+    }
+    expect(localStorage.getItem('tiao:preview')).toBeNull()
+
+    // the settled change repeats the last previewed value and still writes it
+    store.patch({ accent: '#333333' })
+    expect(JSON.parse(localStorage.getItem('tiao:preview')!).accent).toBe('#333333')
+  })
+
+  it('does not resurrect state a page cleared behind the store', () => {
+    const store = jsonStore<{ theme: string; width: number }>('tiao:cleared')
+    store.patch({ theme: 'nord', width: 300 })
+
+    localStorage.clear()
+    store.patch({ width: 320 })
+
+    expect(store.get()).toEqual({ width: 320 })
+    expect(JSON.parse(localStorage.getItem('tiao:cleared')!)).toEqual({ width: 320 })
   })
 })
 
