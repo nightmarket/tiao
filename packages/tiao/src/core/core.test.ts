@@ -582,7 +582,7 @@ describe('Pane registry and chrome', () => {
     expect(pane.docked).toBe(true)
     expect(pane.element.classList.contains('tiao-floating')).toBe(false)
     expect(document.body.style.getPropertyValue('padding-inline-start')).toBe(
-      'var(--tiao-dock-width, 300px)',
+      'var(--tiao-dock-inset-start)',
     )
     // panes created while docked join the sidebar
     const later = new Pane()
@@ -682,7 +682,7 @@ describe('Pane registry and chrome', () => {
     const dock = document.querySelector('.tiao-dock')!
     expect(dock.classList.contains('tiao-dock-end')).toBe(true)
     expect(document.body.style.paddingInlineStart).toBe('')
-    expect(document.body.style.paddingInlineEnd).toBe('var(--tiao-dock-width, 300px)')
+    expect(document.body.style.paddingInlineEnd).toBe('var(--tiao-dock-inset-end)')
 
     // both are sidebar state: panes come back unnumbered
     ;(document.querySelector('.tiao-notch-dock') as HTMLButtonElement).click()
@@ -716,6 +716,79 @@ describe('Pane registry and chrome', () => {
 
     pane.dispose()
     expect(document.documentElement.style.getPropertyValue('--tiao-dock-width')).toBe('')
+  })
+
+  it('publishes the sidebar footprint so fixed page chrome can inset itself', () => {
+    const pane = new Pane()
+    const inset = (edge: 'start' | 'end') =>
+      document.documentElement.style.getPropertyValue(`--tiao-dock-inset-${edge}`)
+    const docked = () => document.documentElement.classList.contains('tiao-docked')
+    expect(docked()).toBe(false)
+
+    const dock = document.querySelector('.tiao-notch-dock') as HTMLButtonElement
+    dock.click()
+    // the width var keeps it live, so a resize drag needs no extra bookkeeping
+    expect(inset('start')).toBe('var(--tiao-dock-width, 300px)')
+    expect(inset('end')).toBe('0px')
+    expect(docked()).toBe(true)
+
+    // the inset follows the anchor, and folding the sidebar away zeroes it
+    ;(document.querySelector('.tiao-dock-gear') as HTMLButtonElement).click()
+    const cells = document.querySelectorAll('.tiao-dock .tiao-anchor-sides .tiao-anchor-cell')
+    ;(cells[1] as HTMLButtonElement).click()
+    expect(inset('start')).toBe('0px')
+    expect(inset('end')).toBe('var(--tiao-dock-width, 300px)')
+
+    Pane.toggleAll()
+    expect(inset('end')).toBe('0px')
+    expect(docked()).toBe(false)
+    Pane.toggleAll()
+    expect(inset('end')).toBe('var(--tiao-dock-width, 300px)')
+
+    dock.click()
+    expect(inset('start')).toBe('')
+    expect(inset('end')).toBe('')
+    expect(docked()).toBe(false)
+
+    pane.dispose()
+  })
+
+  it('insets the page fixed chrome while docked and leaves floating UI alone', async () => {
+    const fixed = (css: string) => {
+      const el = document.createElement('div')
+      el.style.cssText = `position:fixed;${css}`
+      document.body.appendChild(el)
+      return el
+    }
+    const navbar = fixed('top:0;left:0;right:0;height:48px')
+    const toast = fixed('bottom:16px;right:16px;width:200px')
+    const optedOut = fixed('top:0;left:0;right:0')
+    optedOut.setAttribute('data-tiao-no-inset', '')
+    const inFlow = document.createElement('div')
+    document.body.appendChild(inFlow)
+
+    const pane = new Pane()
+    const dock = document.querySelector('.tiao-notch-dock') as HTMLButtonElement
+    dock.click()
+    expect(navbar.hasAttribute('data-tiao-inset')).toBe(true)
+    // a corner toast is not what the sidebar covers, and neither is normal flow
+    expect(toast.hasAttribute('data-tiao-inset')).toBe(false)
+    expect(optedOut.hasAttribute('data-tiao-inset')).toBe(false)
+    expect(inFlow.hasAttribute('data-tiao-inset')).toBe(false)
+    // tiao's own chrome is positioned against the sidebar, not inset by it
+    expect(pane.element.hasAttribute('data-tiao-inset')).toBe(false)
+
+    // chrome the page mounts later still gets picked up, one microtask behind
+    const footer = fixed('bottom:0;left:0;right:0;height:32px')
+    await Promise.resolve()
+    expect(footer.hasAttribute('data-tiao-inset')).toBe(true)
+
+    dock.click()
+    expect(navbar.hasAttribute('data-tiao-inset')).toBe(false)
+    expect(footer.hasAttribute('data-tiao-inset')).toBe(false)
+
+    pane.dispose()
+    for (const el of [navbar, toast, optedOut, inFlow, footer]) el.remove()
   })
 
   it('hiding all panes also folds the dock away without losing dock state', () => {
