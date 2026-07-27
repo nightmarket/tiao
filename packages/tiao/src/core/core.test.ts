@@ -508,6 +508,27 @@ describe('Pane registry and chrome', () => {
     pane.dispose()
   })
 
+  it('an armed notch reveals itself from the pointer nearing the top edge', () => {
+    const pane = new Pane()
+    const notch = document.querySelector('.tiao-notch') as HTMLElement
+    const move = (clientY: number) =>
+      document.dispatchEvent(new MouseEvent('pointermove', { clientY, bubbles: true }))
+
+    move(4)
+    expect(notch.classList.contains('tiao-notch-near')).toBe(true)
+    move(200)
+    expect(notch.classList.contains('tiao-notch-near')).toBe(false)
+
+    // disarmed, the bar always shows, so the pointer is nobody's business
+    move(4)
+    notchMenuCheck('Hiding').click()
+    expect(notch.classList.contains('tiao-notch-near')).toBe(false)
+    move(4)
+    expect(notch.classList.contains('tiao-notch-near')).toBe(false)
+
+    pane.dispose()
+  })
+
   it('notch settings theme every pane in both views and seed later panes', () => {
     const a = new Pane({ id: 'globe-a' })
     const b = new Pane({ id: 'globe-b' })
@@ -623,8 +644,7 @@ describe('Pane registry and chrome', () => {
     const gear = document.querySelector('.tiao-dock-gear') as HTMLButtonElement
     gear.click()
     const select = document.querySelector('.tiao-dock .tiao-pane-menu .tiao-select') as HTMLSelectElement
-    select.value = '4' // catppuccin
-    select.dispatchEvent(new Event('change'))
+    selectOption(select, 'Catppuccin')
     expect(a.element.classList.contains('tiao-theme-catppuccin')).toBe(true)
     expect(b.element.classList.contains('tiao-theme-catppuccin')).toBe(true)
     expect(JSON.parse(localStorage.getItem('tiao:dock')!).theme).toBe('catppuccin')
@@ -1615,30 +1635,83 @@ describe('Pane registry and chrome', () => {
     const select = menu.querySelector('.tiao-select') as HTMLSelectElement
     expect(pane.theme).toBe('dark')
     expect(pane.element.classList.contains('tiao-theme-dark')).toBe(true)
+    expect([...select.options].map((o) => o.textContent)).toEqual([
+      'System',
+      'Dark',
+      'Light',
+      'Solarized',
+      'Nord',
+      'Catppuccin',
+    ])
 
-    select.value = '1'
-    select.dispatchEvent(new Event('change'))
+    selectOption(select, 'Light')
     expect(pane.theme).toBe('light')
     expect(pane.element.classList.contains('tiao-theme-dark')).toBe(false)
 
-    select.value = '2'
-    select.dispatchEvent(new Event('change'))
+    selectOption(select, 'Solarized')
     expect(pane.theme).toBe('solarized')
     expect(pane.element.classList.contains('tiao-theme-solarized')).toBe(true)
 
-    select.value = '3'
-    select.dispatchEvent(new Event('change'))
+    selectOption(select, 'Nord')
     expect(pane.theme).toBe('nord')
     expect(pane.element.classList.contains('tiao-theme-nord')).toBe(true)
 
-    select.value = '4'
-    select.dispatchEvent(new Event('change'))
+    selectOption(select, 'Catppuccin')
     expect(pane.theme).toBe('catppuccin')
     expect(pane.element.classList.contains('tiao-theme-catppuccin')).toBe(true)
     pane.dispose()
 
     const revived = new Pane({ id: 'themed' })
     expect(revived.theme).toBe('catppuccin')
+    revived.dispose()
+  })
+
+  it('system theme follows prefers-color-scheme and updates when it changes', () => {
+    const listeners = new Set<(ev: { matches: boolean }) => void>()
+    let dark = true
+    window.matchMedia = ((query: string) => {
+      if (!query.includes('prefers-color-scheme')) {
+        return {
+          matches: false,
+          media: query,
+          addEventListener() {},
+          removeEventListener() {},
+        } as unknown as MediaQueryList
+      }
+      return {
+        get matches() {
+          return dark
+        },
+        media: query,
+        addEventListener(_type: string, fn: (ev: { matches: boolean }) => void) {
+          listeners.add(fn)
+        },
+        removeEventListener(_type: string, fn: (ev: { matches: boolean }) => void) {
+          listeners.delete(fn)
+        },
+      } as unknown as MediaQueryList
+    }) as typeof window.matchMedia
+
+    const pane = new Pane({ id: 'sys-theme' })
+    pane.theme = 'system'
+    expect(pane.theme).toBe('system')
+    expect(pane.element.dataset.tiaoTheme).toBe('system')
+    expect(pane.element.classList.contains('tiao-theme-dark')).toBe(true)
+
+    dark = false
+    for (const fn of listeners) fn({ matches: false })
+    expect(pane.theme).toBe('system')
+    expect(pane.element.classList.contains('tiao-theme-dark')).toBe(false)
+
+    dark = true
+    for (const fn of listeners) fn({ matches: true })
+    expect(pane.element.classList.contains('tiao-theme-dark')).toBe(true)
+
+    // preference persists as system, not the resolved light/dark
+    pane.dispose()
+    const revived = new Pane({ id: 'sys-theme' })
+    expect(revived.theme).toBe('system')
+    expect(JSON.parse(localStorage.getItem('tiao:sys-theme')!).theme).toBe('system')
     revived.dispose()
   })
 
