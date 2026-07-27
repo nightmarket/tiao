@@ -2,12 +2,15 @@ import { Emitter } from './emitter'
 import { h, icon, longPress, withDocument } from './dom'
 import { onInterval } from './ticker'
 import { Value } from './value'
+import { sameShape, type ValueStore } from './values'
 import type { BindingOptions, PluginRegistry } from './plugin'
 
 /** Provided by the root Pane to every descendant. */
 export interface BladeHost {
   document: Document
   registry: PluginRegistry
+  /** where bound values persist; absent for panes without an id or storage */
+  values?: ValueStore
 }
 
 /**
@@ -131,6 +134,9 @@ export abstract class Container extends Item {
       () => new BindingApi<O[K]>(this.host, target as Record<string, O[K]>, key, options),
     )
     this.attach(api)
+    if (this.host.values && !options.readonly && options.persist !== false) {
+      persistValue(this.host.values, valuePath(this, key), api)
+    }
     return api
   }
 
@@ -236,6 +242,36 @@ export abstract class Container extends Item {
   }
 }
 
+/** storage path for a row: enclosing folder / tab-page titles, then the key */
+function valuePath(container: Container, key: string): string {
+  const parts = [key]
+  for (let c: Container | null = container; c; c = c.parent) {
+    if (c instanceof FolderApi || c instanceof TabPageApi) parts.unshift(c.title)
+  }
+  return parts.join('/')
+}
+
+/**
+ * Seed a binding from storage, then keep the stored copy current. Only settled
+ * values are written: mid-drag frames, graph samples, and app-driven refreshes
+ * would otherwise hit localStorage every tick.
+ */
+function persistValue<T>(store: ValueStore, path: string, api: BindingApi<T>): void {
+  const saved = store.read(path)
+  if (sameShape(saved, api.defaultValue)) api.value.set(saved as T)
+  api.value.subscribe((v, meta) => {
+    if (meta.sample || meta.last === false || meta.source === 'refresh') return
+    store.write(path, v)
+  })
+}
+
+/** visit every binding under `item`, descending into folders and tab pages */
+export function walkBindings(item: Item, fn: (binding: BindingApi<unknown>) => void): void {
+  if (item instanceof BindingApi) fn(item)
+  else if (item instanceof Container) for (const child of item.children) walkBindings(child, fn)
+  else if (item instanceof TabApi) for (const page of item.pages) walkBindings(page, fn)
+}
+
 const DEFAULT_MONITOR_INTERVAL = 66
 
 /** shared meta objects so per-tick polling does not allocate */
@@ -252,6 +288,8 @@ export class BindingApi<T> extends Item {
   readonly element: HTMLElement
   readonly key: string
   readonly value: Value<T>
+  /** the value the code declared, restored by reset() */
+  readonly defaultValue: T
   private bindingEmitter = new Emitter<BindingEvents<T>>()
   private labelEl: HTMLElement | null = null
   private labelText: string
@@ -265,6 +303,7 @@ export class BindingApi<T> extends Item {
     super()
     this.key = key
     const initial = target[key] as T
+    this.defaultValue = initial
     const label = options.label ?? key
     this.labelText = label
     this.value = new Value<T>(initial)
@@ -388,6 +427,11 @@ export class BindingApi<T> extends Item {
   /** re-read the current value from the bound object */
   refresh(): void {
     this.value.set(this.target[this.key] as T, REFRESH_META)
+  }
+
+  /** restore the value the code declared (and write it back to the target) */
+  reset(): void {
+    this.value.set(this.defaultValue)
   }
 
   override dispose(): void {

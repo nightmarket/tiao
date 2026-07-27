@@ -1,15 +1,39 @@
+import type { DockSide } from './dock'
 import { h, withDocument } from './dom'
-import type { Anchor, Pane, PaneOptions, PaneStyle, PaneTheme } from './pane'
+import type { Anchor, Pane, PaneFontSize, PaneOptions, PaneStyle, PaneTheme } from './pane'
+import { withoutPersisting } from './util'
+
+/** rows that only make sense for a single floating pane */
+export interface PaneMenuPlacement {
+  getDraggable(): boolean
+  setDraggable(v: boolean): void
+  getAnchor(): Anchor | null
+  setAnchor(anchor: Anchor): void
+}
+
+/** the sidebar anchors to one of two page edges instead of nine spots */
+export interface PaneMenuSides {
+  getSide(): DockSide
+  setSide(side: DockSide): void
+}
+
+/** how big every pane draws; only the notch offers it */
+export interface PaneMenuFontSize {
+  get(): PaneFontSize
+  set(v: PaneFontSize): void
+}
+
+/** whether the notch retreats to a sliver until the pointer finds it */
+export interface PaneMenuHiding {
+  get(): boolean
+  set(v: boolean): void
+}
 
 export interface PaneMenuHost {
   element: HTMLElement
   document: Document
   /** factory injected by the Pane to avoid a module cycle */
   createPane(options: PaneOptions): Pane
-  getDraggable(): boolean
-  setDraggable(v: boolean): void
-  getAnchor(): Anchor | null
-  setAnchor(anchor: Anchor): void
   getTheme(): PaneTheme
   setTheme(theme: PaneTheme): void
   getStyle(): PaneStyle
@@ -18,6 +42,14 @@ export interface PaneMenuHost {
   setAccent(accent: string): void
   getNumbers(): boolean
   setNumbers(v: boolean): void
+  /** omitted for menus that control a group of panes, e.g. the dock sidebar */
+  placement?: PaneMenuPlacement
+  /** the dock's stand-in for the pane anchor grid */
+  sides?: PaneMenuSides
+  fontSize?: PaneMenuFontSize
+  hiding?: PaneMenuHiding
+  /** drop below the host instead of beside it (the notch bar is too narrow) */
+  menuBelow?: boolean
   onDispose(fn: () => void): void
 }
 
@@ -33,6 +65,9 @@ const ANCHOR_GRID: Anchor[] = [
   'bottom-center',
   'bottom-right',
 ]
+
+/** the sidebar only has two homes: the start or the end edge of the page */
+const DOCK_SIDES: DockSide[] = ['left', 'right']
 
 /** quick accent swatches, loosely based on syntax-highlighting palettes */
 const ACCENT_PALETTE = [
@@ -74,12 +109,14 @@ export function createPaneMenu(host: PaneMenuHost): { toggle(): void; close(): v
     built ??= withDocument(doc, () => buildMenu(host))
     built.refresh()
     built.shell.classList.add('tiao-open')
-    // open to whichever side of the pane has room
-    const rect = host.element.getBoundingClientRect()
-    const menuWidth = built.shell.offsetWidth || 190
-    const viewportWidth = doc.defaultView?.innerWidth ?? Infinity
-    const fitsRight = rect.right + menuWidth + 12 <= viewportWidth
-    built.shell.classList.toggle('tiao-menu-left', !fitsRight)
+    if (!host.menuBelow) {
+      // open to whichever side of the pane has room
+      const rect = host.element.getBoundingClientRect()
+      const menuWidth = built.shell.offsetWidth || 190
+      const viewportWidth = doc.defaultView?.innerWidth ?? Infinity
+      const fitsRight = rect.right + menuWidth + 12 <= viewportWidth
+      built.shell.classList.toggle('tiao-menu-left', !fitsRight)
+    }
     // capture phase so clicks inside other panes still close it
     doc.addEventListener('pointerdown', onOutside, true)
     doc.addEventListener('keydown', onKey)
@@ -101,10 +138,15 @@ export function createPaneMenu(host: PaneMenuHost): { toggle(): void; close(): v
 
 function buildMenu(host: PaneMenuHost): { shell: HTMLElement; refresh: () => void } {
   const shell = h('div', 'tiao-pane-menu')
+  if (host.menuBelow) shell.classList.add('tiao-menu-below')
   host.element.append(shell)
 
+  const placement = host.placement
+  const { fontSize, hiding } = host
   const settings = {
-    draggable: host.getDraggable(),
+    draggable: placement?.getDraggable() ?? false,
+    fontSize: fontSize?.get() ?? 'small',
+    hiding: hiding?.get() ?? false,
     theme: host.getTheme(),
     style: host.getStyle(),
     accent: host.getAccent(),
@@ -121,13 +163,39 @@ function buildMenu(host: PaneMenuHost): { shell: HTMLElement; refresh: () => voi
     menuPane.applyTheme({ accent: host.getAccent() })
   }
 
-  const dragBinding = menuPane.addBinding(settings, 'draggable', { label: 'Draggable' })
-  dragBinding.on('change', (ev) => host.setDraggable(Boolean(ev.value)))
-
+  /** re-reads for the rows that only some hosts have */
+  const refreshers: (() => void)[] = []
+  if (placement) {
+    const drag = menuPane.addBinding(settings, 'draggable', { label: 'Draggable' })
+    drag.on('change', (ev) => placement.setDraggable(Boolean(ev.value)))
+    refreshers.push(() => {
+      settings.draggable = placement.getDraggable()
+      drag.refresh()
+    })
+  }
+  if (hiding) {
+    const binding = menuPane.addBinding(settings, 'hiding', { label: 'Hiding' })
+    binding.on('change', (ev) => hiding.set(Boolean(ev.value)))
+    refreshers.push(() => {
+      settings.hiding = hiding.get()
+      binding.refresh()
+    })
+  }
   const numbersBinding = menuPane.addBinding(settings, 'numbers', { label: 'Numbers' })
   numbersBinding.on('change', (ev) => host.setNumbers(Boolean(ev.value)))
-
   menuPane.addSeparator()
+
+  if (fontSize) {
+    const binding = menuPane.addBinding(settings, 'fontSize', {
+      label: 'Font Size',
+      options: { Small: 'small', Normal: 'normal' },
+    })
+    binding.on('change', (ev) => fontSize.set(ev.value as PaneFontSize))
+    refreshers.push(() => {
+      settings.fontSize = fontSize.get()
+      binding.refresh()
+    })
+  }
 
   const themeBinding = menuPane.addBinding(settings, 'theme', {
     label: 'Theme',
@@ -158,8 +226,13 @@ function buildMenu(host: PaneMenuHost): { shell: HTMLElement; refresh: () => voi
 
   const accentBinding = menuPane.addBinding(settings, 'accent', { label: 'Accent' })
   accentBinding.on('change', (ev) => {
-    host.setAccent(String(ev.value))
-    syncChrome()
+    // the picker fires per frame while dragging; preview those, save the last
+    const apply = () => {
+      host.setAccent(String(ev.value))
+      syncChrome()
+    }
+    if (ev.last) apply()
+    else withoutPersisting(apply)
   })
 
   // accent palette: blank-labeled row so swatches sit in the control column
@@ -183,47 +256,67 @@ function buildMenu(host: PaneMenuHost): { shell: HTMLElement; refresh: () => voi
     h('div', 'tiao-row', h('div', 'tiao-label'), h('div', 'tiao-control', palette)),
   )
 
-  // anchor: 3x3 button grid in a standard row
-  const grid = h('div', 'tiao-anchor-grid')
-  const anchorButtons = new Map<Anchor, HTMLButtonElement>()
-  for (const anchor of ANCHOR_GRID) {
-    const btn = h('button', 'tiao-anchor-cell')
-    btn.type = 'button'
-    btn.title = anchor.replace('-', ' ')
-    const onClick = () => {
-      host.setAnchor(anchor)
-      renderAnchors()
-    }
-    btn.addEventListener('click', onClick)
-    host.onDispose(() => btn.removeEventListener('click', onClick))
-    anchorButtons.set(anchor, btn)
-    grid.append(btn)
+  // anchor: a grid laid out like the region it picks (3x3 for panes, 1x2 for the dock)
+  let anchors: { row: HTMLElement; render: () => void } | null = null
+  if (placement) {
+    anchors = anchorRow(host, 'tiao-anchor-grid', ANCHOR_GRID, {
+      get: () => placement.getAnchor(),
+      set: (anchor) => placement.setAnchor(anchor),
+    })
+  } else if (host.sides) {
+    const sides = host.sides
+    anchors = anchorRow(host, 'tiao-anchor-grid tiao-anchor-sides', DOCK_SIDES, {
+      get: () => sides.getSide(),
+      set: (side) => sides.setSide(side),
+    })
   }
-  menuPane.rack.append(
-    h('div', 'tiao-row', h('div', 'tiao-label', 'Anchor'), h('div', 'tiao-control', grid)),
-  )
-
-  const renderAnchors = () => {
-    const current = host.getAnchor()
-    for (const [anchor, btn] of anchorButtons) {
-      btn.classList.toggle('tiao-selected', anchor === current)
-    }
+  if (anchors) {
+    menuPane.rack.append(anchors.row)
+    refreshers.push(anchors.render)
   }
 
   const refresh = () => {
-    settings.draggable = host.getDraggable()
     settings.theme = host.getTheme()
     settings.style = host.getStyle()
     settings.accent = host.getAccent()
     settings.numbers = host.getNumbers()
-    dragBinding.refresh()
     themeBinding.refresh()
     styleBinding.refresh()
     accentBinding.refresh()
     numbersBinding.refresh()
-    renderAnchors()
+    for (const fn of refreshers) fn()
     syncChrome()
   }
 
   return { shell, refresh }
+}
+
+/** one selectable cell per position, in a row labeled "Anchor" */
+function anchorRow<T extends string>(
+  host: PaneMenuHost,
+  gridClass: string,
+  values: readonly T[],
+  value: { get(): T | null; set(v: T): void },
+): { row: HTMLElement; render: () => void } {
+  const grid = h('div', gridClass)
+  const cells = new Map<T, HTMLButtonElement>()
+  const render = () => {
+    const current = value.get()
+    for (const [v, btn] of cells) btn.classList.toggle('tiao-selected', v === current)
+  }
+  for (const v of values) {
+    const btn = h('button', 'tiao-anchor-cell')
+    btn.type = 'button'
+    btn.title = v.replace('-', ' ')
+    const onClick = () => {
+      value.set(v)
+      render()
+    }
+    btn.addEventListener('click', onClick)
+    host.onDispose(() => btn.removeEventListener('click', onClick))
+    cells.set(v, btn)
+    grid.append(btn)
+  }
+  const row = h('div', 'tiao-row', h('div', 'tiao-label', 'Anchor'), h('div', 'tiao-control', grid))
+  return { row, render }
 }

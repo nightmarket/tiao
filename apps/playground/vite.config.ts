@@ -10,6 +10,7 @@ const tiaoSrc = path.join(repoRoot, 'packages/tiao/src')
 
 const aliases = [
   { find: /^@nightmarket\/tiao$/, replacement: path.join(tiaoSrc, 'core/index.ts') },
+  { find: /^@nightmarket\/tiao\/core$/, replacement: path.join(tiaoSrc, 'core/index.ts') },
   { find: /^@nightmarket\/tiao\/styles\.css$/, replacement: path.join(tiaoSrc, 'core/styles.css') },
   { find: /^@nightmarket\/tiao\/react$/, replacement: path.join(tiaoSrc, 'react/index.ts') },
   { find: /^@nightmarket\/tiao\/perf-pane$/, replacement: path.join(tiaoSrc, 'perf-pane/index.ts') },

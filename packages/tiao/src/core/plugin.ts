@@ -10,6 +10,8 @@ export interface BindingOptions {
   step?: number
   options?: Record<string, unknown> | readonly { text: string; value: unknown }[]
   readonly?: boolean
+  /** set false to keep this value out of localStorage (default true) */
+  persist?: boolean
   /** monitor poll interval in ms (default 66) */
   interval?: number
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- callable with the plugin's value type
