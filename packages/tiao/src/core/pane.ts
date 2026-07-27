@@ -88,15 +88,46 @@ interface PersistedState {
   numbers?: boolean | undefined
 }
 
-export type PaneTheme = 'light' | 'dark' | 'solarized' | 'nord' | 'catppuccin'
+export type PaneTheme = 'system' | 'light' | 'dark' | 'solarized' | 'nord' | 'catppuccin'
 
-/** CSS class for each theme; light uses no theme class (base tokens). */
-const THEME_CLASS: Record<PaneTheme, string | null> = {
+/** themes that map 1:1 onto a CSS class; system resolves to light or dark */
+type ResolvedTheme = Exclude<PaneTheme, 'system'>
+
+/** CSS class for each resolved theme; light uses no theme class (base tokens). */
+const THEME_CLASS: Record<ResolvedTheme, string | null> = {
   light: null,
   dark: 'tiao-theme-dark',
   solarized: 'tiao-theme-solarized',
   nord: 'tiao-theme-nord',
   catppuccin: 'tiao-theme-catppuccin',
+}
+
+/** whether the OS is in dark mode; default dark when matchMedia is unavailable */
+function prefersDark(doc: Document = document): boolean {
+  return doc.defaultView?.matchMedia?.('(prefers-color-scheme: dark)').matches ?? true
+}
+
+function resolveTheme(theme: PaneTheme, doc: Document = document): ResolvedTheme {
+  if (theme === 'system') return prefersDark(doc) ? 'dark' : 'light'
+  return theme
+}
+
+/** one media-query listener per document; re-paints every element on system */
+const schemeWatch = new WeakMap<Document, { mql: MediaQueryList; onChange: () => void }>()
+
+function watchColorScheme(doc: Document): void {
+  const mql = doc.defaultView?.matchMedia?.('(prefers-color-scheme: dark)')
+  if (!mql) return
+  const existing = schemeWatch.get(doc)
+  if (existing?.mql === mql) return
+  if (existing) existing.mql.removeEventListener('change', existing.onChange)
+  const onChange = () => {
+    for (const el of doc.querySelectorAll('[data-tiao-theme="system"]')) {
+      if (el instanceof HTMLElement) applyThemeClass(el, 'system')
+    }
+  }
+  mql.addEventListener('change', onChange)
+  schemeWatch.set(doc, { mql, onChange })
 }
 
 /** Surface style (shape/elevation) — orthogonal to PaneTheme colors. */
@@ -170,7 +201,7 @@ const notches = new WeakMap<Document, Notch>()
  */
 interface NotchState {
   fontSize?: PaneFontSize | undefined
-  /** the notch retreats to a sliver until the pointer finds it */
+  /** the notch vanishes until the pointer comes near the top edge */
   hiding?: boolean | undefined
   theme?: PaneTheme | undefined
   style?: PaneStyle | undefined
@@ -195,6 +226,7 @@ function paneStorageKey(options: PaneOptions): string | null {
 }
 
 function ensureNotch(doc: Document): void {
+  watchColorScheme(doc)
   if (notches.has(doc)) return
   notches.set(
     doc,
@@ -302,10 +334,13 @@ function applyChrome(el: HTMLElement, chrome: PaneChrome): void {
 }
 
 function applyThemeClass(el: HTMLElement, theme: PaneTheme): void {
+  // preference stays on the element so a system change can find who to repaint
+  el.dataset.tiaoTheme = theme
+  const resolved = resolveTheme(theme, el.ownerDocument)
   for (const cls of Object.values(THEME_CLASS)) {
     if (cls) el.classList.remove(cls)
   }
-  const next = THEME_CLASS[theme]
+  const next = THEME_CLASS[resolved]
   if (next) el.classList.add(next)
 }
 
@@ -386,6 +421,8 @@ export class Pane extends Container {
   private _expanded: boolean
   private _draggable: boolean
   private _numbers = false
+  /** preferred theme, which may be 'system'; the CSS class is the resolved look */
+  private _theme: PaneTheme = 'dark'
   private _anchor: Anchor | null = null
   private margin: number
   private readonly doc: Document
@@ -489,6 +526,7 @@ export class Pane extends Container {
     this.margin = options.margin ?? 8
 
     injectStyles(doc)
+    watchColorScheme(doc)
 
     // build the chrome under the pane's document so h()/icon() create
     // elements in the right realm (PaneOptions.document)
@@ -551,7 +589,8 @@ export class Pane extends Container {
       this.element.style.setProperty('--tiao-max-height', `${persisted.hMax}px`)
     }
     if (persisted.expanded !== undefined) this._expanded = persisted.expanded
-    applyThemeClass(this.element, persisted.theme ?? notchState.theme ?? 'dark')
+    this._theme = persisted.theme ?? notchState.theme ?? 'dark'
+    applyThemeClass(this.element, this._theme)
     applyStyleClass(
       this.element,
       normalizeStyle(persisted.style ?? notchState.style ?? options.style),
@@ -891,12 +930,10 @@ export class Pane extends Container {
   }
 
   get theme(): PaneTheme {
-    for (const [name, cls] of Object.entries(THEME_CLASS) as [PaneTheme, string | null][]) {
-      if (cls && this.element.classList.contains(cls)) return name
-    }
-    return 'light' // no theme class → light (base tokens)
+    return this._theme
   }
   set theme(v: PaneTheme) {
+    this._theme = v
     applyThemeClass(this.element, v)
     this.saveState({ theme: v })
   }
@@ -1158,6 +1195,8 @@ export class Pane extends Container {
     if (!free) return
     this.free = null
     this.filter('')
+    // setChrome only paints; restore the parked preference so 'system' survives
+    this._theme = free.chrome.theme
     this.setChrome(free.chrome)
     this.element.classList.remove('tiao-docked')
     this.element.classList.add('tiao-floating')

@@ -23,7 +23,7 @@ export interface PaneMenuFontSize {
   set(v: PaneFontSize): void
 }
 
-/** whether the notch retreats to a sliver until the pointer finds it */
+/** whether the notch vanishes until the pointer comes near the top edge */
 export interface PaneMenuHiding {
   get(): boolean
   set(v: boolean): void
@@ -200,6 +200,7 @@ function buildMenu(host: PaneMenuHost): { shell: HTMLElement; refresh: () => voi
   const themeBinding = menuPane.addBinding(settings, 'theme', {
     label: 'Theme',
     options: {
+      System: 'system',
       Dark: 'dark',
       Light: 'light',
       Solarized: 'solarized',

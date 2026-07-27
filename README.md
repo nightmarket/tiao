@@ -82,13 +82,13 @@ Storage stays out of the way of the frame budget: each key is parsed once rather
 ### Pane chrome
 
 - `anchor`: any corner, side center, or `'center'` (`'top-left'`, `'top-center'`, `'right-center'`, ...), or `container: element` for inline panes
-- Hover the title bar for a gear icon (or right-click the pane) to open the Pane Settings panel: toggle dragging, switch themes (light, dark, solarized, nord, catppuccin), pick the accent color, and jump between the 9 anchor positions on a mini window that mirrors your viewport's aspect ratio
+- Hover the title bar for a gear icon (or right-click the pane) to open the Pane Settings panel: toggle dragging, switch themes (system, light, dark, solarized, nord, catppuccin), pick the accent color, and jump between the 9 anchor positions on a mini window that mirrors your viewport's aspect ratio. System follows `prefers-color-scheme` and updates when the OS theme changes.
 - The search icon in the title bar opens a filter row: rows are matched by label/title, folders holding a match are forced open, and a folder-title match keeps its whole subtree visible. `pane.filter(query)` / `pane.searchOpen` do the same programmatically
 - `draggable: true` (default for floating panes); drag position, anchor, and the draggable toggle persist to `localStorage` when the pane has an `id`
 - `toggleKey: '\`'` toggles that pane's visibility; `pane.hidden`, `pane.expanded` are settable
 - Press `H` to hide/show all floating panes (skipped while typing); `Pane.toggleAll()` does the same programmatically.
 - A small notch at the top edge of the window holds the global controls: hide/show every floating pane (same as `H`), dock/undock them into an inline sidebar the page lays out beside (`Pane.toggleDock()` / `Pane.docked`), a settings gear, and reset every bound value to its code default (`Pane.resetValues()`). `notch: false` keeps a pane from mounting it.
-- The notch gear opens the global settings panel: font size, either `Small` (each pane's own declared size, the default) or `Normal` (every floating pane at size `l`) via `Pane.setFontSize()` / `Pane.fontSize`; hiding, on by default, which lets the notch retreat to a sliver until you point at it; plus one theme, style, accent, and numbering for every pane in both views. Each change is broadcast — floating panes, docked panes, and the sidebar all take it and save it as their own, so a later per-pane tweak still sticks, and panes mounted afterwards inherit it unless they have saved chrome of their own. All of it persists under `tiao:notch`.
+- The notch gear opens the global settings panel: font size, either `Small` (each pane's own declared size, the default) or `Normal` (every floating pane at size `l`) via `Pane.setFontSize()` / `Pane.fontSize`; hiding, on by default, which makes the notch fully invisible until the pointer comes near the top edge anywhere across the window; plus one theme, style, accent, and numbering for every pane in both views. Each change is broadcast — floating panes, docked panes, and the sidebar all take it and save it as their own, so a later per-pane tweak still sticks, and panes mounted afterwards inherit it unless they have saved chrome of their own. All of it persists under `tiao:notch`.
 - Docked panes stack flush and square in the sidebar and hand their chrome over to it: one header search filters every pane at once, one settings menu sets theme, style, accent, and numbering for all of them, and anchors the sidebar left or right. Its outer edge drags to resize (width in `--tiao-dock-width`, default `300px`). All of it is separate state under `tiao:dock` — each pane keeps its floating theme and numbering and gets them back on undock.
 - `maxHeight: 500` (default) caps the pane height; content scrolls when it overflows
 - Clicking a pane brings it above other overlapping panes
@@ -100,7 +100,7 @@ All styling flows through CSS custom properties on `.tiao-pane` (`--tiao-bg`, `-
 
 ```ts
 mountPane({ theme: { accent: '#f0f', '--tiao-width': '320px' } }, (pane) => {
-  pane.theme = 'light'      // default 'dark'; also 'light' | 'solarized' | 'nord' | 'catppuccin'
+  pane.theme = 'light'      // default 'dark'; also 'system' | 'light' | 'solarized' | 'nord' | 'catppuccin'
   pane.accent = '#ff0080'   // sets --tiao-accent
   pane.style = 'kiki'       // 'bouba' (rounded glass, default) | 'kiki' (sharp / flat)
 })

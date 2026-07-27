@@ -262,9 +262,9 @@
   position: fixed;
   top: 0;
   left: 50%;
-  /* clear of the floating pane band, which climbs from 9999 on every click */
   z-index: 20000;
-  transform: translateX(-50%);
+  /* translate(-50%, 0) so hide/show can interpolate Y without fighting centering */
+  transform: translate(-50%, 0);
   display: flex;
   align-items: center;
   gap: 2px;
@@ -274,13 +274,24 @@
   border-radius: 0 0 var(--tiao-radius) var(--tiao-radius);
   box-shadow: var(--tiao-shadow-raised);
   transition:
-    transform 0.16s ease,
-    opacity 0.16s ease;
+    opacity 0.16s ease,
+    transform 0.16s ease;
 }
-/* armed to hide: retreat to a sliver, but stay put while hovered or in use */
-.tiao-notch-auto-hide:not(:hover):not(:has(.tiao-pane-menu.tiao-open)) {
-  transform: translate(-50%, -70%);
-  opacity: 0.4;
+/*
+ * armed to hide: fade + slide the bar up. tiao-notch-near comes from tracking
+ * the pointer's distance to the top edge, since a hover strip wide enough to be
+ * easy to hit would swallow clicks meant for the panes underneath it.
+ */
+.tiao-notch.tiao-notch-auto-hide:not(
+    .tiao-notch-near,
+    :hover,
+    :focus-within,
+    :has(.tiao-pane-menu.tiao-open)
+  ) {
+  opacity: 0;
+  box-shadow: none;
+  transform: translate(-50%, -100%);
+  pointer-events: none;
 }
 .tiao-notch-btn {
   display: flex;

@@ -23,7 +23,11 @@ export interface NotchHost
   reset(): void
 }
 
+/** how close to the top edge the pointer has to get to reveal a hidden bar */
+const REVEAL_BAND = 32
+
 export interface Notch {
+  /** the themed bar; chrome tokens land here */
   element: HTMLElement
   sync(): void
   dispose(): void
@@ -34,6 +38,10 @@ export interface Notch {
  * floating pane, dock them into the sidebar, reset every bound value, and open
  * the settings panel that themes every pane at once. Built by the Pane (which
  * owns the pane registry) so this module stays free of pane imports.
+ *
+ * Auto-hide tracks the pointer's distance from the top edge instead of hovering
+ * a hit strip: a strip would have to swallow clicks meant for the panes and the
+ * sidebar header sitting right under it.
  */
 export function createNotch(host: NotchHost): Notch {
   const doc = host.document
@@ -80,8 +88,24 @@ export function createNotch(host: NotchHost): Notch {
     onDispose: (fn) => disposers.push(fn),
   })
 
+  let near = false
+  const setNear = (next: boolean) => {
+    if (next === near) return
+    near = next
+    element.classList.toggle('tiao-notch-near', next)
+  }
+  const onMove = (e: PointerEvent) => setNear(e.clientY <= REVEAL_BAND)
+  // pointer left the window entirely, so no further move will retract the bar
+  const onLeave = () => setNear(false)
+  const stopWatching = () => {
+    doc.removeEventListener('pointermove', onMove)
+    doc.documentElement.removeEventListener('mouseleave', onLeave)
+    setNear(false)
+  }
+
   // sync runs per pane on a global toggle, so state changes gate the DOM work
   let lastHidden: boolean | null = null
+  let lastHiding: boolean | null = null
   const sync = () => {
     const hidden = host.getHidden()
     if (hidden !== lastHidden) {
@@ -97,8 +121,18 @@ export function createNotch(host: NotchHost): Notch {
     dockBtn.setAttribute('aria-pressed', String(docked))
     dockBtn.classList.toggle('tiao-notch-on', docked)
 
-    // the retreat itself is CSS, keyed off :hover; this only arms it
-    element.classList.toggle('tiao-notch-auto-hide', host.hiding.get())
+    // the retreat itself is CSS; this arms it and only then watches the pointer
+    const hiding = host.hiding.get()
+    if (hiding !== lastHiding) {
+      lastHiding = hiding
+      element.classList.toggle('tiao-notch-auto-hide', hiding)
+      if (hiding) {
+        doc.addEventListener('pointermove', onMove, { passive: true })
+        doc.documentElement.addEventListener('mouseleave', onLeave)
+      } else {
+        stopWatching()
+      }
+    }
   }
 
   const onHide = () => host.toggleHidden()
@@ -121,6 +155,7 @@ export function createNotch(host: NotchHost): Notch {
       dockBtn.removeEventListener('click', onDock)
       gear.removeEventListener('click', onGear)
       resetBtn.removeEventListener('click', onReset)
+      stopWatching()
       for (const fn of disposers) fn()
       element.remove()
     },
