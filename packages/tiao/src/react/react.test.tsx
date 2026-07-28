@@ -6,7 +6,8 @@ import { Pane } from '../core'
 import { setTiaoEnabled } from './config'
 import { loadCore } from './manager'
 import { button, monitor } from './types'
-import { useControls, type ControlsResult } from './useControls'
+import type { ControlsResult } from './types'
+import { useControls } from './useControls'
 
 declare global {
   // eslint-disable-next-line no-var
@@ -84,6 +85,24 @@ describe('useControls', () => {
     })
     expect(api!.n).toBe(9)
     expect(api!.$get('n')).toBe(9)
+  })
+
+  it('adopts persisted values once core restores them', async () => {
+    localStorage.setItem('tiao:dot:values', JSON.stringify({ 'Footer/variant': 'wallpaper' }))
+    let api: ControlsResult<{ variant: { value: string; options: Record<string, string> } }> | null =
+      null
+    function App() {
+      api = useControls(
+        'Footer',
+        { variant: { value: 'wordmark', options: { Wordmark: 'wordmark', Wallpaper: 'wallpaper' } } },
+        { pane: { id: 'dot' } },
+      )
+      return null
+    }
+    await act(async () => root.render(<App />))
+    await flushCore()
+    expect(api!.variant).toBe('wallpaper')
+    expect(api!.$get('variant')).toBe('wallpaper')
   })
 
   it('merges folders across components and ref-counts on unmount', async () => {

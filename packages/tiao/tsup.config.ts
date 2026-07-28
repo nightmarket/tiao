@@ -6,6 +6,7 @@ export default defineConfig({
     'index.production': 'src/lazy/production.ts',
     core: 'src/core/index.ts',
     react: 'src/react/index.ts',
+    'react.production': 'src/react/production.ts',
     'perf-pane': 'src/perf-pane/index.ts',
     'export-pane': 'src/export-pane/index.ts',
     'plugin-fps': 'src/plugin-fps/index.ts',

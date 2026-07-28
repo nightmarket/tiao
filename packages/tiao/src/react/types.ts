@@ -53,6 +53,13 @@ export type SchemaValues<S extends Schema> = {
   [K in keyof S as SchemaValue<S[K]> extends never ? never : K]: SchemaValue<S[K]>
 }
 
+export type ControlsResult<S extends Schema> = SchemaValues<S> & {
+  /** programmatically update one or more controls */
+  $set(patch: Partial<SchemaValues<S>>): void
+  /** read the latest value without subscribing */
+  $get<K extends keyof SchemaValues<S>>(key: K): SchemaValues<S>[K]
+}
+
 export interface UseControlsOptions {
   /** target pane: an id string or pane options (id required for sharing across components) */
   pane?: string | (PaneOptions & { id?: string })

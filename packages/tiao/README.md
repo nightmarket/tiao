@@ -39,5 +39,11 @@ React is an optional peer dependency and is only required for
 
 `useControls` and `mountPane` work without application-level environment
 checks: they lazy-load the pane in development and become no-ops in production.
+Production builds resolve through the `production` export condition, which Vite
+applies on its own; esbuild, Rollup, and webpack may need `production` added to
+their resolve conditions. Bundlers that skip it fall back to the development
+build, where the UI still sits behind a dynamic import. Since the pane's code is
+absent from a production build, `setTiaoEnabled(true)` cannot bring it back —
+use `@nightmarket/tiao/core` for controls that must exist in a shipped build.
 
 See the [full documentation](https://github.com/nightmarket/tiao#readme).
