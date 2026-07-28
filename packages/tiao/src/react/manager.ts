@@ -1,3 +1,4 @@
+import { DEFAULT_PANE_ID, keyFor } from './controls'
 import { ControlStore } from './store'
 import { isButton, isButtonGroup, isInputDef, isMonitor, itemValue, type Schema } from './types'
 import type { BindingApi, Container, FolderApi, Pane, PaneOptions } from '../core'
@@ -17,7 +18,7 @@ interface FolderRef {
   count: number
 }
 
-export interface Registration {
+interface Registration {
   folderPath: string[]
   schema: Schema
   active: boolean
@@ -27,11 +28,27 @@ export interface Registration {
   bindings: Map<string, { binding: BindingApi<unknown>; target: Record<string, unknown>; name: string }>
 }
 
-export const DEFAULT_PANE_ID = 'tiao-default'
+/**
+ * Everything a manager exposes outside this module. `getManager` is typed to
+ * this rather than to `PaneManager` so the production entry's inert stand-in
+ * (src/react/production.ts) can satisfy the same contract — a member added
+ * here without a production counterpart is a compile error, not a crash that
+ * only shows up in a shipped build.
+ */
+export interface ManagerApi {
+  readonly id: string
+  readonly store: ControlStore
+  configure(options: PaneOptions): void
+  onPane(fn: (pane: Pane) => void): () => void
+  getPane(): Pane | null
+  setValue(key: string, value: unknown): void
+  /** mount a schema into the pane; the returned disposer releases it */
+  register(folderPath: string[], schema: Schema): () => void
+}
 
 const managers = new Map<string, PaneManager>()
 
-export function getManager(id: string): PaneManager {
+export function getManager(id: string): ManagerApi {
   let m = managers.get(id)
   if (!m) {
     m = new PaneManager(id)
@@ -40,11 +57,7 @@ export function getManager(id: string): PaneManager {
   return m
 }
 
-export function keyFor(folderPath: string[], name: string): string {
-  return [...folderPath, name].join('.')
-}
-
-export class PaneManager {
+export class PaneManager implements ManagerApi {
   readonly store = new ControlStore()
   private pane: Pane | null = null
   private paneOptions: PaneOptions = {}
@@ -73,7 +86,7 @@ export class PaneManager {
     return this.pane
   }
 
-  register(folderPath: string[], schema: Schema): Registration {
+  register(folderPath: string[], schema: Schema): () => void {
     const reg: Registration = {
       folderPath,
       schema,
@@ -86,10 +99,10 @@ export class PaneManager {
     void loadCore().then((core) => {
       if (reg.active) this.materialize(reg, core)
     })
-    return reg
+    return () => this.unregister(reg)
   }
 
-  unregister(reg: Registration): void {
+  private unregister(reg: Registration): void {
     reg.active = false
     this.registrations.delete(reg)
     for (const fn of reg.disposers) fn()
@@ -189,8 +202,11 @@ export class PaneManager {
       const target: Record<string, unknown> = { [name]: initial }
       const binding = container.addBinding(target, name, options)
       binding.on('change', (ev) => this.store.set(key, ev.value))
-      // seed the store so first render after hydration matches the pane
-      this.store.set(key, initial)
+      // addBinding may restore a persisted value into the target, and that
+      // restore predates the change listener above — adopt it. When nothing
+      // was restored, skip the write: the hook already falls back to the same
+      // default, and seeding it would re-render every subscriber for nothing.
+      if (!Object.is(target[name], initial)) this.store.set(key, target[name])
       reg.bindings.set(key, { binding, target, name })
       reg.disposers.push(() => binding.dispose())
     }

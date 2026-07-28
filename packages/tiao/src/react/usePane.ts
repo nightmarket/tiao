@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { isTiaoEnabled } from './config'
-import { DEFAULT_PANE_ID, getManager } from './manager'
+import { DEFAULT_PANE_ID } from './controls'
+import { getManager } from './manager'
 import type { Pane, PaneOptions } from '../core'
 
 /**

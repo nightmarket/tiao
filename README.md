@@ -153,7 +153,11 @@ function ComponentC() {
 
 ### Production builds
 
-`useControls` is enabled when `NODE_ENV !== 'production'` (override per-hook with `enabled`, or globally with `setTiaoEnabled`). When disabled, hooks return plain default values and none of the DOM/UI code loads — core is behind a dynamic `import()`, so bundlers split it into a chunk that production users never download. No environment checks are needed in application code.
+`useControls` is enabled when `NODE_ENV !== 'production'` (override per-hook with `enabled`, or globally with `setTiaoEnabled`). When disabled, hooks return plain default values and none of the DOM/UI code loads. No environment checks are needed in application code.
+
+Production builds go one step further. `@nightmarket/tiao/react` resolves through the `production` export condition to a build with no pane, no manager, and no dynamic `import()` of core, so the UI chunk is never emitted at all — `useControls` still returns values and `$set` still re-renders. Vite applies the condition on its own: the dev server loads the full pane, `vite build` picks the stripped build. Other setups may need it added to their resolve conditions (esbuild `--conditions=production`, `exportConditions` in `@rollup/plugin-node-resolve`, `resolve.conditionNames` in webpack). Without it they fall back to the development build, where core sits behind a dynamic `import()` and is split into a chunk production users never download.
+
+Because that build contains no pane code, `setTiaoEnabled(true)` cannot bring the UI back in it.
 
 The root vanilla API has the same behavior:
 

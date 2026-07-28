@@ -51,7 +51,8 @@
     },
     "./react": {
       "types": "./dist/react.d.ts",
-      "import": "./dist/react.js"
+      "production": "./dist/react.production.js",
+      "default": "./dist/react.js"
     },
     "./perf-pane": {
       "types": "./dist/perf-pane.d.ts",
