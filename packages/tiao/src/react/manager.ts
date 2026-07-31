@@ -1,6 +1,17 @@
 import { DEFAULT_PANE_ID, keyFor } from './controls'
 import { ControlStore } from './store'
-import { isButton, isButtonGroup, isInputDef, isMonitor, itemValue, type Schema } from './types'
+import {
+  isButton,
+  isButtonGroup,
+  isInputDef,
+  isMonitor,
+  isTabs,
+  itemValue,
+  type Schema,
+  type ShowIf,
+  type ShowIfGet,
+  type UseControlsOptions,
+} from './types'
 import type { BindingApi, Container, FolderApi, Pane, PaneOptions } from '../core'
 
 type CoreModule = typeof import('../core')
@@ -21,6 +32,7 @@ interface FolderRef {
 interface Registration {
   folderPath: string[]
   schema: Schema
+  showIf?: ShowIf | undefined
   active: boolean
   /** true once ensureFolder ran, so unregister only releases what it acquired */
   materialized: boolean
@@ -43,7 +55,7 @@ export interface ManagerApi {
   getPane(): Pane | null
   setValue(key: string, value: unknown): void
   /** mount a schema into the pane; the returned disposer releases it */
-  register(folderPath: string[], schema: Schema): () => void
+  register(folderPath: string[], schema: Schema, options?: UseControlsOptions): () => void
 }
 
 const managers = new Map<string, PaneManager>()
@@ -86,10 +98,11 @@ export class PaneManager implements ManagerApi {
     return this.pane
   }
 
-  register(folderPath: string[], schema: Schema): () => void {
+  register(folderPath: string[], schema: Schema, options?: UseControlsOptions): () => void {
     const reg: Registration = {
       folderPath,
       schema,
+      showIf: options?.showIf,
       active: true,
       materialized: false,
       disposers: [],
@@ -166,15 +179,55 @@ export class PaneManager implements ManagerApi {
     }
   }
 
+  private readValue(folderPath: string[], name: string): unknown {
+    const key = name.includes('.') ? name : keyFor(folderPath, name)
+    if (this.store.has(key)) return this.store.get(key)
+    for (const reg of this.registrations) {
+      const entry = reg.bindings.get(key)
+      if (entry) return entry.target[entry.name]
+    }
+    return undefined
+  }
+
   private materialize(reg: Registration, core: CoreModule): void {
     const container = this.ensureFolder(core, reg.folderPath)
     reg.materialized = true
+    const get: ShowIfGet = (name) => this.readValue(reg.folderPath, name)
+    if (reg.showIf && reg.folderPath.length > 0) {
+      const leaf = this.folders.get(reg.folderPath.join('.'))?.api
+      leaf?.setShowIf(() => reg.showIf!(get))
+    }
+    this.mountSchema(reg, container, reg.schema, get)
+  }
 
-    for (const [name, item] of Object.entries(reg.schema)) {
+  private mountSchema(
+    reg: Registration,
+    container: Container,
+    schema: Schema,
+    get: ShowIfGet,
+  ): void {
+    for (const [name, item] of Object.entries(schema)) {
       const key = keyFor(reg.folderPath, name)
 
+      if (isTabs(item)) {
+        const titles = Object.keys(item.pages)
+        const tab = container.addTab({ pages: titles.map((title) => ({ title })) })
+        titles.forEach((title, i) => {
+          const page = tab.pages[i]
+          const pageSchema = item.pages[title]
+          if (page && pageSchema) this.mountSchema(reg, page, pageSchema, get)
+        })
+        reg.disposers.push(() => tab.dispose())
+        continue
+      }
+
       if (isButton(item)) {
-        const btn = container.addButton({ title: item.title || name })
+        const btn = container.addButton({
+          title: item.title || name,
+          hidden: item.hidden,
+          disabled: item.disabled,
+          showIf: item.showIf ? () => item.showIf!(get) : undefined,
+        })
         btn.on('click', item.onClick)
         reg.disposers.push(() => btn.dispose())
         continue
@@ -184,6 +237,9 @@ export class PaneManager implements ManagerApi {
         const group = container.addButtonGroup({
           label: item.label ?? name,
           buttons: item.buttons,
+          hidden: item.hidden,
+          disabled: item.disabled,
+          showIf: item.showIf ? () => item.showIf!(get) : undefined,
         })
         reg.disposers.push(() => group.dispose())
         continue
@@ -192,13 +248,18 @@ export class PaneManager implements ManagerApi {
       if (isMonitor(item)) {
         const target: Record<string, unknown> = {}
         Object.defineProperty(target, name, { get: item.get })
-        const binding = container.addBinding(target, name, item.options)
+        const binding = container.addBinding(target, name, {
+          ...item.options,
+          hidden: item.hidden,
+          disabled: item.disabled,
+          showIf: item.showIf ? () => item.showIf!(get) : undefined,
+        })
         reg.disposers.push(() => binding.dispose())
         continue
       }
 
       const initial = this.store.has(key) ? this.store.get(key) : itemValue(item)
-      const options = isInputDef(item) ? { ...item, label: item.label ?? name } : { label: name }
+      const options = inputBindingOptions(item, name, get)
       const target: Record<string, unknown> = { [name]: initial }
       const binding = container.addBinding(target, name, options)
       binding.on('change', (ev) => this.store.set(key, ev.value))
@@ -210,6 +271,16 @@ export class PaneManager implements ManagerApi {
       reg.bindings.set(key, { binding, target, name })
       reg.disposers.push(() => binding.dispose())
     }
+  }
+}
+
+function inputBindingOptions(item: Schema[string], name: string, get: ShowIfGet) {
+  if (!isInputDef(item)) return { label: name }
+  const { value: _value, showIf, ...rest } = item
+  return {
+    ...rest,
+    label: item.label ?? name,
+    showIf: showIf ? () => showIf(get) : undefined,
   }
 }
 

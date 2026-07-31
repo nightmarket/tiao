@@ -4,6 +4,7 @@ import {
   isButton,
   isButtonGroup,
   isMonitor,
+  isTabs,
   itemValue,
   type ControlsResult,
   type Schema,
@@ -50,11 +51,21 @@ export function initControls<S extends Schema>(
   const paneOpt = options.pane
   const paneId = typeof paneOpt === 'string' ? paneOpt : (paneOpt?.id ?? DEFAULT_PANE_ID)
   const folderPath = folder ? folder.split('.').filter(Boolean) : []
-  const valueKeys = Object.entries(schema)
-    .filter(([, item]) => !isButton(item) && !isButtonGroup(item) && !isMonitor(item))
-    .map(([name, item]) => ({ name, key: keyFor(folderPath, name), initial: itemValue(item) }))
+  const valueKeys: ValueKey[] = []
+  collectValueKeys(schema, folderPath, valueKeys)
 
   return { paneId, folderPath, schema, options, valueKeys, keys: valueKeys.map((v) => v.key) }
+}
+
+function collectValueKeys(schema: Schema, folderPath: string[], out: ValueKey[]): void {
+  for (const [name, item] of Object.entries(schema)) {
+    if (isButton(item) || isButtonGroup(item) || isMonitor(item)) continue
+    if (isTabs(item)) {
+      for (const page of Object.values(item.pages)) collectValueKeys(page, folderPath, out)
+      continue
+    }
+    out.push({ name, key: keyFor(folderPath, name), initial: itemValue(item) })
+  }
 }
 
 /**

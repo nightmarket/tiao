@@ -15,6 +15,7 @@ export {
 export type { BladeHost, TiaoChangeEvent } from './blade'
 export { registerPlugin, globalRegistry, PluginRegistry } from './plugin'
 export type {
+  AddBindingOptions,
   BindingOptions,
   BladePlugin,
   BladePluginContext,
@@ -23,6 +24,7 @@ export type {
   PluginContext,
   PluginView,
   TiaoPlugin,
+  VisibilityOptions,
 } from './plugin'
 export { Value } from './value'
 export type { ValueListener, ValueMeta } from './value'

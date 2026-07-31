@@ -1,7 +1,7 @@
 export { useControls } from './useControls'
 export type { ControlsResult } from './types'
 export { usePane } from './usePane'
-export { button, buttonGroup, monitor } from './types'
+export { button, buttonGroup, monitor, tabs } from './types'
 export type {
   ButtonGroupItem,
   ButtonItem,
@@ -10,6 +10,9 @@ export type {
   Schema,
   SchemaItem,
   SchemaValues,
+  ShowIf,
+  ShowIfGet,
+  TabsItem,
   UseControlsOptions,
 } from './types'
 export { setTiaoEnabled } from './config'

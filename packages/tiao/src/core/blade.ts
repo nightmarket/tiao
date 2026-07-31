@@ -3,7 +3,7 @@ import { h, icon, longPress, withDocument } from './dom'
 import { onInterval } from './ticker'
 import { Value } from './value'
 import { sameShape, type ValueStore } from './values'
-import type { BindingOptions, PluginRegistry } from './plugin'
+import type { AddBindingOptions, BindingOptions, PluginRegistry, VisibilityOptions } from './plugin'
 
 /** Provided by the root Pane to every descendant. */
 export interface BladeHost {
@@ -36,6 +36,7 @@ export interface TiaoChangeEvent<T = unknown> {
   last: boolean
   target: BindingApi<T>
   key: string
+  source?: 'api' | 'ui' | 'refresh' | 'monitor' | undefined
 }
 
 export abstract class Item {
@@ -44,6 +45,7 @@ export abstract class Item {
   protected disposers: (() => void)[] = []
   private _hidden = false
   private _disabled = false
+  private _showIf: (() => boolean) | undefined = undefined
   private disposed = false
 
   get parent(): Container | null {
@@ -67,6 +69,17 @@ export abstract class Item {
   set disabled(v: boolean) {
     this._disabled = v
     this.element.classList.toggle('tiao-disabled', v)
+  }
+
+  /** when set, visibility is owned by the predicate and re-run after settled changes */
+  setShowIf(fn?: (() => boolean) | undefined): void {
+    this._showIf = fn
+    this.syncShowIf()
+  }
+
+  /** internal: re-apply showIf when present */
+  syncShowIf(): void {
+    if (this._showIf) this.hidden = !this._showIf()
   }
 
   /** register cleanup to run when this item is disposed */
@@ -119,24 +132,30 @@ export abstract class Container extends Item {
   /** internal: bubble a change event up the tree */
   bubble(ev: TiaoChangeEvent): void {
     this.emitter.emit('change', ev)
-    this.parent?.bubble(ev)
+    if (this.parent) {
+      this.parent.bubble(ev)
+    } else if (ev.last !== false && ev.source !== 'monitor') {
+      walkItems(this, (item) => item.syncShowIf())
+    }
   }
 
   addBinding<O extends object, K extends keyof O & string>(
     target: O,
     key: K,
-    options: BindingOptions = {},
+    options: AddBindingOptions = {},
   ): BindingApi<O[K]> {
+    const { showIf, hidden, disabled, ...pluginOpts } = options
     // all add* methods create under the host document so h()/icon() build
     // elements in the right realm (PaneOptions.document)
     const api = withDocument(
       this.host.document,
-      () => new BindingApi<O[K]>(this.host, target as Record<string, O[K]>, key, options),
+      () => new BindingApi<O[K]>(this.host, target as Record<string, O[K]>, key, pluginOpts),
     )
     this.attach(api)
-    if (this.host.values && !options.readonly && options.persist !== false) {
+    if (this.host.values && !pluginOpts.readonly && pluginOpts.persist !== false) {
       persistValue(this.host.values, valuePath(this, key), api)
     }
+    applyVisibility(api, { showIf, hidden, disabled })
     return api
   }
 
@@ -146,27 +165,37 @@ export abstract class Container extends Item {
     collapsible?: boolean
     /** tints the folder title; caret and depth line get softer mixes of it */
     color?: string
-  }): FolderApi {
-    const api = withDocument(this.host.document, () => new FolderApi(this.host, params))
+  } & VisibilityOptions): FolderApi {
+    const { showIf, hidden, disabled, ...folderParams } = params
+    const api = withDocument(this.host.document, () => new FolderApi(this.host, folderParams))
     this.attach(api)
+    applyVisibility(api, { showIf, hidden, disabled })
     return api
   }
 
-  addButton(params: { title: string; label?: string }): ButtonApi {
-    const api = withDocument(this.host.document, () => new ButtonApi(params))
+  addButton(params: { title: string; label?: string } & VisibilityOptions): ButtonApi {
+    const { showIf, hidden, disabled, ...buttonParams } = params
+    const api = withDocument(this.host.document, () => new ButtonApi(buttonParams))
     this.attach(api)
+    applyVisibility(api, { showIf, hidden, disabled })
     return api
   }
 
-  addButtonGroup(params: { label?: string; buttons: Record<string, () => void> }): ButtonGroupApi {
-    const api = withDocument(this.host.document, () => new ButtonGroupApi(params))
+  addButtonGroup(
+    params: { label?: string; buttons: Record<string, () => void> } & VisibilityOptions,
+  ): ButtonGroupApi {
+    const { showIf, hidden, disabled, ...groupParams } = params
+    const api = withDocument(this.host.document, () => new ButtonGroupApi(groupParams))
     this.attach(api)
+    applyVisibility(api, { showIf, hidden, disabled })
     return api
   }
 
-  addTab(params: { pages: { title: string }[] }): TabApi {
-    const api = withDocument(this.host.document, () => new TabApi(this.host, params))
+  addTab(params: { pages: { title: string }[] } & VisibilityOptions): TabApi {
+    const { showIf, hidden, disabled, ...tabParams } = params
+    const api = withDocument(this.host.document, () => new TabApi(this.host, tabParams))
     this.attach(api)
+    applyVisibility(api, { showIf, hidden, disabled })
     return api
   }
 
@@ -176,9 +205,11 @@ export abstract class Container extends Item {
     return api
   }
 
-  addBlade(params: Record<string, unknown>): BladeApi {
-    const api = withDocument(this.host.document, () => new BladeApi(this.host, params))
+  addBlade(params: Record<string, unknown> & VisibilityOptions): BladeApi {
+    const { showIf, hidden, disabled, ...bladeParams } = params
+    const api = withDocument(this.host.document, () => new BladeApi(this.host, bladeParams))
     this.attach(api)
+    applyVisibility(api, { showIf, hidden, disabled })
     return api
   }
 
@@ -270,6 +301,19 @@ export function walkBindings(item: Item, fn: (binding: BindingApi<unknown>) => v
   if (item instanceof BindingApi) fn(item)
   else if (item instanceof Container) for (const child of item.children) walkBindings(child, fn)
   else if (item instanceof TabApi) for (const page of item.pages) walkBindings(page, fn)
+}
+
+/** visit every item under `root`, including tab pages that are not in `children` */
+function walkItems(item: Item, fn: (item: Item) => void): void {
+  fn(item)
+  if (item instanceof Container) for (const child of item.children) walkItems(child, fn)
+  else if (item instanceof TabApi) for (const page of item.pages) walkItems(page, fn)
+}
+
+function applyVisibility(item: Item, opts: VisibilityOptions): void {
+  if (opts.disabled) item.disabled = true
+  if (opts.hidden) item.hidden = true
+  if (opts.showIf) item.setShowIf(opts.showIf)
 }
 
 const DEFAULT_MONITOR_INTERVAL = 66
@@ -401,6 +445,7 @@ export class BindingApi<T> extends Item {
           last: meta.last ?? true,
           target: this,
           key: this.key,
+          source: meta.source,
         }
         this.bindingEmitter.emit('change', ev)
         this.parent?.bubble(ev as TiaoChangeEvent)
