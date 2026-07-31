@@ -85,15 +85,20 @@ export function createPopup(
 
 /**
  * Close floating UI when the pane content scrolls — absolute/fixed anchors go
- * stale relative to their controls.
+ * stale relative to their controls. Docked panes scroll via the sidebar body.
  */
 export function onPaneScroll(from: Element, onScroll: () => void): () => void {
   const pane = from.closest('.tiao-pane')
-  const clip = pane?.querySelector(':scope > .tiao-pane-body > .tiao-pane-clip')
-  if (!clip) return () => {}
+  if (!pane) return () => {}
+  const clip = pane.querySelector(':scope > .tiao-pane-body > .tiao-pane-clip')
+  const dockBody = pane.closest('.tiao-dock-body')
+  const scrollers = [clip, dockBody].filter((el): el is Element => el != null)
+  if (scrollers.length === 0) return () => {}
   const handler = () => onScroll()
-  clip.addEventListener('scroll', handler, { passive: true })
-  return () => clip.removeEventListener('scroll', handler)
+  for (const el of scrollers) el.addEventListener('scroll', handler, { passive: true })
+  return () => {
+    for (const el of scrollers) el.removeEventListener('scroll', handler)
+  }
 }
 
 /**

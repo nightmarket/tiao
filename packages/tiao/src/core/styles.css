@@ -381,7 +381,7 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  overscroll-behavior: contain;
+  overscroll-behavior: none;
   scrollbar-width: none;
 }
 .tiao-dock-body::-webkit-scrollbar {
@@ -430,6 +430,14 @@
 .tiao-pane.tiao-docked > .tiao-searchbar,
 .tiao-pane.tiao-docked .tiao-resize {
   display: none;
+}
+/* stacked in the sidebar: grow to content, let .tiao-dock-body scroll instead.
+   overflow:clip keeps collapse clipping without creating a scrollport, and
+   dropping overscroll-behavior:contain lets wheel events reach the sidebar. */
+.tiao-pane.tiao-docked > .tiao-pane-body > .tiao-pane-clip {
+  max-height: none;
+  overflow: clip;
+  overscroll-behavior: auto;
 }
 
 .tiao-disabled {
@@ -648,7 +656,7 @@
 .tiao-pane > .tiao-pane-body > .tiao-pane-clip {
   max-height: calc(var(--tiao-max-height) - var(--tiao-titlebar-height));
   overflow-y: auto;
-  overscroll-behavior: contain;
+  overscroll-behavior: none;
   scrollbar-width: none;
 }
 .tiao-pane > .tiao-pane-body > .tiao-pane-clip::-webkit-scrollbar {
