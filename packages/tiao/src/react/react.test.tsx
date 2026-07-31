@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { Pane } from '../core'
 import { setTiaoEnabled } from './config'
 import { loadCore } from './manager'
-import { button, monitor } from './types'
+import { button, monitor, tabs } from './types'
 import type { ControlsResult } from './types'
 import { useControls } from './useControls'
 
@@ -172,6 +172,119 @@ describe('useControls', () => {
     btn.click()
     expect(clicks).toBe(1)
     expect(pane.element.querySelector('.tiao-monitor-text')).not.toBeNull()
+  })
+
+  it('hides a row via showIf and keeps returning its value', async () => {
+    let api: {
+      mode: string
+      wavelength: number
+      $set: (patch: { mode?: string; wavelength?: number }) => void
+      $get: (key: 'mode' | 'wavelength') => unknown
+    } | null = null
+    function App() {
+      api = useControls(
+        'Motion',
+        {
+          mode: { value: 'orbit', options: { Orbit: 'orbit', Wave: 'wave' } },
+          wavelength: { value: 1, showIf: (get) => get('mode') === 'wave' },
+        },
+        { pane: 'showif' },
+      )
+      return null
+    }
+    await act(async () => root.render(<App />))
+    await flushCore()
+
+    const pane = Pane.get('showif')!
+    const rows = [...pane.element.querySelectorAll('.tiao-folder .tiao-row')]
+    const wavelength = rows[1]!
+    expect(wavelength.classList.contains('tiao-hidden')).toBe(true)
+    expect(api!.wavelength).toBe(1)
+
+    await act(async () => {
+      api!.$set({ mode: 'wave' })
+    })
+    expect(wavelength.classList.contains('tiao-hidden')).toBe(false)
+    expect(api!.wavelength).toBe(1)
+
+    await act(async () => {
+      api!.$set({ wavelength: 3 })
+    })
+    expect(api!.wavelength).toBe(3)
+    expect(api!.$get('wavelength')).toBe(3)
+  })
+
+  it('resolves cross-folder showIf keys and folder-level showIf', async () => {
+    let motion: { $set: (patch: { mode: string }) => void } | null = null
+    function Motion() {
+      motion = useControls(
+        'Motion',
+        { mode: { value: 'orbit', options: { Orbit: 'orbit', Wave: 'wave' } } },
+        { pane: 'cross' },
+      )
+      return null
+    }
+    function Wave() {
+      useControls(
+        'Wave',
+        { wavelength: 2 },
+        { pane: 'cross', showIf: (get) => get('Motion.mode') === 'wave' },
+      )
+      return null
+    }
+    function App() {
+      return (
+        <>
+          <Motion />
+          <Wave />
+        </>
+      )
+    }
+    await act(async () => root.render(<App />))
+    await flushCore()
+
+    const pane = Pane.get('cross')!
+    const folders = [...pane.element.querySelectorAll('.tiao-folder')]
+    const wave = folders.find((f) => f.querySelector('.tiao-folder-title')?.textContent === 'Wave')!
+    expect(wave.classList.contains('tiao-hidden')).toBe(true)
+
+    await act(async () => {
+      motion!.$set({ mode: 'wave' })
+    })
+    expect(wave.classList.contains('tiao-hidden')).toBe(false)
+  })
+
+  it('materializes tabs() pages and flattens values into the hook result', async () => {
+    let api: {
+      shared: boolean
+      color: string
+      size: number
+      note: string
+    } | null = null
+    function App() {
+      api = useControls(
+        {
+          shared: true,
+          panel: tabs({
+            Look: { color: '#fff', size: 2 },
+            Monitor: { note: 'hi' },
+          }),
+        },
+        { pane: 'tabs' },
+      )
+      return null
+    }
+    await act(async () => root.render(<App />))
+    await flushCore()
+
+    expect(api!.shared).toBe(true)
+    expect(api!.color).toBe('#fff')
+    expect(api!.size).toBe(2)
+    expect(api!.note).toBe('hi')
+
+    const pane = Pane.get('tabs')!
+    expect(pane.element.querySelectorAll('.tiao-tab-button')).toHaveLength(2)
+    expect(pane.element.querySelectorAll('.tiao-tab-page')).toHaveLength(2)
   })
 
   it('skips all UI when disabled but still returns working values', async () => {

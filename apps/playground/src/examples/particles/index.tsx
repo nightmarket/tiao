@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import { createExportPane } from '@nightmarket/tiao/export-pane'
 import { addFpsGraph } from '@nightmarket/tiao/plugin-fps'
 import { type MediaValue } from '@nightmarket/tiao/plugin-media'
-import { button, buttonGroup, monitor, useControls } from '@nightmarket/tiao/react'
+import { button, buttonGroup, monitor, tabs, useControls } from '@nightmarket/tiao/react'
 import { startScene, type SceneHandle, type SceneParams } from './scene'
 import type { Pane } from '@nightmarket/tiao/core'
 
@@ -17,7 +17,12 @@ function useMotionControls() {
       '2x': () => controls.$set({ speed: 2 }),
     }),
     mode: { value: 'orbit', view: 'radiogrid', options: { Orbit: 'orbit', Wave: 'wave' }, columns: 2 },
-    center: { value: { x: 0, y: 0 }, x: { min: -1, max: 1, step: 0.01 }, y: { min: -1, max: 1, step: 0.01 } },
+    center: {
+      value: { x: 0, y: 0 },
+      x: { min: -1, max: 1, step: 0.01 },
+      y: { min: -1, max: 1, step: 0.01 },
+      showIf: (get) => get('mode') === 'orbit',
+    },
   })
   return controls
 }
@@ -25,14 +30,19 @@ function useMotionControls() {
 /** ...while a sibling component adds a Look folder to the same pane. */
 function useLookControls(scene: React.RefObject<SceneHandle | null>) {
   return useControls('Look', {
-    count: { value: 400, min: 10, max: 2000, step: 10 },
-    size: { value: 2.5, min: 0.5, max: 10, step: 0.1 },
-    color: '#7dd3fc',
-    trail: { value: 0.12, min: 0.01, max: 1, step: 0.01 },
-    // drop an image/video to replace the dots with a sprite drawn per particle
-    sprite: { value: null as MediaValue, view: 'media' },
-    fps: monitor(() => scene.current?.fps() ?? 0, { view: 'graph', min: 0, max: 120, unit: 'FPS' }),
-    reset: button(() => localStorage.clear(), 'Clear saved pane state'),
+    panel: tabs({
+      Sprite: {
+        count: { value: 400, min: 10, max: 2000, step: 10 },
+        size: { value: 2.5, min: 0.5, max: 10, step: 0.1 },
+        color: '#7dd3fc',
+        trail: { value: 0.12, min: 0.01, max: 1, step: 0.01 },
+        sprite: { value: null as MediaValue, view: 'media' },
+      },
+      Monitor: {
+        fps: monitor(() => scene.current?.fps() ?? 0, { view: 'graph', min: 0, max: 120, unit: 'FPS' }),
+        reset: button(() => localStorage.clear(), 'Clear saved pane state'),
+      },
+    }),
   })
 }
 
@@ -150,8 +160,8 @@ function buildKitchenSink(pane: Pane): Pane {
   pane.addBinding(params, 'threshold', { min: 0, max: 1, step: 0.01 })
   pane.addBinding(params, 'amount', { min: 0, max: 100, step: 1 })
   pane.addBinding(params, 'range', { min: 0, max: 100, step: 1 })
-  pane.addBinding(params, 'tag')
   pane.addBinding(params, 'active')
+  pane.addBinding(params, 'tag', { showIf: () => params.active })
 
   const basics = pane.addFolder({ title: 'Basics' })
   basics.addBinding(params, 'exposure', { min: 0, max: 1, step: 0.01 })

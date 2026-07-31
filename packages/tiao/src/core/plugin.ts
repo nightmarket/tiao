@@ -1,5 +1,13 @@
 import type { Value } from './value'
 
+/** Show/hide/disable a row or folder. Core strips these before plugins see options. */
+export interface VisibilityOptions {
+  /** re-run after settled value changes; when false the item is hidden */
+  showIf?: (() => boolean) | undefined
+  hidden?: boolean | undefined
+  disabled?: boolean | undefined
+}
+
 /** Options bag accepted by addBinding. Known keys are typed; plugins may read extras. */
 export interface BindingOptions {
   label?: string
@@ -18,6 +26,9 @@ export interface BindingOptions {
   format?: (value: any) => string
   [key: string]: unknown
 }
+
+/** `addBinding` options: plugin bag plus construction-time visibility. */
+export type AddBindingOptions = BindingOptions & VisibilityOptions
 
 export interface PluginContext<T> {
   document: Document

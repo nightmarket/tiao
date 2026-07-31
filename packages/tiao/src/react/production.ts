@@ -17,7 +17,7 @@ import type { Pane, PaneOptions } from '../core'
 export { setTiaoEnabled } from './config'
 export { ControlStore } from './store'
 export { DEFAULT_PANE_ID } from './controls'
-export { button, buttonGroup, monitor } from './types'
+export { button, buttonGroup, monitor, tabs } from './types'
 export type {
   ButtonGroupItem,
   ButtonItem,
@@ -27,6 +27,9 @@ export type {
   Schema,
   SchemaItem,
   SchemaValues,
+  ShowIf,
+  ShowIfGet,
+  TabsItem,
   UseControlsOptions,
 } from './types'
 
@@ -50,7 +53,7 @@ class ProductionManager implements ManagerApi {
     this.store.set(key, value)
   }
 
-  register(_folderPath: string[], _schema: Schema): () => void {
+  register(_folderPath: string[], _schema: Schema, _options?: UseControlsOptions): () => void {
     return () => {}
   }
 }

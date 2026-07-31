@@ -2059,6 +2059,64 @@ describe('color model', () => {
   })
 })
 
+describe('showIf and construction-time visibility', () => {
+  it('applies static hidden and disabled at construction', () => {
+    const pane = new Pane()
+    const binding = pane.addBinding({ n: 1 }, 'n', { hidden: true, disabled: true })
+    expect(binding.hidden).toBe(true)
+    expect(binding.disabled).toBe(true)
+    expect(binding.element.classList.contains('tiao-hidden')).toBe(true)
+    expect(binding.element.classList.contains('tiao-disabled')).toBe(true)
+    pane.dispose()
+  })
+
+  it('hides a binding when showIf is false and re-shows after a dropdown change', () => {
+    const params = { mode: 'orbit', wavelength: 1 }
+    const pane = new Pane()
+    pane.addBinding(params, 'mode', { options: { Orbit: 'orbit', Wave: 'wave' } })
+    const wavelength = pane.addBinding(params, 'wavelength', {
+      showIf: () => params.mode === 'wave',
+    })
+    expect(wavelength.hidden).toBe(true)
+
+    const mode = pane.children[0] as unknown as { value: { set: (v: string, m: object) => void } }
+    mode.value.set('wave', { source: 'ui', last: true })
+    expect(params.mode).toBe('wave')
+    expect(wavelength.hidden).toBe(false)
+
+    mode.value.set('orbit', { source: 'ui', last: true })
+    expect(wavelength.hidden).toBe(true)
+    pane.dispose()
+  })
+
+  it('hides a folder when showIf is false', () => {
+    const params = { mode: 'a', extra: 1 }
+    const pane = new Pane()
+    pane.addBinding(params, 'mode', { options: { A: 'a', B: 'b' } })
+    const folder = pane.addFolder({ title: 'Extra', showIf: () => params.mode === 'b' })
+    folder.addBinding(params, 'extra')
+    expect(folder.hidden).toBe(true)
+
+    const mode = pane.children[0] as unknown as { value: { set: (v: string, m: object) => void } }
+    mode.value.set('b', { source: 'ui', last: true })
+    expect(folder.hidden).toBe(false)
+    pane.dispose()
+  })
+
+  it('skips mid-drag updates when re-evaluating showIf', () => {
+    const params = { gain: 0, n: 1 }
+    const pane = new Pane()
+    const gain = pane.addBinding(params, 'gain', { min: 0, max: 1 })
+    const row = pane.addBinding(params, 'n', { showIf: () => params.gain > 0.5 })
+    expect(row.hidden).toBe(true)
+    gain.value.set(0.9, { source: 'ui', last: false })
+    expect(row.hidden).toBe(true)
+    gain.value.set(0.9, { source: 'ui', last: true })
+    expect(row.hidden).toBe(false)
+    pane.dispose()
+  })
+})
+
 describe('number utils', () => {
   it('snaps without float noise', () => {
     expect(snap(0.30000000000000004, 0.1)).toBe(0.3)

@@ -39,7 +39,7 @@ export function useControls<S extends Schema>(
     const paneOpt = init.options.pane
     if (typeof paneOpt === 'object') manager.configure(paneOpt)
     if (!enabled) return
-    return manager.register(init.folderPath, init.schema)
+    return manager.register(init.folderPath, init.schema, init.options)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- captured on first render
   }, [])
 

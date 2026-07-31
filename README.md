@@ -64,6 +64,15 @@ const disposePane = mountPane(
 
     pane.addButton({ title: 'Reset' }).on('click', reset)
     pane.addButtonGroup({ label: 'zoom', buttons: { '0.5x': () => zoom(0.5), '1x': () => zoom(1) } })
+
+    pane.addBinding(params, 'mode', { options: { Orbit: 'orbit', Wave: 'wave' } })
+    pane.addBinding(params, 'wavelength', { showIf: () => params.mode === 'wave' })
+    pane.addFolder({ title: 'Wave', showIf: () => params.mode === 'wave' })
+
+    const tabs = pane.addTab({ pages: [{ title: 'Monitor' }, { title: 'Look' }] })
+    tabs.pages[0].addBinding(stats, 'fps', { readonly: true, view: 'graph' })
+    tabs.pages[1].addBinding(params, 'tint')
+
     pane.on('change', (ev) => console.log(ev.key, ev.value, ev.last))
   },
 )
@@ -121,13 +130,15 @@ Theme, accent, and style are also editable from the Pane Settings panel (gear ic
 ## React
 
 ```tsx
-import { useControls, button, monitor } from '@nightmarket/tiao/react'
+import { useControls, button, monitor, tabs } from '@nightmarket/tiao/react'
 
 function ComponentA() {
   // creates the default pane
-  const { speed, color } = useControls({
+  const { speed, color, mode, wavelength } = useControls({
     speed: { value: 1, min: 0, max: 2 },
     color: '#f00',
+    mode: { value: 'orbit', options: { Orbit: 'orbit', Wave: 'wave' } },
+    wavelength: { value: 1, showIf: (get) => get('mode') === 'wave' },
   })
 }
 
@@ -136,17 +147,29 @@ function ComponentB() {
   const { gravity } = useControls('Physics', { gravity: 9.8 })
 }
 
+function WaveExtras() {
+  // whole folder is hidden unless Motion.mode is wave
+  useControls('Wave', { amplitude: 0.5 }, { showIf: (get) => get('Motion.mode') === 'wave' })
+}
+
 function ComponentC() {
   // a separate pane, anchored elsewhere
   const values = useControls(
     'Capture',
-    { fps: monitor(() => stats.fps, { view: 'graph' }), reset: button(() => reset()) },
+    {
+      panel: tabs({
+        Monitor: { fps: monitor(() => stats.fps, { view: 'graph' }) },
+        Actions: { reset: button(() => reset()) },
+      }),
+    },
     { pane: { id: 'export', anchor: 'bottom-right' } },
   )
 }
 ```
 
 - Folder paths nest and merge: `useControls('Physics.Collisions', ...)` from any number of components lands in one folder; folders are ref-counted and survive sibling unmounts.
+- `showIf: (get) => …` hides a row (or a whole folder via hook options). `get('mode')` is folder-relative; `get('Motion.mode')` is absolute. Hidden values stay in the store.
+- `tabs({ Page: { … } })` groups rows onto tab pages; values are flattened into the hook result.
 - Re-renders are per-field via `useSyncExternalStore` — only consumers of a changed value update.
 - `$set({ key: value })` and `$get('key')` on the returned object for programmatic access.
 - `usePane(id)` returns the live `Pane` (or `null` before load) for plugins/custom blades.
