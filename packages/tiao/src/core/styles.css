@@ -30,6 +30,7 @@
   --tiao-depth-line: color-mix(in srgb, var(--tiao-fg) 14%, var(--tiao-bg-solid));
   --tiao-depth-line-hover: color-mix(in srgb, var(--tiao-fg) 24%, var(--tiao-bg-solid));
   --tiao-depth-line-active: color-mix(in srgb, var(--tiao-fg) 40%, var(--tiao-bg-solid));
+  --tiao-focus: color-mix(in srgb, var(--tiao-fg) 32%, var(--tiao-bg-solid));
   --tiao-hover: rgba(15, 23, 42, 0.055);
   --tiao-hover-soft: rgba(15, 23, 42, 0.03);
   --tiao-hover-strong: rgba(15, 23, 42, 0.09);
@@ -449,7 +450,7 @@
   cursor: pointer;
 }
 :where(.tiao-pane, .tiao-notch, .tiao-dock) :where(button, select):focus-visible {
-  outline: 1.5px solid var(--tiao-accent);
+  outline: 1.5px solid var(--tiao-focus);
   outline-offset: 1px;
 }
 :where(.tiao-pane, .tiao-dock) input {

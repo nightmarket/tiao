@@ -476,7 +476,7 @@ const CSS = `
   touch-action: none;
 }
 .tiao-bezier-graph:focus-visible {
-  outline: 1.5px solid var(--tiao-accent);
+  outline: 1.5px solid var(--tiao-focus);
   outline-offset: 1px;
 }
 .tiao-bezier-graph-svg {
