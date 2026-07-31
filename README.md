@@ -156,12 +156,10 @@ function ComponentC() {
   // a separate pane, anchored elsewhere
   const values = useControls(
     'Capture',
-    {
-      panel: tabs({
-        Monitor: { fps: monitor(() => stats.fps, { view: 'graph' }) },
-        Actions: { reset: button(() => reset()) },
-      }),
-    },
+    tabs({
+      Monitor: { fps: monitor(() => stats.fps, { view: 'graph' }) },
+      Actions: { reset: button(() => reset()) },
+    }),
     { pane: { id: 'export', anchor: 'bottom-right' } },
   )
 }
@@ -169,7 +167,7 @@ function ComponentC() {
 
 - Folder paths nest and merge: `useControls('Physics.Collisions', ...)` from any number of components lands in one folder; folders are ref-counted and survive sibling unmounts.
 - `showIf: (get) => …` hides a row (or a whole folder via hook options). `get('mode')` is folder-relative; `get('Motion.mode')` is absolute. Hidden values stay in the store.
-- `tabs({ Page: { … } })` groups rows onto tab pages; values are flattened into the hook result.
+- `tabs({ Page: { … } })` groups rows onto tab pages; pass it as the schema itself or nest it under a key — either way values are flattened into the hook result.
 - Re-renders are per-field via `useSyncExternalStore` — only consumers of a changed value update.
 - `$set({ key: value })` and `$get('key')` on the returned object for programmatic access.
 - `usePane(id)` returns the live `Pane` (or `null` before load) for plugins/custom blades.

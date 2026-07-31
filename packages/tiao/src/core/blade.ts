@@ -43,7 +43,10 @@ export abstract class Item {
   abstract readonly element: HTMLElement
   private _parent: Container | null = null
   protected disposers: (() => void)[] = []
+  /** user-set visibility; independent of any showIf predicate */
   private _hidden = false
+  /** predicate-driven visibility; the row hides when either flag is set */
+  private _condHidden = false
   private _disabled = false
   private _showIf: (() => boolean) | undefined = undefined
   private disposed = false
@@ -56,11 +59,11 @@ export abstract class Item {
   }
 
   get hidden(): boolean {
-    return this._hidden
+    return this._hidden || this._condHidden
   }
   set hidden(v: boolean) {
     this._hidden = v
-    this.element.classList.toggle('tiao-hidden', v)
+    this.applyHidden()
   }
 
   get disabled(): boolean {
@@ -71,15 +74,27 @@ export abstract class Item {
     this.element.classList.toggle('tiao-disabled', v)
   }
 
-  /** when set, visibility is owned by the predicate and re-run after settled changes */
+  /** when set, the predicate drives its own hidden flag (re-run after settled changes);
+      it never overwrites a manual `hidden = true` */
   setShowIf(fn?: (() => boolean) | undefined): void {
     this._showIf = fn
-    this.syncShowIf()
+    if (fn) {
+      this.syncShowIf()
+    } else {
+      this._condHidden = false
+      this.applyHidden()
+    }
   }
 
   /** internal: re-apply showIf when present */
   syncShowIf(): void {
-    if (this._showIf) this.hidden = !this._showIf()
+    if (!this._showIf) return
+    this._condHidden = !this._showIf()
+    this.applyHidden()
+  }
+
+  private applyHidden(): void {
+    this.element.classList.toggle('tiao-hidden', this._hidden || this._condHidden)
   }
 
   /** register cleanup to run when this item is disposed */
@@ -264,6 +279,9 @@ export abstract class Container extends Item {
       else if (child instanceof Container) child.refresh()
       else if (child instanceof TabApi) child.refresh()
     }
+    // a refresh signals "my params changed outside the pane" — re-run showIf
+    // predicates too, so mutate-then-refresh also updates conditional rows
+    if (!this.parent) walkItems(this, (item) => item.syncShowIf())
   }
 
   override dispose(): void {

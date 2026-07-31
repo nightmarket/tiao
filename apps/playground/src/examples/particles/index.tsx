@@ -29,21 +29,19 @@ function useMotionControls() {
 
 /** ...while a sibling component adds a Look folder to the same pane. */
 function useLookControls(scene: React.RefObject<SceneHandle | null>) {
-  return useControls('Look', {
-    panel: tabs({
-      Sprite: {
-        count: { value: 400, min: 10, max: 2000, step: 10 },
-        size: { value: 2.5, min: 0.5, max: 10, step: 0.1 },
-        color: '#7dd3fc',
-        trail: { value: 0.12, min: 0.01, max: 1, step: 0.01 },
-        sprite: { value: null as MediaValue, view: 'media' },
-      },
-      Monitor: {
-        fps: monitor(() => scene.current?.fps() ?? 0, { view: 'graph', min: 0, max: 120, unit: 'FPS' }),
-        reset: button(() => localStorage.clear(), 'Clear saved pane state'),
-      },
-    }),
-  })
+  return useControls('Look', tabs({
+    Sprite: {
+      count: { value: 400, min: 10, max: 2000, step: 10 },
+      size: { value: 2.5, min: 0.5, max: 10, step: 0.1 },
+      color: '#7dd3fc',
+      trail: { value: 0.12, min: 0.01, max: 1, step: 0.01 },
+      sprite: { value: null as MediaValue, view: 'media' },
+    },
+    Monitor: {
+      fps: monitor(() => scene.current?.fps() ?? 0, { view: 'graph', min: 0, max: 120, unit: 'FPS' }),
+      reset: button(() => localStorage.clear(), 'Clear saved pane state'),
+    },
+  }))
 }
 
 export function ParticlesExample() {

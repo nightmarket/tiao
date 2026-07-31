@@ -2,8 +2,17 @@ import { useEffect, useRef } from 'react'
 import { isTiaoEnabled } from './config'
 import { initControls, useControlValues, type ControlsInit } from './controls'
 import { getManager, type ManagerApi } from './manager'
-import type { ControlsResult, Schema, UseControlsOptions } from './types'
+import type { ControlsResult, Schema, TabsItem, UseControlsOptions } from './types'
 
+export function useControls<P extends Record<string, Schema>>(
+  schema: TabsItem<P>,
+  options?: UseControlsOptions,
+): ControlsResult<{ $tabs: TabsItem<P> }>
+export function useControls<P extends Record<string, Schema>>(
+  folder: string,
+  schema: TabsItem<P>,
+  options?: UseControlsOptions,
+): ControlsResult<{ $tabs: TabsItem<P> }>
 export function useControls<S extends Schema>(schema: S, options?: UseControlsOptions): ControlsResult<S>
 export function useControls<S extends Schema>(
   folder: string,
@@ -11,8 +20,8 @@ export function useControls<S extends Schema>(
   options?: UseControlsOptions,
 ): ControlsResult<S>
 export function useControls<S extends Schema>(
-  a: string | S,
-  b?: S | UseControlsOptions,
+  a: string | S | TabsItem,
+  b?: S | TabsItem | UseControlsOptions,
   c?: UseControlsOptions,
 ): ControlsResult<S> {
   // schema and pane target are intentionally captured on first render (like leva)

@@ -2103,6 +2103,37 @@ describe('showIf and construction-time visibility', () => {
     pane.dispose()
   })
 
+  it('keeps a manual hidden = true even when showIf says visible', () => {
+    const params = { mode: 'wave', n: 1 }
+    const pane = new Pane()
+    const mode = pane.addBinding(params, 'mode', { options: { Orbit: 'orbit', Wave: 'wave' } })
+    const row = pane.addBinding(params, 'n', { showIf: () => params.mode === 'wave' })
+    expect(row.hidden).toBe(false)
+
+    row.hidden = true
+    mode.value.set('wave', { source: 'ui', last: true })
+    expect(row.hidden).toBe(true)
+    expect(row.element.classList.contains('tiao-hidden')).toBe(true)
+
+    // clearing the manual flag hands visibility back to the predicate
+    row.hidden = false
+    expect(row.hidden).toBe(false)
+    pane.dispose()
+  })
+
+  it('re-runs showIf on pane.refresh() even when no binding value changed', () => {
+    let flag = false
+    const pane = new Pane()
+    const row = pane.addBinding({ n: 1 }, 'n', { showIf: () => flag })
+    expect(row.hidden).toBe(true)
+
+    // the predicate reads state no binding tracks; refresh is the contract
+    flag = true
+    pane.refresh()
+    expect(row.hidden).toBe(false)
+    pane.dispose()
+  })
+
   it('skips mid-drag updates when re-evaluating showIf', () => {
     const params = { gain: 0, n: 1 }
     const pane = new Pane()
