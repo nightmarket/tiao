@@ -287,6 +287,76 @@ describe('useControls', () => {
     expect(pane.element.querySelectorAll('.tiao-tab-page')).toHaveLength(2)
   })
 
+  it('accepts tabs() directly as the schema, no wrapper key', async () => {
+    let api: { color: string; size: number } | null = null
+    function App() {
+      api = useControls(
+        'Look',
+        tabs({
+          Sprite: { color: '#abc', size: 4 },
+          Info: { note: 'hello' },
+        }),
+        { pane: 'tabs-direct' },
+      )
+      return null
+    }
+    await act(async () => root.render(<App />))
+    await flushCore()
+
+    expect(api!.color).toBe('#abc')
+    expect(api!.size).toBe(4)
+
+    const pane = Pane.get('tabs-direct')!
+    expect(pane.element.querySelectorAll('.tiao-tab-button')).toHaveLength(2)
+  })
+
+  it('folder showIf is owned by its first registration and cleared on unmount', async () => {
+    let motion: { $set: (patch: { mode: string }) => void } | null = null
+    function Motion() {
+      motion = useControls(
+        'Motion',
+        { mode: { value: 'orbit', options: { Orbit: 'orbit', Wave: 'wave' } } },
+        { pane: 'owner' },
+      )
+      return null
+    }
+    function GatedShared() {
+      useControls('Shared', { a: 1 }, { pane: 'owner', showIf: (get) => get('Motion.mode') === 'wave' })
+      return null
+    }
+    function PlainShared() {
+      useControls('Shared', { b: 2 }, { pane: 'owner' })
+      return null
+    }
+    function App({ gated }: { gated: boolean }) {
+      return (
+        <>
+          <Motion />
+          {gated && <GatedShared />}
+          <PlainShared />
+        </>
+      )
+    }
+    await act(async () => root.render(<App gated />))
+    await flushCore()
+
+    const pane = Pane.get('owner')!
+    const shared = [...pane.element.querySelectorAll('.tiao-folder')].find(
+      (f) => f.querySelector('.tiao-folder-title')?.textContent === 'Shared',
+    )!
+    expect(shared.classList.contains('tiao-hidden')).toBe(true)
+
+    // the owning registration unmounts; its stale predicate must not keep
+    // hiding the folder the surviving registration still uses
+    await act(async () => root.render(<App gated={false} />))
+    expect(shared.classList.contains('tiao-hidden')).toBe(false)
+
+    await act(async () => {
+      motion!.$set({ mode: 'wave' })
+    })
+    expect(shared.classList.contains('tiao-hidden')).toBe(false)
+  })
+
   it('skips all UI when disabled but still returns working values', async () => {
     setTiaoEnabled(false)
     let api: ControlsResult<{ n: number }> | null = null

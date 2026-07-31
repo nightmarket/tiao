@@ -8,6 +8,7 @@ import {
   itemValue,
   type ControlsResult,
   type Schema,
+  type TabsItem,
   type UseControlsOptions,
 } from './types'
 
@@ -40,12 +41,15 @@ export interface ControlsInit<S extends Schema> {
 
 /** Resolve the hook's overloaded arguments into everything keyed off the schema. */
 export function initControls<S extends Schema>(
-  a: string | S,
-  b?: S | UseControlsOptions,
+  a: string | S | TabsItem,
+  b?: S | TabsItem | UseControlsOptions,
   c?: UseControlsOptions,
 ): ControlsInit<S> {
   const folder = typeof a === 'string' ? a : undefined
-  const schema = (typeof a === 'string' ? b : a) as S
+  const raw = (typeof a === 'string' ? b : a) as S | TabsItem
+  // a bare tabs(...) schema gets an internal wrapper key; the key never
+  // surfaces — tabs values are flattened and the item itself yields none
+  const schema = (isTabs(raw) ? { $tabs: raw } : raw) as S
   const options = (typeof a === 'string' ? c : (b as UseControlsOptions | undefined)) ?? {}
 
   const paneOpt = options.pane

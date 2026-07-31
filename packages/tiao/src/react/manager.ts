@@ -27,6 +27,8 @@ function loadCore(): Promise<CoreModule> {
 interface FolderRef {
   api: FolderApi
   count: number
+  /** the registration whose folder-level showIf currently drives visibility */
+  showIfOwner?: Registration | undefined
 }
 
 interface Registration {
@@ -121,7 +123,14 @@ export class PaneManager implements ManagerApi {
     for (const fn of reg.disposers) fn()
     reg.disposers = []
     reg.bindings.clear()
-    if (reg.materialized) this.releaseFolders(reg.folderPath)
+    if (reg.materialized) {
+      const ref = this.folders.get(reg.folderPath.join('.'))
+      if (ref && ref.showIfOwner === reg) {
+        ref.showIfOwner = undefined
+        ref.api.setShowIf(undefined)
+      }
+      this.releaseFolders(reg.folderPath)
+    }
     if (this.registrations.size === 0 && this.pane) {
       this.pane.dispose()
       this.pane = null
@@ -179,8 +188,21 @@ export class PaneManager implements ManagerApi {
     }
   }
 
+  /** relative key first (this hook's folder), then the name as an absolute dotted key */
   private readValue(folderPath: string[], name: string): unknown {
-    const key = name.includes('.') ? name : keyFor(folderPath, name)
+    const relative = keyFor(folderPath, name)
+    if (this.hasKey(relative)) return this.getKey(relative)
+    if (name.includes('.') && this.hasKey(name)) return this.getKey(name)
+    return undefined
+  }
+
+  private hasKey(key: string): boolean {
+    if (this.store.has(key)) return true
+    for (const reg of this.registrations) if (reg.bindings.has(key)) return true
+    return false
+  }
+
+  private getKey(key: string): unknown {
     if (this.store.has(key)) return this.store.get(key)
     for (const reg of this.registrations) {
       const entry = reg.bindings.get(key)
@@ -194,8 +216,13 @@ export class PaneManager implements ManagerApi {
     reg.materialized = true
     const get: ShowIfGet = (name) => this.readValue(reg.folderPath, name)
     if (reg.showIf && reg.folderPath.length > 0) {
-      const leaf = this.folders.get(reg.folderPath.join('.'))?.api
-      leaf?.setShowIf(() => reg.showIf!(get))
+      // first registration to bring a folder-level showIf owns it; later ones
+      // are ignored rather than silently overwriting the predicate
+      const ref = this.folders.get(reg.folderPath.join('.'))
+      if (ref && !ref.showIfOwner) {
+        ref.showIfOwner = reg
+        ref.api.setShowIf(() => reg.showIf!(get))
+      }
     }
     this.mountSchema(reg, container, reg.schema, get)
   }
