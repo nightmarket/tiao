@@ -51,7 +51,7 @@ export function icon(name: 'chevron' | 'plus' | 'triangle' | 'check'): SVGSVGEle
     check: 'M2.75 6.5 L5 8.75 L9.25 3.75',
     // leva-style filled collapse caret, pointing down; the glyph is centered
     // in the viewBox so rotating it while collapsed keeps it optically aligned
-    triangle: 'M3.2 4.25 L8.8 4.25 L6 7.75 Z',
+    triangle: 'M3.9 4.7 L8.1 4.7 L6 7.3 Z',
   }[name]
   path.setAttribute('d', d)
   // the caret is a filled shape; a thin same-color stroke rounds its corners
