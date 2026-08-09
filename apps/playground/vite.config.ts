@@ -22,6 +22,10 @@ const aliases = [
     replacement: path.join(tiaoSrc, 'plugin-radio-grid/index.ts'),
   },
   { find: /^@nightmarket\/tiao\/plugin-media$/, replacement: path.join(tiaoSrc, 'plugin-media/index.ts') },
+  {
+    find: /^@nightmarket\/tiao\/plugin-thumbnails$/,
+    replacement: path.join(tiaoSrc, 'plugin-thumbnails/index.ts'),
+  },
   { find: /^@nightmarket\/tiao\/plugin-camera$/, replacement: path.join(tiaoSrc, 'plugin-camera/index.ts') },
 ]
 

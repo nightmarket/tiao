@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { createExportPane } from '@nightmarket/tiao/export-pane'
 import { addFpsGraph } from '@nightmarket/tiao/plugin-fps'
 import { type MediaValue } from '@nightmarket/tiao/plugin-media'
+import { type ThumbEntry } from '@nightmarket/tiao/plugin-thumbnails'
 import { button, buttonGroup, monitor, tabs, useControls } from '@nightmarket/tiao/react'
 import { startScene, type SceneHandle, type SceneParams } from './scene'
 import type { Pane } from '@nightmarket/tiao/core'
@@ -111,6 +112,24 @@ export function ParticlesExample() {
   )
 }
 
+/** thumbs cover all three sources: CSS gradients, inline svg, and an image url */
+const DOT_SRC = `data:image/svg+xml,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><rect width="8" height="8" fill="#1f2937"/><circle cx="4" cy="4" r="2.2" fill="#fbbf24"/></svg>',
+)}`
+
+const GRADIENTS: ThumbEntry[] = [
+  { text: 'violet', value: 'violet', thumb: 'linear-gradient(135deg, #ddd6fe, #a78bfa)' },
+  { text: 'magenta', value: 'magenta', thumb: 'linear-gradient(135deg, #fbcfe8, #db2777)' },
+  { text: 'cyan', value: 'cyan', thumb: 'linear-gradient(135deg, #cffafe, #14b8a6)' },
+  { text: 'orange', value: 'orange', thumb: 'linear-gradient(135deg, #fed7aa, #f97316)' },
+  {
+    text: 'checker',
+    value: 'checker',
+    thumb: `<svg viewBox="0 0 2 2"><rect width="2" height="2" fill="#e5e5e5"/><rect width="1" height="1" fill="#737373"/><rect x="1" y="1" width="1" height="1" fill="#737373"/></svg>`,
+  },
+  { text: 'dot', value: 'dot', thumb: DOT_SRC },
+]
+
 function buildKitchenSink(pane: Pane): Pane {
   const params = {
     gain: 0.4,
@@ -140,6 +159,8 @@ function buildKitchenSink(pane: Pane): Pane {
     flen: 55,
     fnumber: 1.8,
     quality: 'medium',
+    gradient: 'violet',
+    swatch: 'checker',
     texture: null as MediaValue,
     time: 0,
   }
@@ -250,6 +271,9 @@ function buildKitchenSink(pane: Pane): Pane {
     options: { Low: 'low', Medium: 'medium', High: 'high' },
     columns: 3,
   })
+  plugins.addBinding(params, 'gradient', { view: 'thumbnails', options: GRADIENTS, aspect: 1.4 })
+  // label-less: the grid takes the whole row
+  plugins.addBinding(params, 'swatch', { view: 'thumbnails', options: GRADIENTS, label: '' })
   plugins
     .addBinding(params, 'texture', { view: 'media' })
     .on('change', (ev) => console.log('texture source:', ev.value))

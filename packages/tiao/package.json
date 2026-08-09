@@ -79,6 +79,10 @@
       "types": "./dist/plugin-media.d.ts",
       "import": "./dist/plugin-media.js"
     },
+    "./plugin-thumbnails": {
+      "types": "./dist/plugin-thumbnails.d.ts",
+      "import": "./dist/plugin-thumbnails.js"
+    },
     "./plugin-camera": {
       "types": "./dist/plugin-camera.d.ts",
       "production": "./dist/plugin-camera.production.js",
