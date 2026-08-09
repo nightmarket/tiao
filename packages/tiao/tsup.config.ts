@@ -14,6 +14,7 @@ export default defineConfig({
     'plugin-bezier.production': 'src/plugin-bezier/production.ts',
     'plugin-radio-grid': 'src/plugin-radio-grid/index.ts',
     'plugin-media': 'src/plugin-media/index.ts',
+    'plugin-thumbnails': 'src/plugin-thumbnails/index.ts',
     'plugin-camera': 'src/plugin-camera/index.ts',
     'plugin-camera.production': 'src/plugin-camera/production.ts',
   },

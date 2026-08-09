@@ -23,6 +23,7 @@ One package. Import what you need via subpaths:
 | `@nightmarket/tiao/plugin-bezier` | Cubic-bezier easing editor input |
 | `@nightmarket/tiao/plugin-radio-grid` | Segmented radio grid input |
 | `@nightmarket/tiao/plugin-media` | Image/video upload input (drag & drop) for WebGL/WebGPU textures |
+| `@nightmarket/tiao/plugin-thumbnails` | Thumbnail grid input: pick one of a set of picture swatches |
 | `@nightmarket/tiao/plugin-camera` | Camera-style ring / wheel number inputs |
 | `@nightmarket/tiao/export-pane` | Pre-configured pane that exports a canvas to PNG / WebM / MP4 |
 | `@nightmarket/tiao/perf-pane` | Pre-configured pane for canvas/three.js perf: fps, cpu/gpu ms, draw calls, memory |
@@ -199,6 +200,7 @@ import { addFpsGraph } from '@nightmarket/tiao/plugin-fps'
 import { registerBezierPlugin } from '@nightmarket/tiao/plugin-bezier'
 import { registerRadioGridPlugin } from '@nightmarket/tiao/plugin-radio-grid'
 import { registerMediaPlugin, type MediaValue } from '@nightmarket/tiao/plugin-media'
+import { registerThumbnailsPlugin } from '@nightmarket/tiao/plugin-thumbnails'
 
 addFpsGraph(pane)
 registerBezierPlugin()
@@ -207,7 +209,21 @@ registerRadioGridPlugin()
 pane.addBinding(params, 'mode', { view: 'radiogrid', options: { Line: 'line', Scatter: 'scatter' } })
 registerMediaPlugin()
 pane.addBinding(params, 'texture', { view: 'media' })          // MediaValue
+registerThumbnailsPlugin()
+pane.addBinding(params, 'gradient', {
+  view: 'thumbnails',
+  options: [
+    { text: 'violet', value: 'violet', thumb: 'linear-gradient(135deg, #ddd6fe, #a78bfa)' },
+    { text: 'brown', value: 'brown', thumb: '/thumbs/brown.png' },
+    { text: 'gray', value: 'gray', thumb: '<svg viewBox="0 0 2 2"><rect width="2" height="2" fill="#999"/></svg>' },
+  ],
+  columns: 3,   // optional; the grid reflows to the column width without it
+  aspect: 1.5,  // optional; thumbnail width / height, defaults to square
+  label: '',    // optional; an empty label drops the label column so the grid spans the row
+})
 ```
+
+Each thumbnail is one string: inline `<svg>` markup, an image URL, or any CSS `background` value (gradients, colors). Artwork and caption form a single card, and the selected one gets a ring and an undimmed caption; captions come from `text` and are omitted when it is empty.
 
 The media input takes a png/jpeg/webp image or mp4/webm video via drag & drop or click-to-browse. The bound value becomes the loaded `HTMLImageElement` or `HTMLVideoElement` (`null` when empty) — both are valid WebGL `TexImageSource`s; for WebGPU pass images through `createImageBitmap` and videos through `importExternalTexture`. Videos autoplay muted on loop, so re-uploading the element each frame gives animated textures.
 
