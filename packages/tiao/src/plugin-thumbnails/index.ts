@@ -4,8 +4,11 @@ import { h, injectCss, normalizeOptions, registerPlugin, type InputPlugin } from
 export interface ThumbEntry {
   text: string
   value: unknown
-  /** inline `<svg …>` markup, an image URL, or any CSS `background` value */
-  thumb?: string
+  /**
+   * inline `<svg …>` markup, an image URL, or any CSS `background` value.
+   * Pass `null` / omit to render a text pill with no artwork.
+   */
+  thumb?: string | null
 }
 
 /**
@@ -16,6 +19,7 @@ export interface ThumbEntry {
  *     options: [
  *       { text: 'violet', value: 'violet', thumb: 'linear-gradient(135deg, #ddd6fe, #a78bfa)' },
  *       { text: 'brown', value: 'brown', thumb: '/thumbs/brown.png' },
+ *       { text: 'none', value: 'none', thumb: null }, // text pill
  *     ],
  *   })
  * Pass `label: ''` to drop the label column and let the grid span the row.
@@ -42,7 +46,10 @@ export const thumbnailsPlugin: InputPlugin<unknown> = {
     }
 
     const cells = entries.map((entry) => {
-      const cell = h('button', 'tiao-thumbs-cell', thumbBox(entry.thumb))
+      const pill = entry.thumb == null || entry.thumb === ''
+      const cell = pill
+        ? h('button', 'tiao-thumbs-cell tiao-thumbs-pill')
+        : h('button', 'tiao-thumbs-cell', thumbBox(entry.thumb))
       cell.type = 'button'
       cell.setAttribute('role', 'radio')
       cell.title = entry.text
@@ -75,9 +82,8 @@ const SVG_MARKUP = /^\s*<svg[\s>]/i
 const IMAGE_SRC = /^(data:|blob:|https?:|\/|\.{1,2}\/)|\.(png|jpe?g|webp|gif|avif|svg)$/i
 
 /** One string covers all three sources; the shape of the value picks the renderer. */
-function thumbBox(thumb: string | undefined): HTMLElement {
+function thumbBox(thumb: string): HTMLElement {
   const box = h('div', 'tiao-thumbs-image')
-  if (!thumb) return box
   if (SVG_MARKUP.test(thumb)) {
     // markup comes from the calling code, same trust level as the rest of the pane
     box.innerHTML = thumb
@@ -160,6 +166,15 @@ const CSS = `
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* null / omitted thumb: compact text pill, no artwork frame */
+.tiao-thumbs-cell.tiao-thumbs-pill {
+  justify-content: center;
+  padding: 4px 6px;
+  min-height: calc(var(--tiao-row-height) - 2px);
+}
+.tiao-thumbs-cell.tiao-thumbs-pill .tiao-thumbs-text {
+  padding: 0;
 }
 `
 
