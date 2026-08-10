@@ -122,8 +122,13 @@ function benchRing(n, size) {
   return { ms: performance.now() - t0, lastMin: observedMin, lastMax: observedMax, len: count }
 }
 
-benchShift(10_000, bufferSize)
-benchRing(10_000, bufferSize)
+function warmup(size) {
+  const warmupSamples = 10_000
+  benchShift(warmupSamples, size)
+  benchRing(warmupSamples, size)
+}
+
+warmup(bufferSize)
 
 const shift = benchShift(samples, bufferSize)
 const ring = benchRing(samples, bufferSize)

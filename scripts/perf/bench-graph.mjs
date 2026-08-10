@@ -100,7 +100,6 @@ try {
   await client.send('Page.enable')
   await client.send('Runtime.enable')
   await client.send('Page.navigate', { url })
-  await client.send('Page.loadEventFired').catch(() => {})
 
   let result
   const deadline = Date.now() + 30000

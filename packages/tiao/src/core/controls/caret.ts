@@ -4,6 +4,12 @@ import { h, withDocument } from '../dom'
 const INPUT_SELECTOR =
   '.tiao-num-input, .tiao-text-input, .tiao-color-text, .tiao-search-input'
 
+function restartBlink(caret: HTMLElement): void {
+  caret.style.animation = 'none'
+  void caret.offsetWidth
+  caret.style.animation = ''
+}
+
 /**
  * Draws a 2px accent caret over the focused pane input; the native caret is
  * too thin to notice. The native caret is hidden while this one is active,
@@ -80,10 +86,7 @@ export function installCaret(root: HTMLElement, doc: Document): () => void {
       caret.style.left = left
       caret.style.top = top
       caret.style.height = heightPx
-      // restart the blink so the caret is solid right after it moves
-      caret.style.animation = 'none'
-      void caret.offsetWidth
-      caret.style.animation = ''
+      restartBlink(caret)
     }
     if (!caret.isConnected) root.append(caret)
   }
