@@ -601,6 +601,29 @@ describe('Pane registry and chrome', () => {
     document.body.style.removeProperty('padding-inline-start')
   })
 
+  it('stacks the sidebar by pane order, falling back to creation order', () => {
+    const late = new Pane({ title: 'Late', order: 99 })
+    const early = new Pane({ title: 'Early', order: -1 })
+    const mid = new Pane({ title: 'Mid' })
+    const dockBtn = document.querySelector('.tiao-notch-dock') as HTMLButtonElement
+    dockBtn.click()
+
+    const titles = () =>
+      [...document.querySelectorAll('.tiao-dock-body .tiao-pane-title')].map((t) => t.textContent)
+    expect(titles()).toEqual(['Early', 'Mid', 'Late'])
+
+    // created while docked: slots into its place instead of landing at the end
+    const alsoEarly = new Pane({ title: 'Also early', order: -1 })
+    expect(titles()).toEqual(['Early', 'Also early', 'Mid', 'Late'])
+
+    // and a live pane re-sorts
+    mid.order = 100
+    expect(titles()).toEqual(['Early', 'Also early', 'Late', 'Mid'])
+
+    dockBtn.click()
+    for (const p of [late, early, mid, alsoEarly]) p.dispose()
+  })
+
   it('moves search and settings to the sidebar header while docked', () => {
     const params = { speed: 1, gamma: 2 }
     const pane = new Pane()

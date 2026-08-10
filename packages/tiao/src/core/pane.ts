@@ -47,6 +47,8 @@ export interface PaneOptions {
   anchor?: Anchor
   /** offset in px from the anchored edge(s) */
   margin?: number
+  /** sidebar position, z-index style: lower sorts first, ties keep creation order */
+  order?: number
   /** floating panes are draggable by default (toggleable from the pane menu) */
   draggable?: boolean
   expanded?: boolean
@@ -424,6 +426,7 @@ export class Pane extends Container {
   /** preferred theme, which may be 'system'; the CSS class is the resolved look */
   private _theme: PaneTheme = 'dark'
   private _anchor: Anchor | null = null
+  private _order: number
   private margin: number
   private readonly doc: Document
   /** created without a container: owns its own window position and joins the H toggle */
@@ -523,6 +526,7 @@ export class Pane extends Container {
     this._expanded = options.expanded ?? true
     this.floating = !options.container
     this._draggable = this.floating && (options.draggable ?? true)
+    this._order = options.order ?? 0
     this.margin = options.margin ?? 8
 
     injectStyles(doc)
@@ -566,6 +570,8 @@ export class Pane extends Container {
     this.searchInput = chrome.searchInput
     this.searchbar = chrome.searchbar
     this.element = chrome.element
+    // mirrored so docked siblings can be compared straight from the DOM
+    this.element.dataset['tiaoOrder'] = String(this._order)
 
     if (this.floating) {
       this.element.classList.add('tiao-floating')
@@ -864,6 +870,18 @@ export class Pane extends Container {
     if (super.hidden === v) return
     super.hidden = v
     syncNotch(this.doc)
+  }
+
+  /** sidebar position, z-index style: lower sorts first, ties keep creation order */
+  get order(): number {
+    return this._order
+  }
+  set order(v: number) {
+    if (this._order === v) return
+    this._order = v
+    this.element.dataset['tiaoOrder'] = String(v)
+    const body = this.docked ? dockBody(this.doc) : null
+    if (body) this.insertDocked(body)
   }
 
   get draggable(): boolean {
@@ -1186,7 +1204,21 @@ export class Pane extends Container {
     this.element.classList.remove('tiao-floating')
     this.element.classList.add('tiao-docked')
     this.applyDraggable()
-    container.append(this.element)
+    this.insertDocked(container)
+  }
+
+  /**
+   * internal: place this pane among its docked siblings by `order`. Inserting
+   * rather than reordering visually keeps the separator rule (which reads DOM
+   * adjacency), tab order, and scrolling in step with what is on screen.
+   */
+  private insertDocked(container: HTMLElement): void {
+    const before = [...container.children].find(
+      (el) => Number((el as HTMLElement).dataset['tiaoOrder'] ?? 0) > this._order,
+    )
+    // strictly greater, so an equal order lands after its peers (creation order)
+    if (before) container.insertBefore(this.element, before)
+    else container.append(this.element)
   }
 
   /** internal: return this pane to its floating position and its own theme */

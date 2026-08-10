@@ -29,6 +29,8 @@ export function createExportPane(options: ExportPaneOptions): Pane {
     id: options.id ?? 'tiao-export',
     title: options.title ?? 'Export',
     anchor: options.anchor ?? 'bottom-right',
+    // export is a terminal action, so it sits last in the sidebar by default
+    order: 99,
     ...options.pane,
   })
 
