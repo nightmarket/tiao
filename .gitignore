@@ -4,3 +4,5 @@ dist/
 .DS_Store
 .git-commands-output.txt
 *.log
+scripts/perf/artifacts/.chrome-profile-*/
+scripts/perf/artifacts/*.cpuprofile

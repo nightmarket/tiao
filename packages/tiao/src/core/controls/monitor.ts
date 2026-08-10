@@ -43,8 +43,14 @@ function createLog(
 
   const push = (v: unknown) => {
     const stick = el.scrollTop + el.clientHeight >= el.scrollHeight - 2
-    el.append(h('div', 'tiao-monitor-log-line', format(v)))
-    while (el.childElementCount > bufferSize) el.firstElementChild?.remove()
+    const text = format(v)
+    if (el.childElementCount >= bufferSize) {
+      const line = el.firstElementChild as HTMLElement
+      el.append(line)
+      if (line.textContent !== text) line.textContent = text
+    } else {
+      el.append(h('div', 'tiao-monitor-log-line', text))
+    }
     if (stick) el.scrollTop = el.scrollHeight
   }
   push(ctx.value.get())
@@ -80,7 +86,10 @@ export function createGraph(
     typeof requestedBuffer === 'number' && Number.isFinite(requestedBuffer)
       ? Math.max(2, Math.floor(requestedBuffer))
       : DEFAULT_BUFFER
-  const buffer: number[] = []
+  // Fixed ring avoids Array#shift memmoves on every sample once the window is full.
+  const buffer = new Float64Array(bufferSize)
+  let count = 0
+  let start = 0
   const canvas = h('canvas', 'tiao-graph-canvas')
   const numberEl = h('span', 'tiao-graph-number')
   // unit (e.g. "s", "FPS") renders after the number in a subtler color
@@ -108,7 +117,40 @@ export function createGraph(
   // getComputedStyle returns a live declaration; resolve it once, read per draw
   let computed: CSSStyleDeclaration | null = null
   let c2d: CanvasRenderingContext2D | null = null
+  let paintAccentRaw = ''
+  let paintStrokeRaw = ''
+  let paintOpacityRaw = ''
+  let paintColor = ''
+  let paintFillStyle = ''
+  let paintAlpha = 0.28
   const dpr = typeof devicePixelRatio === 'number' ? devicePixelRatio : 1
+
+  const sampleAt = (i: number): number => buffer[(start + i) % bufferSize]!
+
+  const syncPaint = () => {
+    computed ??= getComputedStyle(el)
+    const accent = computed.getPropertyValue('--tiao-graph-accent')
+    const stroke = computed.getPropertyValue('--tiao-graph-stroke')
+    const opacity = computed.getPropertyValue('--tiao-graph-fill-opacity')
+    const color = computed.color
+    if (
+      accent === paintAccentRaw &&
+      stroke === paintStrokeRaw &&
+      opacity === paintOpacityRaw &&
+      color === paintColor
+    ) {
+      return
+    }
+    paintAccentRaw = accent
+    paintStrokeRaw = stroke
+    paintOpacityRaw = opacity
+    paintColor = color
+    paintFillStyle = accent.trim() || stroke.trim() || color
+    const configuredOpacity = Number.parseFloat(opacity)
+    paintAlpha = Number.isFinite(configuredOpacity)
+      ? Math.min(1, Math.max(0, configuredOpacity))
+      : 0.28
+  }
 
   const resize = (rect: Pick<DOMRectReadOnly, 'width' | 'height'>) => {
     // zero size means collapsed/hidden: stop drawing until visible again
@@ -134,7 +176,7 @@ export function createGraph(
   ctx.onDispose(() => ro?.disconnect())
 
   const draw = () => {
-    if (width === 0 || buffer.length === 0) {
+    if (width === 0 || count === 0) {
       dirty = true
       return
     }
@@ -162,32 +204,24 @@ export function createGraph(
       min = lower
     }
     c.clearRect(0, 0, width, height)
-    computed ??= getComputedStyle(el)
-    c.fillStyle =
-      computed.getPropertyValue('--tiao-graph-accent').trim() ||
-      computed.getPropertyValue('--tiao-graph-stroke').trim() ||
-      computed.color
-    const configuredOpacity = Number.parseFloat(
-      computed.getPropertyValue('--tiao-graph-fill-opacity'),
-    )
-    c.globalAlpha = Number.isFinite(configuredOpacity)
-      ? Math.min(1, Math.max(0, configuredOpacity))
-      : 0.28
+    syncPaint()
+    c.fillStyle = paintFillStyle
+    c.globalAlpha = paintAlpha
     c.beginPath()
     const step = width / (bufferSize - 1)
-    const firstX = width - (buffer.length - 1) * step
+    const firstX = width - (count - 1) * step
     const range = max - min
-    if (buffer.length === 1) {
+    if (count === 1) {
       const left = Math.max(0, width - Math.max(step, dpr))
-      const ratio = Math.min(1, Math.max(0, (buffer[0]! - min) / range))
+      const ratio = Math.min(1, Math.max(0, (sampleAt(0) - min) / range))
       const y = (1 - ratio) * height
       c.moveTo(left, y)
       c.lineTo(width, y)
       c.lineTo(width, height)
       c.lineTo(left, height)
     } else {
-      for (let i = 0; i < buffer.length; i++) {
-        const v = buffer[i]!
+      for (let i = 0; i < count; i++) {
+        const v = sampleAt(i)
         const x = firstX + i * step
         const ratio = Math.min(1, Math.max(0, (v - min) / range))
         const y = (1 - ratio) * height
@@ -207,7 +241,7 @@ export function createGraph(
   // The buffer *is* the window — the parenthesized range always describes exactly
   // what's on screen; the monitor interval determines its elapsed duration.
   const updateLabel = () => {
-    if (!labelEl || buffer.length === 0) return
+    if (!labelEl || count === 0) return
     const loText = format(observedMin)
     const hiText = format(observedMax)
     const next =
@@ -224,10 +258,16 @@ export function createGraph(
       if (numberEl.textContent !== text) numberEl.textContent = text
       // Keep a transient invalid reading from poisoning the rolling scale.
       if (!Number.isFinite(v)) return
-      const removed = buffer.length === bufferSize ? buffer.shift() : undefined
+      let removed: number | undefined
+      if (count === bufferSize) {
+        removed = buffer[start]!
+        start = (start + 1) % bufferSize
+      } else {
+        count++
+      }
+      buffer[(start + count - 1) % bufferSize] = v
       if (removed === observedMin) observedMinCount--
       if (removed === observedMax) observedMaxCount--
-      buffer.push(v)
       if (v < observedMin) {
         observedMin = v
         observedMinCount = 1
@@ -241,11 +281,12 @@ export function createGraph(
         observedMaxCount++
       }
       if (observedMinCount === 0 || observedMaxCount === 0) {
-        observedMin = buffer[0]!
+        observedMin = sampleAt(0)
         observedMax = observedMin
         observedMinCount = 0
         observedMaxCount = 0
-        for (const sample of buffer) {
+        for (let i = 0; i < count; i++) {
+          const sample = sampleAt(i)
           if (sample < observedMin) {
             observedMin = sample
             observedMinCount = 1
