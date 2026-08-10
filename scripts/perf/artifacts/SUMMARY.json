@@ -1,0 +1,24 @@
+{
+  "metric": "graph monitor sample ingest + canvas draw",
+  "harness": "apps/playground/bench-graph.html via scripts/perf/bench-graph.mjs",
+  "workload": { "samples": 5000, "graphs": 8, "bufferSize": 128, "updates": 40000 },
+  "baseline_nsPerUpdate": 12792.5,
+  "final_median_nsPerUpdate": 11597.5,
+  "delta_pct": -9.34,
+  "artifact_files": [
+    "graph-bench-baseline.json",
+    "graph-bench-final-1.json",
+    "graph-bench-final-2.json",
+    "graph-bench-final-3.json",
+    "ring-buffer-baseline.json"
+  ],
+  "inconclusive": [
+    "CPU profiles on #/three-perf and the bench page reported only (idle) hits in headless Chromium; not used for pass/fail"
+  ],
+  "changes": [
+    "createGraph: Float64Array ring buffer instead of Array#shift",
+    "createGraph: cache resolved canvas paint tokens until CSS vars change",
+    "text log monitor: recycle line DOM nodes when full",
+    "caret: selectionchange uses existing rAF scheduleUpdate; skip blink reflow when unmoved"
+  ]
+}

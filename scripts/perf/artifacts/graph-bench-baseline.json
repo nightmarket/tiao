@@ -1,0 +1,13 @@
+{
+  "label": "baseline",
+  "at": "2026-08-10T15:41:24.124Z",
+  "url": "http://127.0.0.1:5173/bench-graph.html?samples=5000&graphs=8&buffer=128",
+  "samples": 5000,
+  "graphs": 8,
+  "bufferSize": 128,
+  "updates": 40000,
+  "elapsedMs": 511.70000000018626,
+  "nsPerUpdate": 12792.500000004657,
+  "updatesPerSec": 78170.80320497448,
+  "canvasW": 240
+}
