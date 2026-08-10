@@ -86,7 +86,6 @@ export function createGraph(
     typeof requestedBuffer === 'number' && Number.isFinite(requestedBuffer)
       ? Math.max(2, Math.floor(requestedBuffer))
       : DEFAULT_BUFFER
-  // Fixed ring avoids Array#shift memmoves on every sample once the window is full.
   const buffer = new Float64Array(bufferSize)
   let count = 0
   let start = 0

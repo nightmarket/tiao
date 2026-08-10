@@ -50,9 +50,7 @@ async function waitForCdp(timeoutMs = 15000) {
     try {
       const res = await fetch(`http://127.0.0.1:${port}/json/version`)
       if (res.ok) return res.json()
-    } catch {
-      /* retry */
-    }
+    } catch {}
     await new Promise((r) => setTimeout(r, 100))
   }
   throw new Error(`CDP not ready on ${port}`)
@@ -104,7 +102,6 @@ try {
   await client.send('Page.navigate', { url })
   await client.send('Page.loadEventFired').catch(() => {})
 
-  // Page.loadEventFired is an event, not a command — poll for the result instead.
   let result
   const deadline = Date.now() + 30000
   while (Date.now() < deadline) {
@@ -117,7 +114,6 @@ try {
       result = evalResult.result.value
       break
     }
-    // Surface module errors early.
     const err = await client.send('Runtime.evaluate', {
       expression: 'document.getElementById("out")?.textContent ?? ""',
       returnByValue: true,

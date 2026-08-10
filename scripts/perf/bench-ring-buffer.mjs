@@ -122,7 +122,6 @@ function benchRing(n, size) {
   return { ms: performance.now() - t0, lastMin: observedMin, lastMax: observedMax, len: count }
 }
 
-// Warm
 benchShift(10_000, bufferSize)
 benchRing(10_000, bufferSize)
 

@@ -43,9 +43,7 @@ async function waitForCdp(timeoutMs = 15000) {
     try {
       const res = await fetch(`http://127.0.0.1:${port}/json/version`)
       if (res.ok) return
-    } catch {
-      /* retry */
-    }
+    } catch {}
     await new Promise((r) => setTimeout(r, 100))
   }
   throw new Error(`CDP not ready on ${port}`)
@@ -130,7 +128,6 @@ try {
   await client.send('Profiler.enable')
   await client.send('Page.navigate', { url })
 
-  // Wait for the example to mount (perf pane + three canvas).
   const mountDeadline = Date.now() + 15000
   while (Date.now() < mountDeadline) {
     const r = await client.send('Runtime.evaluate', {
