@@ -71,13 +71,20 @@ export function installCaret(root: HTMLElement, doc: Document): () => void {
 
     const rootRect = root.getBoundingClientRect()
     const height = Math.min(rect.height - 6, parseFloat(cs.fontSize) + 4)
-    caret.style.left = `${x - rootRect.left}px`
-    caret.style.top = `${rect.top - rootRect.top + (rect.height - height) / 2}px`
-    caret.style.height = `${height}px`
-    // restart the blink so the caret is solid right after it moves
-    caret.style.animation = 'none'
-    void caret.offsetWidth
-    caret.style.animation = ''
+    const left = `${x - rootRect.left}px`
+    const top = `${rect.top - rootRect.top + (rect.height - height) / 2}px`
+    const heightPx = `${height}px`
+    const moved =
+      caret.style.left !== left || caret.style.top !== top || caret.style.height !== heightPx
+    if (moved) {
+      caret.style.left = left
+      caret.style.top = top
+      caret.style.height = heightPx
+      // restart the blink so the caret is solid right after it moves
+      caret.style.animation = 'none'
+      void caret.offsetWidth
+      caret.style.animation = ''
+    }
     if (!caret.isConnected) root.append(caret)
   }
 
@@ -125,7 +132,7 @@ export function installCaret(root: HTMLElement, doc: Document): () => void {
     if (e.target === active) hide()
   }
   // selectionchange covers typing, clicks, arrows, and select-all inside inputs
-  const onSelectionChange = () => update()
+  const onSelectionChange = () => scheduleUpdate()
   const onTransitionEnd = (e: TransitionEvent) => {
     if (e.target === deferredSearchbar && e.propertyName === 'height') {
       revealDeferredSearchCaret()

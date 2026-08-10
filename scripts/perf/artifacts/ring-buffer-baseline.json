@@ -1,0 +1,12 @@
+{
+  "label": "baseline",
+  "at": "2026-08-10T15:38:15.189Z",
+  "bufferSize": 128,
+  "samples": 200000,
+  "shiftMs": 11.141708000000001,
+  "ringMs": 1.9833749999999988,
+  "speedup": 5.617549883405815,
+  "nsPerShift": 55.708540000000006,
+  "nsPerRing": 9.916874999999994,
+  "parity": true
+}
