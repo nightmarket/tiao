@@ -45,6 +45,8 @@ export function App() {
         title: 'Examples',
         anchor: 'bottom-center',
         width: 240,
+        // the router belongs at the top of the sidebar, above every scene pane
+        order: -10,
       })
       const nav = pane.addBinding({ example: slugFromHash() || examples[0]!.slug }, 'example', {
         view: 'thumbnails',
