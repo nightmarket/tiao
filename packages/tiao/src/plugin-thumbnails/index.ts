@@ -46,10 +46,11 @@ export const thumbnailsPlugin: InputPlugin<unknown> = {
     }
 
     const cells = entries.map((entry) => {
-      const pill = entry.thumb == null || entry.thumb === ''
-      const cell = pill
-        ? h('button', 'tiao-thumbs-cell tiao-thumbs-pill')
-        : h('button', 'tiao-thumbs-cell', thumbBox(entry.thumb))
+      const thumb = entry.thumb
+      const cell =
+        thumb == null || thumb === ''
+          ? h('button', 'tiao-thumbs-cell tiao-thumbs-pill')
+          : h('button', 'tiao-thumbs-cell', thumbBox(thumb))
       cell.type = 'button'
       cell.setAttribute('role', 'radio')
       cell.title = entry.text
