@@ -174,13 +174,27 @@ function ComponentC() {
 - `$set({ key: value })` and `$get('key')` on the returned object for programmatic access.
 - `usePane(id)` returns the live `Pane` (or `null` before load) for plugins/custom blades.
 
-### Production builds
+### Debug levels
 
-`useControls` is enabled when `NODE_ENV !== 'production'` (override per-hook with `enabled`, or globally with `setTiaoEnabled`). When disabled, hooks return plain default values and none of the DOM/UI code loads. No environment checks are needed in application code.
+Gating resolves from one canonical env variable, `DEBUG_LEVEL`, read through your bundler's client-exposure prefix — no setup call in application code:
+
+| Bundler | Variable |
+| --- | --- |
+| Next.js | `NEXT_PUBLIC_DEBUG_LEVEL` |
+| Vite | `VITE_DEBUG_LEVEL` |
+| Node / tests / custom `define` | `DEBUG_LEVEL` |
+
+- `0` — off: every gate returns false; no UI code loads.
+- `1` — armed: off unless the page URL has `?debug` (or `?debug=true`); `?debug=false` keeps it off. The pane lazy-loads only when enabled.
+- `2` — on: on unless the URL has `?debug=false`.
+
+Unset falls back to `NODE_ENV`: development is `2`, production is `0`. Override per-hook with `enabled`, or globally with `setTiaoEnabled`. When disabled, hooks return plain default values and none of the DOM/UI code loads.
+
+### Production builds
 
 Production builds go one step further. `@nightmarket/tiao/react` resolves through the `production` export condition to a build with no pane, no manager, and no dynamic `import()` of core, so the UI chunk is never emitted at all — `useControls` still returns values and `$set` still re-renders. Vite applies the condition on its own: the dev server loads the full pane, `vite build` picks the stripped build. Other setups may need it added to their resolve conditions (esbuild `--conditions=production`, `exportConditions` in `@rollup/plugin-node-resolve`, `resolve.conditionNames` in webpack). Without it they fall back to the development build, where core sits behind a dynamic `import()` and is split into a chunk production users never download.
 
-Because that build contains no pane code, `setTiaoEnabled(true)` cannot bring the UI back in it.
+Because that build contains no pane code, `setTiaoEnabled(true)` cannot bring the UI back in it — and neither can level `1` + `?debug=true`. To use level `1` on a production deployment, the bundler must not apply the `production` condition (Next/webpack/turbopack don't by default; in Vite, drop it from `resolve.conditions`). The UI then stays behind the dynamic `import()` and is only fetched when debug is enabled.
 
 The root vanilla API has the same behavior:
 
