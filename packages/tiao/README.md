@@ -38,12 +38,20 @@ React is an optional peer dependency and is only required for
 `@nightmarket/tiao/styles.css` disables that runtime injection.
 
 `useControls` and `mountPane` work without application-level environment
-checks: they lazy-load the pane in development and become no-ops in production.
+checks. Gating resolves from one canonical env variable, `DEBUG_LEVEL`, read
+through your bundler's client-exposure prefix (`NEXT_PUBLIC_DEBUG_LEVEL` in
+Next.js, `VITE_DEBUG_LEVEL` in Vite, bare `DEBUG_LEVEL` for Node or a custom
+`define`): `0` disables everything, `1` arms a runtime `?debug` URL toggle
+that lazy-loads the pane, and `2` enables by default (`?debug=false` turns it
+off). Unset falls back to `NODE_ENV` — pane in development, no-op in
+production.
 Production builds resolve through the `production` export condition, which Vite
 applies on its own; esbuild, Rollup, and webpack may need `production` added to
 their resolve conditions. Bundlers that skip it fall back to the development
-build, where the UI still sits behind a dynamic import. Since the pane's code is
-absent from a production build, `setTiaoEnabled(true)` cannot bring it back —
-use `@nightmarket/tiao/core` for controls that must exist in a shipped build.
+build, where the UI still sits behind a dynamic import — this is also what
+level `1` needs in a production deployment, since the stripped build contains
+no pane code and neither `setTiaoEnabled(true)` nor `?debug=true` can bring it
+back. Use `@nightmarket/tiao/core` for controls that must exist in a shipped
+build.
 
 See the [full documentation](https://github.com/nightmarket/tiao#readme).

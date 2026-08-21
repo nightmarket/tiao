@@ -1,6 +1,8 @@
 import { isTiaoEnabled } from '../config'
 import type { Pane, PaneOptions } from '../core'
 
+export { isTiaoEnabled, setTiaoEnabled } from '../config'
+
 export type PaneSetup = (pane: Pane) => void | (() => void)
 
 /**
