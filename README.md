@@ -312,6 +312,6 @@ The playground Vite config aliases `@nightmarket/tiao` / `@nightmarket/tiao/*` t
 ### Publishing
 
 ```sh
-npm login
-pnpm publish:packages
+pnpm install
+pnpm run publish:package
 ```
