@@ -27,7 +27,9 @@
   --tiao-fg-dim: #737373;
   --tiao-fg-faint: #a3a3a3;
   --tiao-titlebar-bg: rgba(15, 23, 42, 0.055);
-  --tiao-depth-line: color-mix(in srgb, var(--tiao-fg) 14%, var(--tiao-bg-solid));
+  --tiao-folder-caret: color-mix(in srgb, var(--tiao-fg) 16%, var(--tiao-bg-solid));
+  --tiao-folder-caret-hover: color-mix(in srgb, var(--tiao-fg) 40%, var(--tiao-bg-solid));
+  --tiao-depth-line: color-mix(in srgb, var(--tiao-fg) 8%, var(--tiao-bg-solid));
   --tiao-depth-line-hover: color-mix(in srgb, var(--tiao-fg) 24%, var(--tiao-bg-solid));
   --tiao-depth-line-active: color-mix(in srgb, var(--tiao-fg) 40%, var(--tiao-bg-solid));
   --tiao-focus: color-mix(in srgb, var(--tiao-fg) 32%, var(--tiao-bg-solid));
@@ -93,7 +95,9 @@
   --tiao-fg-dim: #737373;
   --tiao-fg-faint: #525252;
   --tiao-titlebar-bg: rgba(255, 255, 255, 0.06);
-  --tiao-depth-line: color-mix(in srgb, var(--tiao-fg) 14%, var(--tiao-bg-solid));
+  --tiao-folder-caret: color-mix(in srgb, var(--tiao-fg) 16%, var(--tiao-bg-solid));
+  --tiao-folder-caret-hover: color-mix(in srgb, var(--tiao-fg) 40%, var(--tiao-bg-solid));
+  --tiao-depth-line: color-mix(in srgb, var(--tiao-fg) 8%, var(--tiao-bg-solid));
   --tiao-depth-line-hover: color-mix(in srgb, var(--tiao-fg) 24%, var(--tiao-bg-solid));
   --tiao-depth-line-active: color-mix(in srgb, var(--tiao-fg) 40%, var(--tiao-bg-solid));
   --tiao-hover: rgba(255, 255, 255, 0.09);
@@ -124,7 +128,9 @@
   --tiao-fg-dim: #839496;
   --tiao-fg-faint: #657b83;
   --tiao-titlebar-bg: rgba(7, 54, 66, 0.85);
-  --tiao-depth-line: color-mix(in srgb, var(--tiao-fg) 14%, var(--tiao-bg-solid));
+  --tiao-folder-caret: color-mix(in srgb, var(--tiao-fg) 16%, var(--tiao-bg-solid));
+  --tiao-folder-caret-hover: color-mix(in srgb, var(--tiao-fg) 40%, var(--tiao-bg-solid));
+  --tiao-depth-line: color-mix(in srgb, var(--tiao-fg) 8%, var(--tiao-bg-solid));
   --tiao-depth-line-hover: color-mix(in srgb, var(--tiao-fg) 24%, var(--tiao-bg-solid));
   --tiao-depth-line-active: color-mix(in srgb, var(--tiao-fg) 40%, var(--tiao-bg-solid));
   --tiao-hover: rgba(253, 246, 227, 0.08);
@@ -155,7 +161,9 @@
   --tiao-fg-dim: #9aa3b5;
   --tiao-fg-faint: #7b849c;
   --tiao-titlebar-bg: rgba(59, 66, 82, 0.85);
-  --tiao-depth-line: color-mix(in srgb, var(--tiao-fg) 14%, var(--tiao-bg-solid));
+  --tiao-folder-caret: color-mix(in srgb, var(--tiao-fg) 16%, var(--tiao-bg-solid));
+  --tiao-folder-caret-hover: color-mix(in srgb, var(--tiao-fg) 40%, var(--tiao-bg-solid));
+  --tiao-depth-line: color-mix(in srgb, var(--tiao-fg) 8%, var(--tiao-bg-solid));
   --tiao-depth-line-hover: color-mix(in srgb, var(--tiao-fg) 24%, var(--tiao-bg-solid));
   --tiao-depth-line-active: color-mix(in srgb, var(--tiao-fg) 40%, var(--tiao-bg-solid));
   --tiao-hover: rgba(236, 239, 244, 0.1);
@@ -186,7 +194,9 @@
   --tiao-fg-dim: #6c7086;
   --tiao-fg-faint: #585b70;
   --tiao-titlebar-bg: rgba(49, 50, 68, 0.85);
-  --tiao-depth-line: color-mix(in srgb, var(--tiao-fg) 14%, var(--tiao-bg-solid));
+  --tiao-folder-caret: color-mix(in srgb, var(--tiao-fg) 16%, var(--tiao-bg-solid));
+  --tiao-folder-caret-hover: color-mix(in srgb, var(--tiao-fg) 40%, var(--tiao-bg-solid));
+  --tiao-depth-line: color-mix(in srgb, var(--tiao-fg) 8%, var(--tiao-bg-solid));
   --tiao-depth-line-hover: color-mix(in srgb, var(--tiao-fg) 24%, var(--tiao-bg-solid));
   --tiao-depth-line-active: color-mix(in srgb, var(--tiao-fg) 40%, var(--tiao-bg-solid));
   --tiao-hover: rgba(205, 214, 244, 0.09);
@@ -811,8 +821,11 @@
 .tiao-folder-header .tiao-icon-triangle {
   position: relative;
   top: -1px;
-  color: var(--tiao-fg-faint);
-  transition: transform 0.18s ease;
+  color: var(--tiao-folder-caret);
+  transition: transform 0.18s ease, color 0.12s ease;
+}
+.tiao-folder:hover > .tiao-folder-header .tiao-icon-triangle {
+  color: var(--tiao-folder-caret-hover);
 }
 .tiao-folder:not(.tiao-expanded) > .tiao-folder-header .tiao-icon-triangle {
   transform: rotate(-90deg);
@@ -881,12 +894,15 @@
   color: color-mix(in srgb, var(--tiao-folder-color) 55%, transparent);
 }
 .tiao-folder-colored > .tiao-folder-header .tiao-icon-triangle {
-  color: color-mix(in srgb, var(--tiao-folder-color) 45%, transparent);
+  color: color-mix(in srgb, var(--tiao-folder-color) 18%, var(--tiao-bg-solid));
+}
+.tiao-folder-colored:hover > .tiao-folder-header .tiao-icon-triangle {
+  color: color-mix(in srgb, var(--tiao-folder-color) 55%, var(--tiao-bg-solid));
 }
 /* opaque mixes toward the pane background (no alpha, so the cap dots and the
    line overlap without stacking artifacts) */
 .tiao-folder-colored > .tiao-folder-body > .tiao-folder-line {
-  --tiao-line-color: color-mix(in srgb, var(--tiao-folder-color) 30%, var(--tiao-bg-solid));
+  --tiao-line-color: color-mix(in srgb, var(--tiao-folder-color) 16%, var(--tiao-bg-solid));
 }
 .tiao-folder-colored:hover > .tiao-folder-body > .tiao-folder-line {
   --tiao-line-color: color-mix(in srgb, var(--tiao-folder-color) 55%, var(--tiao-bg-solid));
