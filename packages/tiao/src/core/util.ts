@@ -48,8 +48,10 @@ function suggestedDecimals(v: number): number {
   return 3
 }
 
+const NON_NUMBER = /[^\d.eE+-]/g
+
 export function parseNumberInput(text: string): number | null {
-  const v = Number(text.replace(/[^\d.eE+-]/g, ''))
+  const v = Number(text.replace(NON_NUMBER, ''))
   return Number.isFinite(v) ? v : null
 }
 

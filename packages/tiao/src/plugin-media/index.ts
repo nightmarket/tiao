@@ -57,6 +57,7 @@ export const mediaPlugin: InputPlugin<MediaValue> = {
     // object URL backing the current value; videos need it alive while playing
     let currentUrl: string | null = null
     let hintTimer: ReturnType<typeof setTimeout> | undefined
+    let loadGen = 0
 
     const setHint = (text: string, transient = false) => {
       hint.textContent = text
@@ -89,13 +90,20 @@ export const mediaPlugin: InputPlugin<MediaValue> = {
         setHint('Unsupported file type', true)
         return
       }
+      const gen = ++loadGen
       const url = URL.createObjectURL(file)
       if (IMAGE_TYPES.includes(file.type)) {
         const img = doc.createElement('img')
-        img.onload = () => commit(img, url, file.name)
+        img.onload = () => {
+          if (gen !== loadGen) {
+            URL.revokeObjectURL(url)
+            return
+          }
+          commit(img, url, file.name)
+        }
         img.onerror = () => {
           URL.revokeObjectURL(url)
-          setHint('Failed to load image', true)
+          if (gen === loadGen) setHint('Failed to load image', true)
         }
         img.src = url
       } else {
@@ -105,12 +113,16 @@ export const mediaPlugin: InputPlugin<MediaValue> = {
         video.playsInline = true
         video.autoplay = true
         video.onloadeddata = () => {
+          if (gen !== loadGen) {
+            URL.revokeObjectURL(url)
+            return
+          }
           commit(video, url, file.name)
           void video.play().catch(() => {})
         }
         video.onerror = () => {
           URL.revokeObjectURL(url)
-          setHint('Failed to load video', true)
+          if (gen === loadGen) setHint('Failed to load video', true)
         }
         video.src = url
       }
@@ -163,6 +175,7 @@ export const mediaPlugin: InputPlugin<MediaValue> = {
       input.removeEventListener('change', onInputChange)
       clear.removeEventListener('click', onClear)
       clearTimeout(hintTimer)
+      loadGen++
       if (currentUrl) URL.revokeObjectURL(currentUrl)
     })
 

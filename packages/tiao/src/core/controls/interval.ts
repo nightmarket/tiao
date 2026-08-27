@@ -50,6 +50,10 @@ function createIntervalRow(ctx: PluginContext<IntervalValue>): PluginView {
       side === 'min'
         ? { min: clamp(snap(v, step), rangeMin, cur.max), max: cur.max }
         : { min: cur.min, max: clamp(snap(v, step), cur.min, rangeMax) }
+    if (next.min === cur.min && next.max === cur.max) {
+      if (last) value.set(cur, { source: 'ui', last })
+      return
+    }
     value.set(next, { source: 'ui', last })
   }
 
@@ -114,7 +118,8 @@ function createIntervalRow(ctx: PluginContext<IntervalValue>): PluginView {
         const cur = value.get()
         // nudge "to" without re-snapping so Alt fractions survive (matches scrubber)
         const nextMax = clamp(nudge(cur.max, delta, base), cur.min, rangeMax)
-        value.set({ min: cur.min, max: nextMax }, { source: 'ui', last: true })
+        if (nextMax === cur.max) value.set(cur, { source: 'ui', last: true })
+        else value.set({ min: cur.min, max: nextMax }, { source: 'ui', last: true })
       },
     },
     onDispose: ctx.onDispose,

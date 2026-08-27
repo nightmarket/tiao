@@ -6,8 +6,13 @@ export function createSliderTrack(): HTMLElement {
   return h('div', 'tiao-slider', h('div', 'tiao-slider-fill'), h('div', 'tiao-slider-handles'))
 }
 
+const fillRange = new WeakMap<HTMLElement, [number, number]>()
+
 /** Percent span of the filled band; handlebars clamp against these in CSS. */
 export function setSliderFillRange(track: HTMLElement, startPct: number, endPct: number): void {
+  const prev = fillRange.get(track)
+  if (prev && prev[0] === startPct && prev[1] === endPct) return
+  fillRange.set(track, [startPct, endPct])
   track.style.setProperty('--tiao-fill-start', `${startPct}%`)
   track.style.setProperty('--tiao-fill-end', `${endPct}%`)
 }

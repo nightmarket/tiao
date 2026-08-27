@@ -36,7 +36,7 @@ export function h<K extends keyof HTMLElementTagNameMap>(
   return el
 }
 
-const SVG_NS = 'http://www.w3.org/2000/svg'
+export const SVG_NS = 'http://www.w3.org/2000/svg'
 
 export function icon(name: 'chevron' | 'plus' | 'check'): SVGSVGElement {
   if (name === 'chevron') {
@@ -314,7 +314,7 @@ export function startDrag(ev: PointerEvent, handlers: DragHandlers): void {
   }
 
   finishActiveDrag = endActive
-  doc.addEventListener('pointermove', onMove, true)
+  doc.addEventListener('pointermove', onMove, { capture: true, passive: true })
   doc.addEventListener('pointerup', onUp, true)
   doc.addEventListener('pointercancel', onUp, true)
   win?.addEventListener('blur', onWindowBlur)
@@ -368,12 +368,22 @@ export interface LongPressHandlers {
 /** Hold without moving to fire `onLongPress`; a quick release fires `onTap`. */
 export function longPress(el: HTMLElement, handlers: LongPressHandlers): () => void {
   const delay = handlers.delay ?? LONG_PRESS_MS
+  const doc = el.ownerDocument
   let timer: ReturnType<typeof setTimeout> | null = null
   let startX = 0
   let startY = 0
   let pointerId = 0
   let pressed = false
   let fired = false
+  let watching = false
+
+  const stopWatch = () => {
+    if (!watching) return
+    watching = false
+    doc.removeEventListener('pointermove', onMove, true)
+    doc.removeEventListener('pointerup', onUp, true)
+    doc.removeEventListener('pointercancel', onUp, true)
+  }
 
   const clear = () => {
     if (timer !== null) {
@@ -383,43 +393,46 @@ export function longPress(el: HTMLElement, handlers: LongPressHandlers): () => v
     pressed = false
   }
 
+  const onMove = (e: PointerEvent) => {
+    if (e.pointerId !== pointerId) return
+    if (Math.hypot(e.clientX - startX, e.clientY - startY) > MOVE_THRESHOLD) {
+      stopWatch()
+      clear()
+    }
+  }
+  const onUp = (e: PointerEvent) => {
+    if (e.pointerId !== pointerId) return
+    const wasPressed = pressed
+    const wasFired = fired
+    stopWatch()
+    clear()
+    if (wasPressed && !wasFired) handlers.onTap?.(e)
+  }
+
   const onPointerDown = (ev: PointerEvent) => {
     if (ev.button !== 0) return
     if (handlers.filter && !handlers.filter(ev)) return
+    stopWatch()
     pressed = true
     fired = false
     startX = ev.clientX
     startY = ev.clientY
     pointerId = ev.pointerId
-    const doc = el.ownerDocument
     timer = setTimeout(() => {
       timer = null
       if (!pressed) return
       fired = true
       handlers.onLongPress(ev)
     }, delay)
-
-    const onMove = (e: PointerEvent) => {
-      if (e.pointerId !== pointerId) return
-      if (Math.hypot(e.clientX - startX, e.clientY - startY) > MOVE_THRESHOLD) clear()
-    }
-    const onUp = (e: PointerEvent) => {
-      if (e.pointerId !== pointerId) return
-      doc.removeEventListener('pointermove', onMove, true)
-      doc.removeEventListener('pointerup', onUp, true)
-      doc.removeEventListener('pointercancel', onUp, true)
-      const wasPressed = pressed
-      const wasFired = fired
-      clear()
-      if (wasPressed && !wasFired) handlers.onTap?.(e)
-    }
-    doc.addEventListener('pointermove', onMove, true)
+    watching = true
+    doc.addEventListener('pointermove', onMove, { capture: true, passive: true })
     doc.addEventListener('pointerup', onUp, true)
     doc.addEventListener('pointercancel', onUp, true)
   }
 
   el.addEventListener('pointerdown', onPointerDown)
   return () => {
+    stopWatch()
     clear()
     el.removeEventListener('pointerdown', onPointerDown)
   }

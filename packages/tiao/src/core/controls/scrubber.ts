@@ -1,4 +1,4 @@
-import { collapseSelection, h, setEwCursor, setRowActive, startDrag } from '../dom'
+import { collapseSelection, h, setEwCursor, setRowActive, startDrag, SVG_NS } from '../dom'
 import { arrowKeyStep, clamp, formatNumber, nudge, parseNumberInput, snap } from '../util'
 import { Value } from '../value'
 
@@ -34,8 +34,6 @@ export interface ScrubberApi {
   beginScrub: (ev: PointerEvent) => void
   dispose: () => void
 }
-
-const SVG_NS = 'http://www.w3.org/2000/svg'
 
 /** Copy pane theme tokens onto a body-portaled overlay. */
 export function applyOverlayTheme(overlay: HTMLElement, from: Element): void {
@@ -130,6 +128,7 @@ export function createScrubber(
     wrap.classList.remove('tiao-scrub-dragging')
     setRowActive(wrap, false)
     setEwCursor(input, false)
+    lastGuideDx = NaN
   }
 
   const showOverlay = (anchor: HTMLElement) => {
@@ -162,16 +161,16 @@ export function createScrubber(
     doc.body.append(overlay)
   }
 
+  let lastGuideDx = NaN
   const updateGuide = (clientX: number) => {
     if (!guideBody || !guideHead || !tooltip) return
     const dx = clientX - originX
+    if (dx === lastGuideDx) return
+    lastGuideDx = dx
     // arrow sits just shy of the cursor so the head reads as a pointer tip
     const aox = dx + (dx > 0 ? -1 : dx < 0 ? 1 : 0)
     const adx = clamp(-aox, -4, 4)
-    guideHead.setAttribute(
-      'd',
-      [`M ${aox + adx},0 L${aox},4 L${aox + adx},8`, `M ${dx},-1 L${dx},9`].join(' '),
-    )
+    guideHead.setAttribute('d', `M ${aox + adx},0 L${aox},4 L${aox + adx},8 M ${dx},-1 L${dx},9`)
     guideBody.setAttribute('d', `M 0,4 L${dx},4`)
     tooltip.style.left = `${dx}px`
   }
@@ -283,8 +282,8 @@ export function createScrubber(
 
   const unsubscribe = value.subscribe(() => {
     const text = format(get())
-    if (input.readOnly) input.value = text
-    if (tooltip) tooltip.textContent = text
+    if (input.readOnly && input.value !== text) input.value = text
+    if (tooltip && tooltip.textContent !== text) tooltip.textContent = text
   })
 
   return {

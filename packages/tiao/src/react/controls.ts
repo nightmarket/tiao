@@ -37,6 +37,7 @@ export interface ControlsInit<S extends Schema> {
   options: UseControlsOptions
   valueKeys: ValueKey[]
   keys: string[]
+  initials: Map<string, unknown>
 }
 
 /** Resolve the hook's overloaded arguments into everything keyed off the schema. */
@@ -57,8 +58,9 @@ export function initControls<S extends Schema>(
   const folderPath = folder ? folder.split('.').filter(Boolean) : []
   const valueKeys: ValueKey[] = []
   collectValueKeys(schema, folderPath, valueKeys)
+  const initials = new Map(valueKeys.map((v) => [v.name, v.initial]))
 
-  return { paneId, folderPath, schema, options, valueKeys, keys: valueKeys.map((v) => v.key) }
+  return { paneId, folderPath, schema, options, valueKeys, keys: valueKeys.map((v) => v.key), initials }
 }
 
 function collectValueKeys(schema: Schema, folderPath: string[], out: ValueKey[]): void {
@@ -82,7 +84,7 @@ function collectValueKeys(schema: Schema, folderPath: string[], out: ValueKey[])
  */
 export function useControlValues<S extends Schema>(
   store: ControlStore,
-  { folderPath, valueKeys, keys }: ControlsInit<S>,
+  { folderPath, valueKeys, keys, initials }: ControlsInit<S>,
   setValue: (key: string, value: unknown) => void,
 ): ControlsResult<S> {
   const subscribe = useCallback(
@@ -107,15 +109,18 @@ export function useControlValues<S extends Schema>(
 
   const values = useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
 
-  return useMemo(() => {
-    const $set = (patch: Record<string, unknown>) => {
-      for (const [name, v] of Object.entries(patch)) setValue(keyFor(folderPath, name), v)
-    }
-    const $get = (name: string) => {
-      const key = keyFor(folderPath, name)
-      return store.has(key) ? store.get(key) : valueKeys.find((v) => v.name === name)?.initial
-    }
-    return { ...values, $set, $get } as ControlsResult<S>
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- all captured args are render-stable (see JSDoc)
-  }, [values])
+  const $set = useCallback((patch: Record<string, unknown>) => {
+    for (const [name, v] of Object.entries(patch)) setValue(keyFor(folderPath, name), v)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- captured on first render
+  }, [])
+  const $get = useCallback((name: string) => {
+    const key = keyFor(folderPath, name)
+    return store.has(key) ? store.get(key) : initials.get(name)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- captured on first render
+  }, [])
+
+  return useMemo(
+    () => ({ ...values, $set, $get }) as ControlsResult<S>,
+    [values, $set, $get],
+  )
 }

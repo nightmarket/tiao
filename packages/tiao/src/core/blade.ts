@@ -309,10 +309,12 @@ function valuePath(container: Container, key: string): string {
 function persistValue<T>(store: ValueStore, path: string, api: BindingApi<T>): void {
   const saved = store.read(path)
   if (sameShape(saved, api.defaultValue)) api.value.set(saved as T)
-  api.value.subscribe((v, meta) => {
-    if (meta.sample || meta.last === false || meta.source === 'refresh') return
-    store.write(path, v)
-  })
+  api.onDispose(
+    api.value.subscribe((v, meta) => {
+      if (meta.sample || meta.last === false || meta.source === 'refresh') return
+      store.write(path, v)
+    }),
+  )
 }
 
 /** visit every binding under `item`, descending into folders and tab pages */

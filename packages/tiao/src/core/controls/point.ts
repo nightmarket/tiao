@@ -1,4 +1,4 @@
-import { h, icon, startDrag } from '../dom'
+import { h, icon, startDrag, SVG_NS } from '../dom'
 import { clamp, formatNumber, isRecord, mapRange, snap } from '../util'
 import { createStickyOverlay } from './popup'
 import { createComponentScrubber, createOverlayTooltip } from './scrubber'
@@ -15,7 +15,6 @@ interface AxisOptions {
   step?: number
 }
 
-const SVG_NS = 'http://www.w3.org/2000/svg'
 const PAD_SIZE = 136
 /** default display / snap precision for point axes when no step is set */
 const DEFAULT_POINT_STEP = 0.01
@@ -52,8 +51,12 @@ export const pointInputPlugin: InputPlugin<PointValue> = {
     const fields = h('div', 'tiao-point-fields')
 
     const setAxis = (axis: Axis, v: number, last: boolean) => {
-      // new object so downstream equality checks see the change
-      ctx.value.set({ ...ctx.value.get(), [axis]: v }, { source: 'ui', last })
+      const cur = ctx.value.get()
+      if (cur[axis] === v) {
+        if (last) ctx.value.set(cur, { source: 'ui', last })
+        return
+      }
+      ctx.value.set({ ...cur, [axis]: v }, { source: 'ui', last })
     }
 
     const scrubs = axes.map((axis) => {
@@ -175,7 +178,13 @@ function createPadOverlay(
   const apply = (clientX: number, clientY: number, last: boolean) => {
     const x = clamp(snap(mapRange(clientX, rect.left, rect.right, xMin, xMax), xStep), xMin, xMax)
     const y = clamp(snap(mapRange(clientY, rect.bottom, rect.top, yMin, yMax), yStep), yMin, yMax)
-    const next = { ...ctx.value.get(), x, y }
+    const cur = ctx.value.get()
+    if (cur.x === x && cur.y === y) {
+      if (last) ctx.value.set(cur, { source: 'ui', last })
+      tooltip.place(originX, originY, clientX, clientY, formatPoint(cur))
+      return
+    }
+    const next = { ...cur, x, y }
     ctx.value.set(next, { source: 'ui', last })
     tooltip.place(originX, originY, clientX, clientY, formatPoint(next))
   }

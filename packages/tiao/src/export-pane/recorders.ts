@@ -59,13 +59,17 @@ export async function recordMp4(canvas: HTMLCanvasElement, opts: RecordOptions):
   let stopped = false
   let pending: Promise<void> = Promise.resolve()
   let rafId = 0
+  let adding = false
 
   const capture = () => {
     if (stopped) return
-    const timestamp = (performance.now() - start) / 1000
-    // chain adds so encoder backpressure is respected without dropping order
-    pending = pending.then(() => (stopped ? undefined : source.add(timestamp, frameDuration)))
     rafId = requestAnimationFrame(capture)
+    if (adding) return
+    const timestamp = (performance.now() - start) / 1000
+    adding = true
+    pending = source.add(timestamp, frameDuration).finally(() => {
+      adding = false
+    })
   }
   rafId = requestAnimationFrame(capture)
 

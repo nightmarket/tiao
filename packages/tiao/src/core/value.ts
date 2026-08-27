@@ -10,6 +10,8 @@ export interface ValueMeta {
 export type ValueListener<T> = (value: T, meta: ValueMeta) => void
 export type Equals<T> = (a: T, b: T) => boolean
 
+const EMPTY_META: ValueMeta = {}
+
 /** Minimal reactive container. The single source of truth for every control. */
 export class Value<T> {
   private listeners = new Set<ValueListener<T>>()
@@ -23,7 +25,7 @@ export class Value<T> {
     return this.raw
   }
 
-  set(next: T, meta: ValueMeta = {}): void {
+  set(next: T, meta: ValueMeta = EMPTY_META): void {
     // re-emit unchanged values when `last` is set so drag-end events fire
     if (this.equals(this.raw, next) && !meta.last && !meta.sample) return
     this.raw = next
