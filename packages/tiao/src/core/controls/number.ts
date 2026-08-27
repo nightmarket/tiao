@@ -1,7 +1,7 @@
 import { h, startDrag } from '../dom'
 import { clamp, mapRange, nudge, snap } from '../util'
 import { createScrubber } from './scrubber'
-import { bindSliderTrack } from './slider'
+import { bindSliderTrack, createSliderTrack, setSliderFillRange } from './slider'
 import type { InputPlugin, PluginContext, PluginView } from '../plugin'
 
 /**
@@ -28,8 +28,7 @@ function createSliderRow(ctx: PluginContext<number>, min: number, max: number): 
   const step = options.step
   const constrain = (v: number) => clamp(snap(v, step), min, max)
 
-  const fill = h('div', 'tiao-slider-fill')
-  const track = h('div', 'tiao-slider', fill)
+  const track = createSliderTrack()
   const scrub = createScrubber(
     value,
     () => value.get(),
@@ -49,7 +48,7 @@ function createSliderRow(ctx: PluginContext<number>, min: number, max: number): 
   const el = h('div', 'tiao-number', track, scrub.element)
 
   const render = (v: number) => {
-    fill.style.width = `${clamp(mapRange(v, min, max, 0, 100), 0, 100)}%`
+    setSliderFillRange(track, 0, clamp(mapRange(v, min, max, 0, 100), 0, 100))
   }
   render(value.get())
   ctx.onDispose(value.subscribe(render))

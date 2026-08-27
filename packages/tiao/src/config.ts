@@ -16,21 +16,31 @@ export function setTiaoEnabled(enabled: boolean): void {
  * - `1` — armed: off unless the URL has `?debug` (and not `?debug=false`).
  * - `2` — on: on unless the URL has `?debug=false`.
  *
- * Unset or unrecognized falls back to `NODE_ENV`: development is 2, production is 0.
+ * Unset or unrecognized falls back to `NODE_ENV`: a defined non-production
+ * value is 2, production is 0. Missing `process` / `NODE_ENV` is 0 so a
+ * production bundle that never inlined env stays off.
  */
 function debugLevel(): 0 | 1 | 2 {
-  // Exact MemberExpressions so Next/webpack/Vite can inline them. Do not wrap
-  // in typeof-process or try/catch — those block define-replacement and DCE.
   const value =
-    process!.env.NEXT_PUBLIC_DEBUG_LEVEL ??
-    process!.env.DEBUG_LEVEL ??
-    (import.meta as ImportMeta & { env: { VITE_DEBUG_LEVEL?: string } }).env
-      .VITE_DEBUG_LEVEL
+    (typeof process !== 'undefined' && process?.env != null
+      ? process.env.NEXT_PUBLIC_DEBUG_LEVEL ?? process.env.DEBUG_LEVEL
+      : undefined) ??
+    (import.meta as ImportMeta & { env?: { VITE_DEBUG_LEVEL?: string } }).env
+      ?.VITE_DEBUG_LEVEL
 
   if (value === '0') return 0
   if (value === '1') return 1
   if (value === '2') return 2
-  return process!.env.NODE_ENV !== 'production' ? 2 : 0
+
+  // Exact `process.env.NODE_ENV` so Vite/webpack can inline it. Bundlers that
+  // replace it with "development" still resolve to 2 even without a process
+  // global; a missing binding throws and we stay off.
+  try {
+    const nodeEnv = process.env.NODE_ENV
+    return nodeEnv && nodeEnv !== 'production' ? 2 : 0
+  } catch {
+    return 0
+  }
 }
 
 let cachedSearch: string | null = null
