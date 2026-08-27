@@ -13,6 +13,7 @@ export function injectCss(doc: Document, key: string, cssText: string): void {
 
 /** Inject the core stylesheet once per document (no-op if styles.css was imported manually). */
 export function injectStyles(doc: Document): void {
+  if (doc.querySelector('style[data-tiao], link[data-tiao]')) return
   const stylesLoaded = doc.defaultView
     ?.getComputedStyle(doc.documentElement)
     .getPropertyValue(STYLES_MARKER)

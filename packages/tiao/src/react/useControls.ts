@@ -29,7 +29,6 @@ export function useControls<S extends Schema>(
     manager: ManagerApi
     init: ControlsInit<S>
     enabled: boolean
-    setValue: (key: string, value: unknown) => void
   } | null>(null)
 
   if (stable.current === null) {
@@ -39,10 +38,9 @@ export function useControls<S extends Schema>(
       manager,
       init,
       enabled: isTiaoEnabled(init.options.enabled),
-      setValue: (key, value) => manager.setValue(key, value),
     }
   }
-  const { manager, init, enabled, setValue } = stable.current
+  const { manager, init, enabled } = stable.current
 
   useEffect(() => {
     const paneOpt = init.options.pane
@@ -52,5 +50,5 @@ export function useControls<S extends Schema>(
     // eslint-disable-next-line react-hooks/exhaustive-deps -- captured on first render
   }, [])
 
-  return useControlValues(manager.store, init, setValue)
+  return useControlValues(manager.store, init, (key, value) => manager.setValue(key, value))
 }

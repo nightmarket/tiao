@@ -238,9 +238,12 @@ function installFixedInsets(doc: Document, entry: DockEntry): void {
   if (!view) return
   const marked = new Set<Element>()
 
+  const SKIP_TAGS = new Set(['SCRIPT', 'STYLE', 'LINK', 'META', 'NOSCRIPT', 'BR', 'WBR', 'TEMPLATE'])
+
   /** edge-to-edge fixed chrome; floating UI like a toast or modal is left be */
   const spansViewport = (el: Element): boolean => {
     if (marked.has(el) || el.hasAttribute(SKIP_ATTR) || el.closest(OWN_UI)) return false
+    if (SKIP_TAGS.has(el.tagName)) return false
     const cs = view.getComputedStyle(el)
     // parseFloat so '0', '0px', and '0%' all read as flush, and 'auto' does not
     if (cs.position !== 'fixed' || parseFloat(cs.left) !== 0 || parseFloat(cs.right) !== 0) {

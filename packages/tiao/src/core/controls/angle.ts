@@ -1,10 +1,9 @@
-import { h, startDrag } from '../dom'
+import { h, startDrag, SVG_NS } from '../dom'
 import { clamp, formatNumber, snap } from '../util'
 import { createStickyOverlay } from './popup'
 import { createOverlayTooltip, createScrubber } from './scrubber'
 import type { InputPlugin, PluginContext, PluginView } from '../plugin'
 
-const SVG_NS = 'http://www.w3.org/2000/svg'
 const TAU = Math.PI * 2
 const DIAL_SIZE = 72
 /** screen angle: 0 at 12 o'clock, clockwise */
@@ -45,18 +44,7 @@ function createAngleRow(ctx: PluginContext<number>): PluginView {
     return clamp(snapped, min ?? -Infinity, max ?? Infinity)
   }
 
-  const setFromPointer = (
-    originX: number,
-    originY: number,
-    clientX: number,
-    clientY: number,
-    last: boolean,
-  ) => {
-    const dx = clientX - originX
-    const dy = clientY - originY
-    if (dx === 0 && dy === 0) return
-    let rad = Math.atan2(dx, -dy) // 0 at 12 o'clock, clockwise
-    if (rad < 0) rad += TAU
+  const applyRad = (rad: number, last: boolean) => {
     value.set(constrain(fromRad(rad)), { source: 'ui', last })
   }
 
@@ -77,8 +65,10 @@ function createAngleRow(ctx: PluginContext<number>): PluginView {
   const renderKnob = (v: number) => {
     const a = toScreen(toRad(v))
     const r = 5.5
-    needle.setAttribute('x2', String(8 + Math.cos(a) * r))
-    needle.setAttribute('y2', String(8 + Math.sin(a) * r))
+    const x2 = String(8 + Math.cos(a) * r)
+    const y2 = String(8 + Math.sin(a) * r)
+    if (needle.getAttribute('x2') !== x2) needle.setAttribute('x2', x2)
+    if (needle.getAttribute('y2') !== y2) needle.setAttribute('y2', y2)
   }
   renderKnob(value.get())
 
@@ -150,8 +140,9 @@ function createAngleRow(ctx: PluginContext<number>): PluginView {
 
   const applyPointer = (clientX: number, clientY: number, last: boolean) => {
     const rad = pointerRad(clientX, clientY)
-    if (rad !== null) noteDirection(rad)
-    setFromPointer(originX, originY, clientX, clientY, last)
+    if (rad === null) return
+    noteDirection(rad)
+    applyRad(rad, last)
     syncDial()
     tooltip.place(originX, originY, clientX, clientY, format(value.get()))
   }
@@ -231,8 +222,12 @@ function createAngleDial(doc: Document, size: number): AngleDial {
   ringSolid.setAttribute('class', 'tiao-angle-ring-solid')
   const zero = doc.createElementNS(SVG_NS, 'line')
   zero.setAttribute('class', 'tiao-angle-zero')
+  zero.setAttribute('x1', '0')
+  zero.setAttribute('y1', '0')
   const ray = doc.createElementNS(SVG_NS, 'line')
   ray.setAttribute('class', 'tiao-angle-ray')
+  ray.setAttribute('x1', '0')
+  ray.setAttribute('y1', '0')
   const arrow = doc.createElementNS(SVG_NS, 'path')
   arrow.setAttribute('class', 'tiao-angle-arrow')
   const hub = doc.createElementNS(SVG_NS, 'circle')
@@ -259,6 +254,10 @@ function createAngleDial(doc: Document, size: number): AngleDial {
     return `M ${x0},${y0} A ${r},${r} 0 ${large} ${sweep} ${x1},${y1}`
   }
 
+  const setAttr = (el: Element, name: string, value: string) => {
+    if (el.getAttribute(name) !== value) el.setAttribute(name, value)
+  }
+
   const render = (rad: number, ccw = false) => {
     const a = toScreen(rad)
     const zeroA = toScreen(0)
@@ -268,20 +267,17 @@ function createAngleDial(doc: Document, size: number): AngleDial {
     const zy = Math.sin(zeroA) * radius
     const clockwise = !ccw
 
-    ringSolid.setAttribute('d', arcPath(zeroA, a, radius, clockwise) || `M ${zx},${zy}`)
-    ringDot.setAttribute(
+    setAttr(ringSolid, 'd', arcPath(zeroA, a, radius, clockwise) || `M ${zx},${zy}`)
+    setAttr(
+      ringDot,
       'd',
       arcPath(a, zeroA, radius, clockwise) ||
         `M ${zx},${zy} A ${radius},${radius} 0 1 ${clockwise ? 1 : 0} ${zx - 0.01},${zy}`,
     )
-    zero.setAttribute('x1', '0')
-    zero.setAttribute('y1', '0')
-    zero.setAttribute('x2', String(zx))
-    zero.setAttribute('y2', String(zy))
-    ray.setAttribute('x1', '0')
-    ray.setAttribute('y1', '0')
-    ray.setAttribute('x2', String(tipX))
-    ray.setAttribute('y2', String(tipY))
+    setAttr(zero, 'x2', String(zx))
+    setAttr(zero, 'y2', String(zy))
+    setAttr(ray, 'x2', String(tipX))
+    setAttr(ray, 'y2', String(tipY))
 
     // tangent along the motion direction (CW or CCW)
     const tx = clockwise ? -Math.sin(a) : Math.sin(a)
@@ -292,7 +288,8 @@ function createAngleDial(doc: Document, size: number): AngleDial {
     const aw = 3.5
     const tipAx = tipX + tx
     const tipAy = tipY + ty
-    arrow.setAttribute(
+    setAttr(
+      arrow,
       'd',
       `M ${tipAx - tx * ah + nx * aw},${tipAy - ty * ah + ny * aw} L ${tipAx},${tipAy} L ${tipAx - tx * ah - nx * aw},${tipAy - ty * ah - ny * aw}`,
     )

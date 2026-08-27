@@ -1,4 +1,4 @@
-import { onTick } from '../core'
+import { onFpsSample, onTick } from '../core'
 
 /** Live sample values. Poll with readonly bindings or read directly. */
 export interface PerfStats {
@@ -288,7 +288,6 @@ export function createPerfMonitor(options: PerfMonitorOptions = {}): PerfMonitor
     if (Array.isArray(current.programs)) stats.shaders = current.programs.length
   }
 
-  // Snapshot + reset every display frame; report fps/cpu/gpu on the sampling window.
   let windowStart = typeof performance !== 'undefined' ? performance.now() : 0
   const tick = (t: number) => {
     displayFrames++
@@ -297,8 +296,6 @@ export function createPerfMonitor(options: PerfMonitorOptions = {}): PerfMonitor
     const elapsed = t - windowStart
     if (elapsed < sampleMs) return
 
-    stats.fps = (displayFrames * 1000) / elapsed
-    // cpuSum is total JS time in top-level render trees over the window
     stats.cpu = displayFrames > 0 ? cpuSum / displayFrames : 0
     cpuSum = 0
     displayFrames = 0
@@ -321,6 +318,9 @@ export function createPerfMonitor(options: PerfMonitorOptions = {}): PerfMonitor
     if (options.gpuMemory) stats.gpuMemory = options.gpuMemory() / MB
   }
   const stopTick = info ? onInfoTick(info, tick) : onTick(tick)
+  const stopFps = onFpsSample(sampleMs, (fps) => {
+    stats.fps = fps
+  })
 
   let disposed = false
   return {
@@ -333,6 +333,7 @@ export function createPerfMonitor(options: PerfMonitorOptions = {}): PerfMonitor
       if (disposed) return
       disposed = true
       stopTick()
+      stopFps()
       stopInstrumentation?.()
       timer?.dispose()
     },

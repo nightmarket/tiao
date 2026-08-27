@@ -95,16 +95,15 @@ export function useControls<S extends Schema>(
   const stable = useRef<{
     manager: ManagerApi
     init: ControlsInit<S>
-    setValue: (key: string, value: unknown) => void
   } | null>(null)
   if (stable.current === null) {
     const init = initControls(a, b, c)
     const manager = getManager(init.paneId)
-    stable.current = { manager, init, setValue: (key, value) => manager.setValue(key, value) }
+    stable.current = { manager, init }
   }
-  const { manager, init, setValue } = stable.current
+  const { manager, init } = stable.current
 
-  return useControlValues(manager.store, init, setValue)
+  return useControlValues(manager.store, init, (key, value) => manager.setValue(key, value))
 }
 
 /** No pane is ever created, so this stays null (as it does when disabled). */

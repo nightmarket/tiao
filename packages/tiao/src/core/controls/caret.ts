@@ -31,6 +31,11 @@ export function installCaret(root: HTMLElement, doc: Document): () => void {
   let frame = 0
   let deferredSearchbar: HTMLElement | null = null
   let revealTimer = 0
+  let fontKey = ''
+  let fontSize = 0
+  let paddingLeft = 0
+  let paddingRight = 0
+  let textAlign = ''
 
   const hide = () => {
     caret.remove()
@@ -59,24 +64,32 @@ export function installCaret(root: HTMLElement, doc: Document): () => void {
       return
     }
     const cs = win.getComputedStyle(active)
-    meas.font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`
+    const nextFont = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`
+    if (nextFont !== fontKey) {
+      fontKey = nextFont
+      meas.font = nextFont
+      fontSize = parseFloat(cs.fontSize)
+      paddingLeft = parseFloat(cs.paddingLeft)
+      paddingRight = parseFloat(cs.paddingRight)
+      textAlign = cs.textAlign
+    }
     const value = active.value
     const rect = active.getBoundingClientRect()
     let x: number
-    if (cs.textAlign === 'right') {
+    if (textAlign === 'right') {
       // right-aligned fields rarely overflow; measure back from the right edge
-      x = rect.right - parseFloat(cs.paddingRight) - meas.measureText(value.slice(start)).width
+      x = rect.right - paddingRight - meas.measureText(value.slice(start)).width
     } else {
       x =
         rect.left +
-        parseFloat(cs.paddingLeft) +
+        paddingLeft +
         meas.measureText(value.slice(0, start)).width -
         active.scrollLeft
     }
     x = Math.min(Math.max(x, rect.left + 1), rect.right - 3)
 
     const rootRect = root.getBoundingClientRect()
-    const height = Math.min(rect.height - 6, parseFloat(cs.fontSize) + 4)
+    const height = Math.min(rect.height - 6, fontSize + 4)
     const left = `${x - rootRect.left}px`
     const top = `${rect.top - rootRect.top + (rect.height - height) / 2}px`
     const heightPx = `${height}px`
@@ -132,7 +145,10 @@ export function installCaret(root: HTMLElement, doc: Document): () => void {
     }
   }
   const onFocusOut = (e: FocusEvent) => {
-    if (e.target === active) hide()
+    if (e.target === active) {
+      fontKey = ''
+      hide()
+    }
   }
   // selectionchange covers typing, clicks, arrows, and select-all inside inputs
   const onSelectionChange = () => scheduleUpdate()

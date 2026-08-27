@@ -30,6 +30,7 @@ export { Value } from './value'
 export type { ValueListener, ValueMeta } from './value'
 export { onTick, onInterval, onFpsSample } from './ticker'
 export {
+  SVG_NS,
   h,
   icon,
   gearIcon,

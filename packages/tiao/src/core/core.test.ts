@@ -989,7 +989,7 @@ describe('Pane registry and chrome', () => {
     }
   })
 
-  it('clamps free positions and re-clamps on window resize', () => {
+  it('clamps free positions and re-clamps on window resize', async () => {
     const pane = new Pane()
     Object.defineProperty(pane.element, 'offsetWidth', { value: 300, configurable: true })
     Object.defineProperty(pane.element, 'offsetHeight', { value: 200, configurable: true })
@@ -1005,6 +1005,7 @@ describe('Pane registry and chrome', () => {
     const originalWidth = window.innerWidth
     Object.defineProperty(window, 'innerWidth', { value: 600, configurable: true })
     window.dispatchEvent(new Event('resize'))
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
     expect(pane.element.style.left).toBe('300px')
     Object.defineProperty(window, 'innerWidth', { value: originalWidth, configurable: true })
     pane.dispose()
@@ -1138,6 +1139,17 @@ describe('Pane registry and chrome', () => {
     const contextSpy = vi
       .spyOn(HTMLCanvasElement.prototype, 'getContext')
       .mockReturnValue(context as unknown as CanvasRenderingContext2D)
+    let raf: FrameRequestCallback | undefined
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+      raf = cb
+      return 1
+    })
+    vi.stubGlobal('cancelAnimationFrame', vi.fn())
+    const flushDraw = () => {
+      const cb = raf
+      raf = undefined
+      cb?.(0)
+    }
     vi.stubGlobal(
       'ResizeObserver',
       class {
@@ -1165,17 +1177,19 @@ describe('Pane registry and chrome', () => {
     binding.refresh()
     params.fps = 50
     binding.refresh()
+    flushDraw()
 
     // Four samples span 100px, so two samples occupy the rightmost third.
     expect(moveTo).toHaveBeenLastCalledWith(100 - 100 / 3, 30)
-    expect(context.fill).toHaveBeenCalledTimes(2)
+    expect(context.fill).toHaveBeenCalledTimes(1)
 
     const onChange = vi.fn()
     binding.on('change', onChange)
     binding.value.set(50, { source: 'monitor', sample: true })
+    flushDraw()
     expect(moveTo).toHaveBeenLastCalledWith(100 - (2 * 100) / 3, 30)
-    expect(context.fill).toHaveBeenCalledTimes(3)
-    expect(fillAlphas).toEqual([0.28, 0.28, 0.28])
+    expect(context.fill).toHaveBeenCalledTimes(2)
+    expect(fillAlphas).toEqual([0.28, 0.28])
     expect(onChange).not.toHaveBeenCalled()
 
     pane.dispose()

@@ -123,15 +123,14 @@ export function createPaneMenu(host: PaneMenuHost): { toggle(): void; close(): v
     // built lazily on first open, so scope the document here too
     built ??= withDocument(doc, () => buildMenu(host))
     built.refresh()
-    built.shell.classList.add('tiao-open')
     if (!host.menuBelow) {
-      // open to whichever side of the pane has room
       const rect = host.element.getBoundingClientRect()
       const menuWidth = built.shell.offsetWidth || 190
       const viewportWidth = doc.defaultView?.innerWidth ?? Infinity
       const fitsRight = rect.right + menuWidth + 12 <= viewportWidth
       built.shell.classList.toggle('tiao-menu-left', !fitsRight)
     }
+    built.shell.classList.add('tiao-open')
     // capture phase so clicks inside other panes still close it
     doc.addEventListener('pointerdown', onOutside, true)
     doc.addEventListener('keydown', onKey)

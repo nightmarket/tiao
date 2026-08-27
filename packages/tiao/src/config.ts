@@ -32,11 +32,8 @@ function debugLevel(): 0 | 1 | 2 {
   if (value === '1') return 1
   if (value === '2') return 2
 
-  // Exact `process.env.NODE_ENV` so Vite/webpack can inline it. Bundlers that
-  // replace it with "development" still resolve to 2 even without a process
-  // global; a missing binding throws and we stay off.
   try {
-    const nodeEnv = process.env.NODE_ENV
+    const nodeEnv = typeof process !== 'undefined' ? process.env.NODE_ENV : undefined
     return nodeEnv && nodeEnv !== 'production' ? 2 : 0
   } catch {
     return 0

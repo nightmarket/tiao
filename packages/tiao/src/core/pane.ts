@@ -103,6 +103,7 @@ const THEME_CLASS: Record<ResolvedTheme, string | null> = {
   nord: 'tiao-theme-nord',
   catppuccin: 'tiao-theme-catppuccin',
 }
+const THEME_CLASSES = Object.values(THEME_CLASS).filter((cls): cls is string => Boolean(cls))
 
 /** whether the OS is in dark mode; default dark when matchMedia is unavailable */
 function prefersDark(doc: Document = document): boolean {
@@ -132,6 +133,13 @@ function watchColorScheme(doc: Document): void {
   schemeWatch.set(doc, { mql, onChange })
 }
 
+function releaseColorScheme(doc: Document): void {
+  const existing = schemeWatch.get(doc)
+  if (!existing) return
+  existing.mql.removeEventListener('change', existing.onChange)
+  schemeWatch.delete(doc)
+}
+
 /** Surface style (shape/elevation) — orthogonal to PaneTheme colors. */
 export type PaneStyle = 'bouba' | 'kiki'
 
@@ -139,6 +147,7 @@ const STYLE_CLASS: Record<PaneStyle, string | null> = {
   bouba: null,
   kiki: 'tiao-style-kiki',
 }
+const STYLE_CLASSES = Object.values(STYLE_CLASS).filter((cls): cls is string => Boolean(cls))
 
 /** Map legacy persisted ids onto the bouba/kiki axis. */
 function normalizeStyle(v: string | undefined | null): PaneStyle {
@@ -175,7 +184,7 @@ const panes = new Map<string, Pane>()
 const floatingPanes = new Set<Pane>()
 
 /** one global-toggle listener per document */
-const globalToggleInstalled = new WeakSet<Document>()
+const globalToggleInstalled = new WeakMap<Document, (e: KeyboardEvent) => void>()
 
 /** shared stacking counter so the last-interacted floating pane wins */
 let zTop = 9999
@@ -187,13 +196,21 @@ function isTypingTarget(t: EventTarget | null): boolean {
 
 function ensureGlobalToggle(doc: Document): void {
   if (globalToggleInstalled.has(doc)) return
-  globalToggleInstalled.add(doc)
-  doc.addEventListener('keydown', (e) => {
+  const onKey = (e: KeyboardEvent) => {
     if (e.key !== 'h' && e.key !== 'H') return
     if (e.metaKey || e.ctrlKey || e.altKey) return
     if (isTypingTarget(e.target)) return
     Pane.toggleAll(doc)
-  })
+  }
+  doc.addEventListener('keydown', onKey)
+  globalToggleInstalled.set(doc, onKey)
+}
+
+function releaseGlobalToggle(doc: Document): void {
+  const onKey = globalToggleInstalled.get(doc)
+  if (!onKey) return
+  doc.removeEventListener('keydown', onKey)
+  globalToggleInstalled.delete(doc)
 }
 
 /** one notch bar per document, mounted with the first floating pane */
@@ -222,7 +239,11 @@ function readNotchState(): NotchState {
 }
 
 function panesIn(doc: Document): Pane[] {
-  return [...floatingPanes].filter((p) => p.element.ownerDocument === doc)
+  const list: Pane[] = []
+  for (const p of floatingPanes) {
+    if (p.element.ownerDocument === doc) list.push(p)
+  }
+  return list
 }
 
 /** persistence is opt-out, but needs a stable id to key on */
@@ -283,19 +304,29 @@ function ensureNotch(doc: Document): void {
   )
 }
 
-/**
- * The look the global settings panel shows: what it last broadcast, or the
- * primary pane's own chrome until something is set.
- */
-function globalChrome(doc: Document): PaneChrome {
-  const saved = readNotchState()
-  const first = panesIn(doc)[0]
+function resolveChrome(
+  saved: {
+    theme?: PaneTheme | undefined
+    style?: string | undefined
+    accent?: string | undefined
+    numbers?: boolean | undefined
+  },
+  first: Pane | undefined,
+): PaneChrome {
   return {
     theme: saved.theme ?? first?.theme ?? 'dark',
     style: normalizeStyle(saved.style ?? first?.style),
     accent: saved.accent ?? first?.chrome.accent ?? '',
     numbers: saved.numbers ?? first?.numbers ?? false,
   }
+}
+
+/**
+ * The look the global settings panel shows: what it last broadcast, or the
+ * primary pane's own chrome until something is set.
+ */
+function globalChrome(doc: Document): PaneChrome {
+  return resolveChrome(readNotchState(), panesIn(doc)[0])
 }
 
 /**
@@ -325,6 +356,8 @@ function releaseNotch(doc: Document): void {
   notches.get(doc)?.dispose()
   notches.delete(doc)
   closeDock(doc)
+  releaseGlobalToggle(doc)
+  releaseColorScheme(doc)
 }
 
 /** the look of a pane, applied as a unit so the dock can swap it wholesale */
@@ -347,17 +380,13 @@ function applyThemeClass(el: HTMLElement, theme: PaneTheme): void {
   // preference stays on the element so a system change can find who to repaint
   el.dataset.tiaoTheme = theme
   const resolved = resolveTheme(theme, el.ownerDocument)
-  for (const cls of Object.values(THEME_CLASS)) {
-    if (cls) el.classList.remove(cls)
-  }
+  for (const cls of THEME_CLASSES) el.classList.remove(cls)
   const next = THEME_CLASS[resolved]
   if (next) el.classList.add(next)
 }
 
 function applyStyleClass(el: HTMLElement, style: PaneStyle): void {
-  for (const cls of Object.values(STYLE_CLASS)) {
-    if (cls) el.classList.remove(cls)
-  }
+  for (const cls of STYLE_CLASSES) el.classList.remove(cls)
   const next = STYLE_CLASS[style]
   if (next) el.classList.add(next)
 }
@@ -377,14 +406,7 @@ function resolvedAccent(el: HTMLElement): string {
  * the first pane the first time the sidebar opens.
  */
 function dockChrome(doc: Document): PaneChrome {
-  const saved = readDockState()
-  const first = panesIn(doc)[0]
-  return {
-    theme: saved.theme ?? first?.theme ?? 'dark',
-    style: normalizeStyle(saved.style ?? first?.style),
-    accent: saved.accent ?? first?.chrome.accent ?? '',
-    numbers: saved.numbers ?? first?.numbers ?? false,
-  }
+  return resolveChrome(readDockState(), panesIn(doc)[0])
 }
 
 function applyDockChrome(doc: Document): void {
@@ -426,6 +448,9 @@ export class Pane extends Container {
   readonly element: HTMLElement
   readonly rack: HTMLElement
   private titlebar: HTMLElement
+  private titleMain: HTMLElement
+  private titleEl: HTMLElement
+  private paneBody: HTMLElement
   private searchbar: HTMLElement
   private searchInput: HTMLInputElement
   private _expanded: boolean
@@ -563,12 +588,8 @@ export class Pane extends Container {
       const searchBtn = h('button', 'tiao-titlebar-btn tiao-pane-search', searchIcon())
       searchBtn.type = 'button'
       searchBtn.title = 'Search'
-      const collapseButton = h(
-        'button',
-        'tiao-titlebar-main',
-        icon('chevron'),
-        h('span', 'tiao-pane-title', options.title ?? ''),
-      )
+      const titleEl = h('span', 'tiao-pane-title', options.title ?? '')
+      const collapseButton = h('button', 'tiao-titlebar-main', icon('chevron'), titleEl)
       collapseButton.type = 'button'
       const titlebar = h(
         'div',
@@ -582,11 +603,14 @@ export class Pane extends Container {
       const searchbar = h('div', 'tiao-searchbar', searchInput)
       const body = h('div', 'tiao-pane-body', h('div', 'tiao-pane-clip', rack))
       const element = h('div', 'tiao-pane', titlebar, searchbar, body)
-      return { rack, gear, searchBtn, titlebar, searchInput, searchbar, element }
+      return { rack, gear, searchBtn, titlebar, titleMain: collapseButton, titleEl, searchInput, searchbar, body, element }
     })
     const { gear, searchBtn } = chrome
     this.rack = chrome.rack
     this.titlebar = chrome.titlebar
+    this.titleMain = chrome.titleMain
+    this.titleEl = chrome.titleEl
+    this.paneBody = chrome.body
     this.searchInput = chrome.searchInput
     this.searchbar = chrome.searchbar
     this.element = chrome.element
@@ -730,9 +754,19 @@ export class Pane extends Container {
       // free-positioned panes must stay inside the window when it shrinks
       const win = doc.defaultView
       if (win) {
-        const onResize = () => this.clampToViewport()
+        let resizeRaf = 0
+        const onResize = () => {
+          if (resizeRaf) return
+          resizeRaf = win.requestAnimationFrame(() => {
+            resizeRaf = 0
+            this.clampToViewport()
+          })
+        }
         win.addEventListener('resize', onResize)
-        this.disposers.push(() => win.removeEventListener('resize', onResize))
+        this.disposers.push(() => {
+          if (resizeRaf) win.cancelAnimationFrame(resizeRaf)
+          win.removeEventListener('resize', onResize)
+        })
       }
     }
 
@@ -858,11 +892,10 @@ export class Pane extends Container {
   }
 
   get title(): string {
-    return this.titlebar.querySelector('.tiao-pane-title')?.textContent ?? ''
+    return this.titleEl.textContent ?? ''
   }
   set title(v: string) {
-    const el = this.titlebar.querySelector('.tiao-pane-title')
-    if (el) el.textContent = v
+    this.titleEl.textContent = v
   }
 
   get expanded(): boolean {
@@ -1293,14 +1326,9 @@ export class Pane extends Container {
 
   private applyExpanded(): void {
     this.element.classList.toggle('tiao-expanded', this._expanded)
-    this.titlebar
-      .querySelector('.tiao-titlebar-main')
-      ?.setAttribute('aria-expanded', String(this._expanded))
-    const body = this.element.querySelector('.tiao-pane-body')
-    if (body instanceof HTMLElement) {
-      body.toggleAttribute('inert', !this._expanded)
-      body.setAttribute('aria-hidden', String(!this._expanded))
-    }
+    this.titleMain.setAttribute('aria-expanded', String(this._expanded))
+    this.paneBody.toggleAttribute('inert', !this._expanded)
+    this.paneBody.setAttribute('aria-hidden', String(!this._expanded))
   }
 
   private loadState(): PersistedState {

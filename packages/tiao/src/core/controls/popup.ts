@@ -135,7 +135,6 @@ export interface StickyOverlayHandle {
   close(): void
   /** click behavior: open sticky, or close when already sticky-open */
   toggleSticky(): void
-  setHoverFollow(on: boolean): void
 }
 
 /**
@@ -254,7 +253,6 @@ export function createStickyOverlay(opts: StickyOverlayOptions): StickyOverlayHa
     open: openOverlay,
     close,
     toggleSticky,
-    setHoverFollow: (on) => (on ? startHoverFollow() : stopHoverFollow()),
   }
 }
 

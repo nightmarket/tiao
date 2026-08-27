@@ -231,7 +231,7 @@ export const bezierPlugin: InputPlugin<BezierValue> = {
       marker.style.left = `${curveY(ctx.value.get(), clamp(progress, 0, 1)) * 100}%`
     }
     const onTimer = () => {
-      const dt = Date.now() - startTime
+      const dt = performance.now() - startTime
       updateMarker(dt / PREVIEW_DURATION)
       if (dt > PREVIEW_DURATION + PREVIEW_DELAY) stopPlayback()
       if (playing) rafId = requestAnimationFrame(onTimer)
@@ -247,7 +247,7 @@ export const bezierPlugin: InputPlugin<BezierValue> = {
       if (!popup.isOpen()) return
       updateMarker(0)
       marker.classList.add('tiao-active')
-      startTime = Date.now() + PREVIEW_DELAY
+      startTime = performance.now() + PREVIEW_DELAY
       playing = true
       rafId = requestAnimationFrame(onTimer)
     }

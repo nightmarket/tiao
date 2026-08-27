@@ -40,9 +40,13 @@ function createLog(
   const rows = typeof ctx.options['rows'] === 'number' ? ctx.options['rows'] : DEFAULT_LOG_ROWS
   const el = h('div', 'tiao-monitor-log')
   el.style.setProperty('--tiao-log-rows', String(rows))
+  let stick = true
+  const onScroll = () => {
+    stick = el.scrollTop + el.clientHeight >= el.scrollHeight - 2
+  }
+  el.addEventListener('scroll', onScroll, { passive: true })
 
   const push = (v: unknown) => {
-    const stick = el.scrollTop + el.clientHeight >= el.scrollHeight - 2
     const text = format(v)
     if (el.childElementCount >= bufferSize) {
       const line = el.firstElementChild as HTMLElement
@@ -54,6 +58,7 @@ function createLog(
     if (stick) el.scrollTop = el.scrollHeight
   }
   push(ctx.value.get())
+  ctx.onDispose(() => el.removeEventListener('scroll', onScroll))
   ctx.onDispose(ctx.value.subscribe(push))
   return el
 }
@@ -122,9 +127,13 @@ export function createGraph(
   let paintColor = ''
   let paintFillStyle = ''
   let paintAlpha = 0.28
-  const dpr = typeof devicePixelRatio === 'number' ? devicePixelRatio : 1
+  let dpr = typeof devicePixelRatio === 'number' ? devicePixelRatio : 1
+  let drawRaf = 0
+  let lastLabelMin = NaN
+  let lastLabelMax = NaN
 
   const sampleAt = (i: number): number => buffer[(start + i) % bufferSize]!
+  const currentDpr = () => (typeof devicePixelRatio === 'number' ? devicePixelRatio : 1)
 
   const syncPaint = () => {
     computed ??= getComputedStyle(el)
@@ -158,6 +167,7 @@ export function createGraph(
       height = 0
       return
     }
+    dpr = currentDpr()
     width = Math.round(rect.width * dpr)
     height = Math.round(rect.height * dpr)
     if (canvas.width !== width) canvas.width = width
@@ -235,12 +245,27 @@ export function createGraph(
     c.globalAlpha = 1
   }
 
+  const scheduleDraw = () => {
+    if (drawRaf) return
+    if (typeof requestAnimationFrame !== 'function') {
+      draw()
+      return
+    }
+    drawRaf = requestAnimationFrame(() => {
+      drawRaf = 0
+      draw()
+    })
+  }
+
   // Label shows the observed range over the plotted window, e.g. "FPS (80-140)".
   // Flat windows (no variance) show "(No Change)" instead of a single value.
   // The buffer *is* the window — the parenthesized range always describes exactly
   // what's on screen; the monitor interval determines its elapsed duration.
   const updateLabel = () => {
     if (!labelEl || count === 0) return
+    if (observedMin === lastLabelMin && observedMax === lastLabelMax) return
+    lastLabelMin = observedMin
+    lastLabelMax = observedMax
     const loText = format(observedMin)
     const hiText = format(observedMax)
     const next =
@@ -251,6 +276,10 @@ export function createGraph(
     }
   }
 
+  ctx.onDispose(() => {
+    if (drawRaf) cancelAnimationFrame(drawRaf)
+    drawRaf = 0
+  })
   ctx.onDispose(
     ctx.value.subscribe((v) => {
       const text = format(v)
@@ -301,7 +330,7 @@ export function createGraph(
         }
       }
       updateLabel()
-      draw()
+      scheduleDraw()
     }),
   )
 

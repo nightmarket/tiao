@@ -268,45 +268,85 @@ function createColorView(ctx: PluginContext<unknown>) {
   swatch.addEventListener('click', togglePicker)
   ctx.onDispose(() => swatch.removeEventListener('click', togglePicker))
 
+  let lastCommit = { r: NaN, g: NaN, b: NaN, a: NaN }
   const commit = (last: boolean) => {
+    if (
+      lastCommit.r === rgba.r &&
+      lastCommit.g === rgba.g &&
+      lastCommit.b === rgba.b &&
+      lastCommit.a === rgba.a
+    ) {
+      if (last) ctx.value.set(ctx.value.get(), { source: 'ui', last })
+      return
+    }
+    lastCommit.r = rgba.r
+    lastCommit.g = rgba.g
+    lastCommit.b = rgba.b
+    lastCommit.a = rgba.a
     const fmt = stringWrite ? displayFormat(family, alpha) : writeFormat
     ctx.value.set(serializeColor(rgba, fmt), { source: 'ui', last })
   }
 
-  const textValue = (): string =>
-    stringWrite ? String(serializeColor(rgba, displayFormat(family, alpha))) : toHexText(rgba, alpha)
+  const displayText = (): string => String(serializeColor(rgba, displayFormat(family, alpha)))
+  const textValue = (): string => (stringWrite ? displayText() : toHexText(rgba, alpha))
 
   // last written values, so per-move renders skip redundant style writes
   let lastSvHue = -1
   let lastAlphaColor = ''
+  let lastCss = ''
+  let lastFieldText = ''
+  let lastPickerText = ''
+  let lastSvLeft = NaN
+  let lastSvTop = NaN
+  let lastHueLeft = NaN
+  let lastOkLeft = NaN
+  let lastOkTop = NaN
+  let lastOkHueLeft = NaN
+  let lastAlphaLeft = NaN
+  const setPct = (el: HTMLElement, prop: 'left' | 'top', pct: number, last: number): number => {
+    if (pct === last) return last
+    el.style[prop] = `${pct}%`
+    return pct
+  }
   const render = () => {
     const css = toCss(rgba)
-    swatch.style.background = css
+    if (css !== lastCss) {
+      lastCss = css
+      swatch.style.background = css
+      okThumb.style.background = css
+      svThumb.style.background = css
+    }
     if (ctx.document.activeElement !== textInput) {
-      textInput.value = textValue()
+      const text = textValue()
+      if (text !== lastFieldText) {
+        lastFieldText = text
+        textInput.value = text
+      }
     }
     if (ctx.document.activeElement !== pickerText) {
-      pickerText.value = String(serializeColor(rgba, displayFormat(family, alpha)))
+      const text = displayText()
+      if (text !== lastPickerText) {
+        lastPickerText = text
+        pickerText.value = text
+      }
     }
     if (isOkMode()) {
       if (popup.isOpen() && ok.H !== planeHue) schedulePlaneDraw()
-      okThumb.style.left = `${clamp(ok.C / OK_C_MAX, 0, 1) * 100}%`
-      okThumb.style.top = `${clamp(1 - ok.L, 0, 1) * 100}%`
-      okThumb.style.background = css
-      okHueThumb.style.left = `${(ok.H / 360) * 100}%`
+      lastOkLeft = setPct(okThumb, 'left', clamp(ok.C / OK_C_MAX, 0, 1) * 100, lastOkLeft)
+      lastOkTop = setPct(okThumb, 'top', clamp(1 - ok.L, 0, 1) * 100, lastOkTop)
+      lastOkHueLeft = setPct(okHueThumb, 'left', (ok.H / 360) * 100, lastOkHueLeft)
     } else {
       if (hsv.h !== lastSvHue) {
         lastSvHue = hsv.h
         svArea.style.background =
           `linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, transparent), hsl(${hsv.h}, 100%, 50%)`
       }
-      svThumb.style.left = `${hsv.s * 100}%`
-      svThumb.style.top = `${(1 - hsv.v) * 100}%`
-      svThumb.style.background = css
-      hueThumb.style.left = `${(hsv.h / 360) * 100}%`
+      lastSvLeft = setPct(svThumb, 'left', hsv.s * 100, lastSvLeft)
+      lastSvTop = setPct(svThumb, 'top', (1 - hsv.v) * 100, lastSvTop)
+      lastHueLeft = setPct(hueThumb, 'left', (hsv.h / 360) * 100, lastHueLeft)
     }
     if (alpha) {
-      alphaThumb.style.left = `${rgba.a * 100}%`
+      lastAlphaLeft = setPct(alphaThumb, 'left', rgba.a * 100, lastAlphaLeft)
       const alphaColor = `rgb(${Math.round(rgba.r)}, ${Math.round(rgba.g)}, ${Math.round(rgba.b)})`
       if (alphaColor !== lastAlphaColor) {
         lastAlphaColor = alphaColor
@@ -317,8 +357,10 @@ function createColorView(ctx: PluginContext<unknown>) {
 
   const setFromHsv = (last: boolean) => {
     const { r, g, b } = hsvToRgb(hsv.h, hsv.s, hsv.v)
-    rgba = { ...rgba, r, g, b }
-    syncOk()
+    rgba.r = r
+    rgba.g = g
+    rgba.b = b
+    if (isOkMode()) syncOk()
     render()
     commit(last)
   }
@@ -327,7 +369,9 @@ function createColorView(ctx: PluginContext<unknown>) {
   const setFromOk = (last: boolean) => {
     ok.C = Math.min(ok.C, maxChroma(ok.L, ok.H, OK_C_MAX))
     const { r, g, b } = oklchToRgb(ok.L, ok.C, ok.H)
-    rgba = { ...rgba, r, g, b }
+    rgba.r = r
+    rgba.g = g
+    rgba.b = b
     hsv = rgbToHsv(r, g, b)
     render()
     commit(last)
