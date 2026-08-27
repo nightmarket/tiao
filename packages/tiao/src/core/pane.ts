@@ -546,7 +546,7 @@ export class Pane extends Container {
       const collapseButton = h(
         'button',
         'tiao-titlebar-main',
-        icon('triangle'),
+        icon('chevron'),
         h('span', 'tiao-pane-title', options.title ?? ''),
       )
       collapseButton.type = 'button'
@@ -1251,6 +1251,11 @@ export class Pane extends Container {
     this.titlebar
       .querySelector('.tiao-titlebar-main')
       ?.setAttribute('aria-expanded', String(this._expanded))
+    const body = this.element.querySelector('.tiao-pane-body')
+    if (body instanceof HTMLElement) {
+      body.toggleAttribute('inert', !this._expanded)
+      body.setAttribute('aria-hidden', String(!this._expanded))
+    }
   }
 
   private loadState(): PersistedState {

@@ -269,6 +269,7 @@ export abstract class Container extends Item {
     const match = titleMatch || childMatch
     this.element.classList.toggle('tiao-search-miss', !match)
     this.element.classList.toggle('tiao-search-open', query !== '' && childMatch && !titleMatch)
+    if (this instanceof FolderApi) this.syncContentAccess()
     return match
   }
 
@@ -614,6 +615,7 @@ export class FolderApi extends Container {
   readonly rack: HTMLElement
   private _expanded: boolean
   private headerEl: HTMLButtonElement
+  private bodyEl: HTMLElement
 
   private collapsible: boolean
 
@@ -628,7 +630,7 @@ export class FolderApi extends Container {
     this.headerEl = h(
       'button',
       'tiao-folder-header',
-      icon('triangle'),
+      icon('chevron'),
       h('span', 'tiao-folder-heading', h('span', 'tiao-folder-title', params.title)),
     )
     this.headerEl.type = 'button'
@@ -637,8 +639,8 @@ export class FolderApi extends Container {
     lineEl.type = 'button'
     lineEl.tabIndex = -1
     lineEl.setAttribute('aria-hidden', 'true')
-    const body = h('div', 'tiao-folder-body', h('div', 'tiao-folder-clip', this.rack), lineEl)
-    this.element = h('div', 'tiao-folder', this.headerEl, body)
+    this.bodyEl = h('div', 'tiao-folder-body', h('div', 'tiao-folder-clip', this.rack), lineEl)
+    this.element = h('div', 'tiao-folder', this.headerEl, this.bodyEl)
     if (params.color) {
       this.element.classList.add('tiao-folder-colored')
       this.element.style.setProperty('--tiao-folder-color', params.color)
@@ -713,6 +715,15 @@ export class FolderApi extends Container {
   private applyExpanded(): void {
     this.element.classList.toggle('tiao-expanded', this._expanded)
     this.headerEl.setAttribute('aria-expanded', String(this._expanded))
+    this.syncContentAccess()
+  }
+
+  /** Collapse hides nested controls from the tab order; search-forced-open
+   * folders stay reachable. Matches disclosure-widget a11y (no auto-expand). */
+  syncContentAccess(): void {
+    const open = this._expanded || this.element.classList.contains('tiao-search-open')
+    this.bodyEl.toggleAttribute('inert', !open)
+    this.bodyEl.setAttribute('aria-hidden', String(!open))
   }
 }
 

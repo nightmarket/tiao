@@ -1,5 +1,16 @@
-import { setEwCursor, setRowActive, startDrag } from '../dom'
+import { h, setEwCursor, setRowActive, startDrag } from '../dom'
 import { arrowKeyStep, mapRange } from '../util'
+
+/** Track + fill + handle overlay. Fill range is `--tiao-fill-start/end` on the track. */
+export function createSliderTrack(): HTMLElement {
+  return h('div', 'tiao-slider', h('div', 'tiao-slider-fill'), h('div', 'tiao-slider-handles'))
+}
+
+/** Percent span of the filled band; handlebars clamp against these in CSS. */
+export function setSliderFillRange(track: HTMLElement, startPct: number, endPct: number): void {
+  track.style.setProperty('--tiao-fill-start', `${startPct}%`)
+  track.style.setProperty('--tiao-fill-end', `${endPct}%`)
+}
 
 export interface SliderTrackHandlers {
   /** apply a pointer position mapped (unclamped) into [min, max] */

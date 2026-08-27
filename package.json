@@ -7,8 +7,7 @@
     "dev": "pnpm --filter playground dev",
     "test": "vitest run",
     "typecheck": "pnpm -r typecheck",
-    "publish:package": "pnpm test && pnpm typecheck && pnpm --filter '@nightmarket/tiao' publish --access public",
-    "publish:packages": "pnpm run publish:package"
+    "publish:package": "pnpm test && pnpm typecheck && pnpm --filter '@nightmarket/tiao' publish --access public"
   },
   "devDependencies": {
     "jsdom": "^25.0.1",

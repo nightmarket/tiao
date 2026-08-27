@@ -126,6 +126,38 @@ describe('Pane bindings', () => {
     pane.dispose()
   })
 
+  it('keeps slider fill range in css variables so the handlebar can clamp', () => {
+    const params = { speed: 0 }
+    const pane = new Pane()
+    const binding = pane.addBinding(params, 'speed', { min: 0, max: 1 })
+    const track = binding.element.querySelector('.tiao-slider') as HTMLElement
+    expect(track.querySelector('.tiao-slider-handles')).not.toBeNull()
+    expect(track.style.getPropertyValue('--tiao-fill-start')).toBe('0%')
+    expect(track.style.getPropertyValue('--tiao-fill-end')).toBe('0%')
+
+    binding.value.set(1, { source: 'ui', last: true })
+    expect(track.style.getPropertyValue('--tiao-fill-end')).toBe('100%')
+
+    binding.value.set(0.25, { source: 'ui', last: true })
+    expect(track.style.getPropertyValue('--tiao-fill-end')).toBe('25%')
+    pane.dispose()
+  })
+
+  it('writes interval endpoints as fill-start/fill-end css variables', () => {
+    const params = { range: { min: 20, max: 80 } }
+    const pane = new Pane()
+    const binding = pane.addBinding(params, 'range', { min: 0, max: 100 })
+    const track = binding.element.querySelector('.tiao-slider') as HTMLElement
+    expect(track.querySelector('.tiao-slider-handles')).not.toBeNull()
+    expect(track.style.getPropertyValue('--tiao-fill-start')).toBe('20%')
+    expect(track.style.getPropertyValue('--tiao-fill-end')).toBe('80%')
+
+    binding.value.set({ min: 0, max: 100 }, { source: 'ui', last: true })
+    expect(track.style.getPropertyValue('--tiao-fill-start')).toBe('0%')
+    expect(track.style.getPropertyValue('--tiao-fill-end')).toBe('100%')
+    pane.dispose()
+  })
+
   it('refresh() re-reads from the target without writing back', () => {
     const params = { label: 'a' }
     const pane = new Pane()
@@ -1190,7 +1222,7 @@ describe('Pane registry and chrome', () => {
     const pane = new Pane()
     const folder = pane.addFolder({ title: 'Section' })
     const header = folder.element.querySelector('.tiao-folder-header')!
-    expect(header.firstElementChild?.classList.contains('tiao-icon-triangle')).toBe(true)
+    expect(header.firstElementChild?.classList.contains('tiao-icon-chevron')).toBe(true)
     expect(header.querySelector('.tiao-folder-index')).toBeNull()
     pane.dispose()
   })
@@ -1218,7 +1250,34 @@ describe('Pane registry and chrome', () => {
     fixedLine.click()
     expect(fixed.expanded).toBe(true)
     // the caret stays visible on static folders
-    expect(fixed.element.querySelector('.tiao-folder-header .tiao-icon-triangle')).not.toBeNull()
+    expect(fixed.element.querySelector('.tiao-folder-header .tiao-icon-chevron')).not.toBeNull()
+    pane.dispose()
+  })
+
+  it('collapsed folders keep nested controls out of the tab order', () => {
+    const params = { speed: 1 }
+    const pane = new Pane()
+    const folder = pane.addFolder({ title: 'Motion', expanded: false })
+    folder.addBinding(params, 'speed')
+    const body = folder.element.querySelector('.tiao-folder-body') as HTMLElement
+    expect(body.hasAttribute('inert')).toBe(true)
+    expect(body.getAttribute('aria-hidden')).toBe('true')
+
+    folder.expanded = true
+    expect(body.hasAttribute('inert')).toBe(false)
+    expect(body.getAttribute('aria-hidden')).toBe('false')
+    pane.dispose()
+  })
+
+  it('search-open folders lift inert so hits stay keyboard-reachable', () => {
+    const params = { speed: 1 }
+    const pane = new Pane()
+    const folder = pane.addFolder({ title: 'Motion', expanded: false })
+    folder.addBinding(params, 'speed')
+    pane.filter('speed')
+    const body = folder.element.querySelector('.tiao-folder-body') as HTMLElement
+    expect(folder.element.classList.contains('tiao-search-open')).toBe(true)
+    expect(body.hasAttribute('inert')).toBe(false)
     pane.dispose()
   })
 

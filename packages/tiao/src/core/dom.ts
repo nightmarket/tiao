@@ -38,7 +38,10 @@ export function h<K extends keyof HTMLElementTagNameMap>(
 
 const SVG_NS = 'http://www.w3.org/2000/svg'
 
-export function icon(name: 'chevron' | 'plus' | 'triangle' | 'check'): SVGSVGElement {
+export function icon(name: 'chevron' | 'plus' | 'check'): SVGSVGElement {
+  if (name === 'chevron') {
+    return lucideIcon('chevron', [svgPath('m6 9 6 6 6-6')])
+  }
   const doc = creationDoc()
   const svg = doc.createElementNS(SVG_NS, 'svg')
   svg.setAttribute('viewBox', '0 0 12 12')
@@ -46,18 +49,13 @@ export function icon(name: 'chevron' | 'plus' | 'triangle' | 'check'): SVGSVGEle
   svg.setAttribute('aria-hidden', 'true')
   const path = doc.createElementNS(SVG_NS, 'path')
   const d = {
-    chevron: 'M3.5 4.5 L6 7.5 L8.5 4.5',
     plus: 'M6 2.5 V9.5 M2.5 6 H9.5',
     check: 'M2.75 6.5 L5 8.75 L9.25 3.75',
-    // leva-style filled collapse caret, pointing down; the glyph is centered
-    // in the viewBox so rotating it while collapsed keeps it optically aligned
-    triangle: 'M3.9 4.7 L8.1 4.7 L6 7.3 Z',
   }[name]
   path.setAttribute('d', d)
-  // the caret is a filled shape; a thin same-color stroke rounds its corners
-  path.setAttribute('fill', name === 'triangle' ? 'currentColor' : 'none')
+  path.setAttribute('fill', 'none')
   path.setAttribute('stroke', 'currentColor')
-  path.setAttribute('stroke-width', name === 'triangle' ? '1' : '1.5')
+  path.setAttribute('stroke-width', '1.5')
   path.setAttribute('stroke-linecap', 'round')
   path.setAttribute('stroke-linejoin', 'round')
   svg.append(path)

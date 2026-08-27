@@ -12,6 +12,7 @@ function setSearch(search: string) {
 
 afterEach(() => {
   vi.unstubAllEnvs()
+  vi.unstubAllGlobals()
   setSearch('')
 })
 
@@ -23,6 +24,26 @@ describe('isTiaoEnabled', () => {
 
   it('defaults to disabled in production (NODE_ENV fallback)', async () => {
     vi.stubEnv('NODE_ENV', 'production')
+    const { isTiaoEnabled } = await loadConfig()
+    expect(isTiaoEnabled()).toBe(false)
+  })
+
+  it('defaults to disabled when process is undefined', async () => {
+    vi.stubGlobal('process', undefined)
+    const { isTiaoEnabled } = await loadConfig()
+    expect(isTiaoEnabled()).toBe(false)
+  })
+
+  it('defaults to disabled when process.env is missing', async () => {
+    vi.stubGlobal('process', {})
+    const { isTiaoEnabled } = await loadConfig()
+    expect(isTiaoEnabled()).toBe(false)
+  })
+
+  it('defaults to disabled when NODE_ENV is unset', async () => {
+    vi.stubEnv('NODE_ENV', '')
+    vi.stubEnv('DEBUG_LEVEL', '')
+    vi.stubEnv('NEXT_PUBLIC_DEBUG_LEVEL', '')
     const { isTiaoEnabled } = await loadConfig()
     expect(isTiaoEnabled()).toBe(false)
   })
