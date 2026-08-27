@@ -21,17 +21,18 @@
   --tiao-neutral-950: #0a0a0a;
   --tiao-bg: rgba(255, 255, 255, 0.94);
   --tiao-bg-solid: #ffffff;
-  --tiao-fg: #0a0a0a;
-  --tiao-fg-muted: #404040;
-  --tiao-fg-soft: #525252;
-  --tiao-fg-dim: #737373;
-  --tiao-fg-faint: #a3a3a3;
+  --tiao-fg: var(--tiao-neutral-950);
+  --tiao-fg-strong: var(--tiao-neutral-800);
+  --tiao-fg-muted: var(--tiao-neutral-700);
+  --tiao-fg-soft: var(--tiao-neutral-500);
+  --tiao-fg-dim: var(--tiao-neutral-400);
+  --tiao-fg-faint: var(--tiao-neutral-300);
   --tiao-titlebar-bg: rgba(15, 23, 42, 0.055);
   --tiao-folder-caret: color-mix(in srgb, var(--tiao-fg) 32%, var(--tiao-bg-solid));
   --tiao-folder-caret-hover: color-mix(in srgb, var(--tiao-fg) 55%, var(--tiao-bg-solid));
-  --tiao-depth-line: color-mix(in srgb, var(--tiao-fg) 18%, var(--tiao-bg-solid));
-  --tiao-depth-line-hover: color-mix(in srgb, var(--tiao-fg) 38%, var(--tiao-bg-solid));
-  --tiao-depth-line-active: color-mix(in srgb, var(--tiao-fg) 55%, var(--tiao-bg-solid));
+  --tiao-depth-line: color-mix(in srgb, var(--tiao-fg) 12%, var(--tiao-bg-solid));
+  --tiao-depth-line-hover: color-mix(in srgb, var(--tiao-fg) 30%, var(--tiao-bg-solid));
+  --tiao-depth-line-active: color-mix(in srgb, var(--tiao-fg) 45%, var(--tiao-bg-solid));
   --tiao-focus: color-mix(in srgb, var(--tiao-fg) 32%, var(--tiao-bg-solid));
   --tiao-hover: rgba(15, 23, 42, 0.055);
   --tiao-hover-soft: rgba(15, 23, 42, 0.03);
@@ -74,6 +75,8 @@
   /* header pad + caret + gap, so the next level's label lands on this title */
   --tiao-indent: calc(var(--tiao-row-pad-x) + var(--tiao-icon-size) + var(--tiao-tree-pad));
   --tiao-row-pad-y: 2px;
+  --tiao-rack-pad-y: 2px;
+  --tiao-folder-pad-y: 3px;
   --tiao-max-height: 500px;
   --tiao-radius: 7px;
   --tiao-radius-sm: 4px;
@@ -98,18 +101,19 @@
 .tiao-notch.tiao-theme-dark,
 .tiao-dock.tiao-theme-dark {
   --tiao-bg: rgba(23, 23, 23, 0.95);
-  --tiao-bg-solid: #171717;
-  --tiao-fg: #f5f5f5;
-  --tiao-fg-muted: #d4d4d4;
-  --tiao-fg-soft: #a3a3a3;
-  --tiao-fg-dim: #737373;
-  --tiao-fg-faint: #525252;
+  --tiao-bg-solid: var(--tiao-neutral-900);
+  --tiao-fg: var(--tiao-neutral-100);
+  --tiao-fg-strong: var(--tiao-neutral-200);
+  --tiao-fg-muted: var(--tiao-neutral-300);
+  --tiao-fg-soft: var(--tiao-neutral-500);
+  --tiao-fg-dim: var(--tiao-neutral-600);
+  --tiao-fg-faint: var(--tiao-neutral-700);
   --tiao-titlebar-bg: rgba(255, 255, 255, 0.06);
   --tiao-folder-caret: color-mix(in srgb, var(--tiao-fg) 32%, var(--tiao-bg-solid));
   --tiao-folder-caret-hover: color-mix(in srgb, var(--tiao-fg) 55%, var(--tiao-bg-solid));
-  --tiao-depth-line: color-mix(in srgb, var(--tiao-fg) 18%, var(--tiao-bg-solid));
-  --tiao-depth-line-hover: color-mix(in srgb, var(--tiao-fg) 38%, var(--tiao-bg-solid));
-  --tiao-depth-line-active: color-mix(in srgb, var(--tiao-fg) 55%, var(--tiao-bg-solid));
+  --tiao-depth-line: color-mix(in srgb, var(--tiao-fg) 12%, var(--tiao-bg-solid));
+  --tiao-depth-line-hover: color-mix(in srgb, var(--tiao-fg) 30%, var(--tiao-bg-solid));
+  --tiao-depth-line-active: color-mix(in srgb, var(--tiao-fg) 45%, var(--tiao-bg-solid));
   --tiao-hover: rgba(255, 255, 255, 0.09);
   --tiao-hover-soft: rgba(255, 255, 255, 0.045);
   --tiao-hover-strong: rgba(255, 255, 255, 0.14);
@@ -130,19 +134,31 @@
 .tiao-pane.tiao-theme-solarized,
 .tiao-notch.tiao-theme-solarized,
 .tiao-dock.tiao-theme-solarized {
+  --tiao-neutral-50: #fdf6e3;
+  --tiao-neutral-100: #f5efdc;
+  --tiao-neutral-200: #eee8d5;
+  --tiao-neutral-300: #c5cbb6;
+  --tiao-neutral-400: #93a1a1;
+  --tiao-neutral-500: #839496;
+  --tiao-neutral-600: #657b83;
+  --tiao-neutral-700: #586e75;
+  --tiao-neutral-800: #0d4552;
+  --tiao-neutral-900: #073642;
+  --tiao-neutral-950: #002b36;
   --tiao-bg: rgba(0, 43, 54, 0.96);
-  --tiao-bg-solid: #002b36;
-  --tiao-fg: #fdf6e3;
-  --tiao-fg-muted: #eee8d5;
-  --tiao-fg-soft: #93a1a1;
-  --tiao-fg-dim: #839496;
-  --tiao-fg-faint: #657b83;
+  --tiao-bg-solid: var(--tiao-neutral-950);
+  --tiao-fg: var(--tiao-neutral-50);
+  --tiao-fg-strong: var(--tiao-neutral-200);
+  --tiao-fg-muted: var(--tiao-neutral-300);
+  --tiao-fg-soft: var(--tiao-neutral-500);
+  --tiao-fg-dim: var(--tiao-neutral-600);
+  --tiao-fg-faint: var(--tiao-neutral-700);
   --tiao-titlebar-bg: rgba(7, 54, 66, 0.85);
   --tiao-folder-caret: color-mix(in srgb, var(--tiao-fg) 32%, var(--tiao-bg-solid));
   --tiao-folder-caret-hover: color-mix(in srgb, var(--tiao-fg) 55%, var(--tiao-bg-solid));
-  --tiao-depth-line: color-mix(in srgb, var(--tiao-fg) 18%, var(--tiao-bg-solid));
-  --tiao-depth-line-hover: color-mix(in srgb, var(--tiao-fg) 38%, var(--tiao-bg-solid));
-  --tiao-depth-line-active: color-mix(in srgb, var(--tiao-fg) 55%, var(--tiao-bg-solid));
+  --tiao-depth-line: color-mix(in srgb, var(--tiao-fg) 12%, var(--tiao-bg-solid));
+  --tiao-depth-line-hover: color-mix(in srgb, var(--tiao-fg) 30%, var(--tiao-bg-solid));
+  --tiao-depth-line-active: color-mix(in srgb, var(--tiao-fg) 45%, var(--tiao-bg-solid));
   --tiao-hover: rgba(253, 246, 227, 0.08);
   --tiao-hover-soft: rgba(253, 246, 227, 0.04);
   --tiao-hover-strong: rgba(253, 246, 227, 0.14);
@@ -163,19 +179,31 @@
 .tiao-pane.tiao-theme-nord,
 .tiao-notch.tiao-theme-nord,
 .tiao-dock.tiao-theme-nord {
+  --tiao-neutral-50: #eceff4;
+  --tiao-neutral-100: #e5e9f0;
+  --tiao-neutral-200: #d8dee9;
+  --tiao-neutral-300: #b8c0cc;
+  --tiao-neutral-400: #9aa3b5;
+  --tiao-neutral-500: #7b849c;
+  --tiao-neutral-600: #616a82;
+  --tiao-neutral-700: #4c566a;
+  --tiao-neutral-800: #434c5e;
+  --tiao-neutral-900: #3b4252;
+  --tiao-neutral-950: #2e3440;
   --tiao-bg: rgba(46, 52, 64, 0.96);
-  --tiao-bg-solid: #2e3440;
-  --tiao-fg: #eceff4;
-  --tiao-fg-muted: #e5e9f0;
-  --tiao-fg-soft: #d8dee9;
-  --tiao-fg-dim: #9aa3b5;
-  --tiao-fg-faint: #7b849c;
+  --tiao-bg-solid: var(--tiao-neutral-950);
+  --tiao-fg: var(--tiao-neutral-50);
+  --tiao-fg-strong: var(--tiao-neutral-200);
+  --tiao-fg-muted: var(--tiao-neutral-300);
+  --tiao-fg-soft: var(--tiao-neutral-500);
+  --tiao-fg-dim: var(--tiao-neutral-600);
+  --tiao-fg-faint: var(--tiao-neutral-700);
   --tiao-titlebar-bg: rgba(59, 66, 82, 0.85);
   --tiao-folder-caret: color-mix(in srgb, var(--tiao-fg) 32%, var(--tiao-bg-solid));
   --tiao-folder-caret-hover: color-mix(in srgb, var(--tiao-fg) 55%, var(--tiao-bg-solid));
-  --tiao-depth-line: color-mix(in srgb, var(--tiao-fg) 18%, var(--tiao-bg-solid));
-  --tiao-depth-line-hover: color-mix(in srgb, var(--tiao-fg) 38%, var(--tiao-bg-solid));
-  --tiao-depth-line-active: color-mix(in srgb, var(--tiao-fg) 55%, var(--tiao-bg-solid));
+  --tiao-depth-line: color-mix(in srgb, var(--tiao-fg) 12%, var(--tiao-bg-solid));
+  --tiao-depth-line-hover: color-mix(in srgb, var(--tiao-fg) 30%, var(--tiao-bg-solid));
+  --tiao-depth-line-active: color-mix(in srgb, var(--tiao-fg) 45%, var(--tiao-bg-solid));
   --tiao-hover: rgba(236, 239, 244, 0.1);
   --tiao-hover-soft: rgba(236, 239, 244, 0.05);
   --tiao-hover-strong: rgba(236, 239, 244, 0.16);
@@ -196,19 +224,31 @@
 .tiao-pane.tiao-theme-catppuccin,
 .tiao-notch.tiao-theme-catppuccin,
 .tiao-dock.tiao-theme-catppuccin {
+  --tiao-neutral-50: #cdd6f4;
+  --tiao-neutral-100: #c4cce8;
+  --tiao-neutral-200: #bac2de;
+  --tiao-neutral-300: #a6adc8;
+  --tiao-neutral-400: #7f849c;
+  --tiao-neutral-500: #6c7086;
+  --tiao-neutral-600: #585b70;
+  --tiao-neutral-700: #45475a;
+  --tiao-neutral-800: #313244;
+  --tiao-neutral-900: #1e1e2e;
+  --tiao-neutral-950: #11111b;
   --tiao-bg: rgba(30, 30, 46, 0.96);
-  --tiao-bg-solid: #1e1e2e;
-  --tiao-fg: #cdd6f4;
-  --tiao-fg-muted: #bac2de;
-  --tiao-fg-soft: #a6adc8;
-  --tiao-fg-dim: #6c7086;
-  --tiao-fg-faint: #585b70;
+  --tiao-bg-solid: var(--tiao-neutral-900);
+  --tiao-fg: var(--tiao-neutral-50);
+  --tiao-fg-strong: var(--tiao-neutral-200);
+  --tiao-fg-muted: var(--tiao-neutral-300);
+  --tiao-fg-soft: var(--tiao-neutral-500);
+  --tiao-fg-dim: var(--tiao-neutral-600);
+  --tiao-fg-faint: var(--tiao-neutral-700);
   --tiao-titlebar-bg: rgba(49, 50, 68, 0.85);
   --tiao-folder-caret: color-mix(in srgb, var(--tiao-fg) 32%, var(--tiao-bg-solid));
   --tiao-folder-caret-hover: color-mix(in srgb, var(--tiao-fg) 55%, var(--tiao-bg-solid));
-  --tiao-depth-line: color-mix(in srgb, var(--tiao-fg) 18%, var(--tiao-bg-solid));
-  --tiao-depth-line-hover: color-mix(in srgb, var(--tiao-fg) 38%, var(--tiao-bg-solid));
-  --tiao-depth-line-active: color-mix(in srgb, var(--tiao-fg) 55%, var(--tiao-bg-solid));
+  --tiao-depth-line: color-mix(in srgb, var(--tiao-fg) 12%, var(--tiao-bg-solid));
+  --tiao-depth-line-hover: color-mix(in srgb, var(--tiao-fg) 30%, var(--tiao-bg-solid));
+  --tiao-depth-line-active: color-mix(in srgb, var(--tiao-fg) 45%, var(--tiao-bg-solid));
   --tiao-hover: rgba(205, 214, 244, 0.09);
   --tiao-hover-soft: rgba(205, 214, 244, 0.045);
   --tiao-hover-strong: rgba(205, 214, 244, 0.14);
@@ -250,6 +290,24 @@
   --tiao-icon-size: 14px;
   --tiao-width: 320px;
   --tiao-radius: 8px;
+}
+
+.tiao-pane.tiao-spacing-m {
+  --tiao-row-pad-y: 3px;
+  --tiao-rack-pad-y: 4px;
+  --tiao-folder-pad-y: 5px;
+  --tiao-hover-pad: 4px;
+  --tiao-gap: 8px;
+  --tiao-tree-pad: 8px;
+}
+
+.tiao-pane.tiao-spacing-l {
+  --tiao-row-pad-y: 5px;
+  --tiao-rack-pad-y: 6px;
+  --tiao-folder-pad-y: 7px;
+  --tiao-hover-pad: 5px;
+  --tiao-gap: 10px;
+  --tiao-tree-pad: 10px;
 }
 
 .tiao-pane.tiao-style-kiki,
@@ -444,6 +502,11 @@
 .tiao-pane.tiao-docked > .tiao-titlebar,
 .tiao-pane.tiao-docked:not(.tiao-expanded) > .tiao-titlebar {
   border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.tiao-pane.tiao-docked > .tiao-titlebar:hover {
+  background: var(--tiao-hover-strong);
 }
 /* placement, search, and theming all move to the sidebar header */
 .tiao-pane.tiao-docked > .tiao-titlebar > .tiao-titlebar-actions,
@@ -515,12 +578,16 @@
 }
 
 /* values and row labels are monospace and less primary than headers, so
-   section titles carry the hierarchy. Labels sit between headers (fg) and
-   control-column values (dim) so sections stay differentiated. */
+   section titles carry the hierarchy. Labels sit below headers (strong) and
+   above control-column values (dim) so sections stay differentiated. */
 .tiao-pane :where(.tiao-label, .tiao-num-input, .tiao-text-input, .tiao-select,
     .tiao-color-text, .tiao-monitor-text, .tiao-graph-value, .tiao-graph-label) {
   font-family: var(--tiao-font-mono);
   font-size: var(--tiao-font-size-mono);
+}
+.tiao-pane .tiao-pane-title,
+.tiao-pane .tiao-folder-heading {
+  color: var(--tiao-fg-strong);
 }
 .tiao-pane .tiao-label {
   color: var(--tiao-fg-soft);
@@ -705,7 +772,7 @@
 }
 /* even horizontal inset; titlebar caret uses the same pad + tree-pad */
 .tiao-pane > .tiao-pane-body > .tiao-pane-clip > .tiao-rack {
-  padding: 2px var(--tiao-rack-pad-x);
+  padding: var(--tiao-rack-pad-y) var(--tiao-rack-pad-x);
 }
 
 /* ---- rack & rows ---- */
@@ -797,7 +864,7 @@
 /* ---- folders: chevron-led headers, children indented behind a depth line ---- */
 .tiao-folder {
   position: relative;
-  padding: 3px 0;
+  padding: var(--tiao-folder-pad-y) 0;
   border-radius: var(--tiao-radius-sm);
 }
 /* section highlight: inset on top/bottom so the header and last control
@@ -935,13 +1002,13 @@
 /* opaque mixes toward the pane background (no alpha, so the cap dots and the
    line overlap without stacking artifacts) */
 .tiao-folder-colored > .tiao-folder-body > .tiao-folder-line {
-  color: color-mix(in srgb, var(--tiao-folder-color) 18%, var(--tiao-bg-solid));
+  color: color-mix(in srgb, var(--tiao-folder-color) 12%, var(--tiao-bg-solid));
 }
 .tiao-folder-colored:hover > .tiao-folder-body > .tiao-folder-line {
-  color: color-mix(in srgb, var(--tiao-folder-color) 38%, var(--tiao-bg-solid));
+  color: color-mix(in srgb, var(--tiao-folder-color) 30%, var(--tiao-bg-solid));
 }
 .tiao-folder-colored > .tiao-folder-body > .tiao-folder-line:hover {
-  color: color-mix(in srgb, var(--tiao-folder-color) 55%, var(--tiao-bg-solid));
+  color: color-mix(in srgb, var(--tiao-folder-color) 45%, var(--tiao-bg-solid));
 }
 /* indent minus row-pad-x so the label lands on the folder title; bottom
    pad matches the depth-line's last-row math */
@@ -959,11 +1026,19 @@
   /* match row content inset so the strip lines up with sliders/inputs */
   margin: 3px var(--tiao-row-pad-x) 2px;
 }
+.tiao-control > .tiao-tab-nav {
+  margin: 0;
+  width: 100%;
+}
 .tiao-tab-button {
   flex: 1;
+  min-width: 0;
   height: var(--tiao-row-height);
   border-radius: calc(var(--tiao-radius-sm) - 2px);
   color: var(--tiao-fg-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   transition: background 0.12s ease, color 0.12s ease;
 }
 .tiao-tab-button:hover {
@@ -971,7 +1046,7 @@
 }
 .tiao-tab-button.tiao-selected {
   background: var(--tiao-bg-solid);
-  color: var(--tiao-fg-soft);
+  color: var(--tiao-fg-strong);
 }
 .tiao-tab-page {
   display: none;

@@ -1,6 +1,14 @@
 import type { DockSide } from './dock'
 import { h, withDocument } from './dom'
-import type { Anchor, Pane, PaneFontSize, PaneOptions, PaneStyle, PaneTheme } from './pane'
+import type {
+  Anchor,
+  Pane,
+  PaneFontSize,
+  PaneOptions,
+  PaneSpacing,
+  PaneStyle,
+  PaneTheme,
+} from './pane'
 import { withoutPersisting } from './util'
 
 /** rows that only make sense for a single floating pane */
@@ -21,6 +29,12 @@ export interface PaneMenuSides {
 export interface PaneMenuFontSize {
   get(): PaneFontSize
   set(v: PaneFontSize): void
+}
+
+/** how much padding every pane draws; only the notch offers it */
+export interface PaneMenuSpacing {
+  get(): PaneSpacing
+  set(v: PaneSpacing): void
 }
 
 /** whether the notch vanishes until the pointer comes near the top edge */
@@ -47,6 +61,7 @@ export interface PaneMenuHost {
   /** the dock's stand-in for the pane anchor grid */
   sides?: PaneMenuSides
   fontSize?: PaneMenuFontSize
+  spacing?: PaneMenuSpacing
   hiding?: PaneMenuHiding
   /** drop below the host instead of beside it (the notch bar is too narrow) */
   menuBelow?: boolean
@@ -142,13 +157,11 @@ function buildMenu(host: PaneMenuHost): { shell: HTMLElement; refresh: () => voi
   host.element.append(shell)
 
   const placement = host.placement
-  const { fontSize, hiding } = host
+  const { fontSize, spacing, hiding } = host
   const settings = {
     draggable: placement?.getDraggable() ?? false,
-    fontSize: fontSize?.get() ?? 'small',
     hiding: hiding?.get() ?? false,
     theme: host.getTheme(),
-    style: host.getStyle(),
     accent: host.getAccent(),
     numbers: host.getNumbers(),
   }
@@ -186,15 +199,28 @@ function buildMenu(host: PaneMenuHost): { shell: HTMLElement; refresh: () => voi
   menuPane.addSeparator()
 
   if (fontSize) {
-    const binding = menuPane.addBinding(settings, 'fontSize', {
-      label: 'Font Size',
-      options: { Small: 'small', Normal: 'normal' },
+    const row = segmentedRow(host, 'Font Size', [
+      { label: 'S', value: 'small', title: 'Small' },
+      { label: 'M', value: 'normal', title: 'Normal' },
+      { label: 'L', value: 'large', title: 'Large' },
+    ], {
+      get: () => fontSize.get(),
+      set: (v) => fontSize.set(v),
     })
-    binding.on('change', (ev) => fontSize.set(ev.value as PaneFontSize))
-    refreshers.push(() => {
-      settings.fontSize = fontSize.get()
-      binding.refresh()
+    menuPane.rack.append(row.row)
+    refreshers.push(row.render)
+  }
+  if (spacing) {
+    const row = segmentedRow(host, 'Spacing', [
+      { label: 'S', value: 's', title: 'Small' },
+      { label: 'M', value: 'm', title: 'Medium' },
+      { label: 'L', value: 'l', title: 'Large' },
+    ], {
+      get: () => spacing.get(),
+      set: (v) => spacing.set(v),
     })
+    menuPane.rack.append(row.row)
+    refreshers.push(row.render)
   }
 
   const themeBinding = menuPane.addBinding(settings, 'theme', {
@@ -213,17 +239,18 @@ function buildMenu(host: PaneMenuHost): { shell: HTMLElement; refresh: () => voi
     syncChrome()
   })
 
-  const styleBinding = menuPane.addBinding(settings, 'style', {
-    label: 'Style',
-    options: {
-      Bouba: 'bouba',
-      Kiki: 'kiki',
+  const styleRow = segmentedRow(host, 'Style', [
+    { label: 'Bouba', value: 'bouba' },
+    { label: 'Kiki', value: 'kiki' },
+  ], {
+    get: () => host.getStyle(),
+    set: (v) => {
+      host.setStyle(v)
+      syncChrome()
     },
   })
-  styleBinding.on('change', (ev) => {
-    host.setStyle(ev.value)
-    syncChrome()
-  })
+  menuPane.rack.append(styleRow.row)
+  refreshers.push(styleRow.render)
 
   const accentBinding = menuPane.addBinding(settings, 'accent', { label: 'Accent' })
   accentBinding.on('change', (ev) => {
@@ -278,11 +305,9 @@ function buildMenu(host: PaneMenuHost): { shell: HTMLElement; refresh: () => voi
 
   const refresh = () => {
     settings.theme = host.getTheme()
-    settings.style = host.getStyle()
     settings.accent = host.getAccent()
     settings.numbers = host.getNumbers()
     themeBinding.refresh()
-    styleBinding.refresh()
     accentBinding.refresh()
     numbersBinding.refresh()
     for (const fn of refreshers) fn()
@@ -290,6 +315,43 @@ function buildMenu(host: PaneMenuHost): { shell: HTMLElement; refresh: () => voi
   }
 
   return { shell, refresh }
+}
+
+/** label + segmented tabs; the selected tab is the current value */
+function segmentedRow<T extends string>(
+  host: PaneMenuHost,
+  label: string,
+  options: readonly { label: string; value: T; title?: string }[],
+  value: { get(): T; set(v: T): void },
+): { row: HTMLElement; render: () => void } {
+  const nav = h('div', 'tiao-tab-nav')
+  nav.setAttribute('role', 'tablist')
+  const buttons = new Map<T, HTMLButtonElement>()
+  const render = () => {
+    const current = value.get()
+    for (const [v, btn] of buttons) {
+      const on = v === current
+      btn.classList.toggle('tiao-selected', on)
+      btn.setAttribute('aria-selected', String(on))
+    }
+  }
+  for (const opt of options) {
+    const btn = h('button', 'tiao-tab-button', opt.label)
+    btn.type = 'button'
+    btn.setAttribute('role', 'tab')
+    if (opt.title) btn.title = opt.title
+    const onClick = () => {
+      value.set(opt.value)
+      render()
+    }
+    btn.addEventListener('click', onClick)
+    host.onDispose(() => btn.removeEventListener('click', onClick))
+    buttons.set(opt.value, btn)
+    nav.append(btn)
+  }
+  const row = h('div', 'tiao-row', h('div', 'tiao-label', label), h('div', 'tiao-control', nav))
+  render()
+  return { row, render }
 }
 
 /** one selectable cell per position, in a row labeled "Anchor" */
