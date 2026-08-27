@@ -31,6 +31,11 @@ function notchMenuSelect(label: string): HTMLSelectElement {
   return notchMenuRow(label).querySelector('.tiao-select') as HTMLSelectElement
 }
 
+function notchMenuTab(label: string, tab: string): HTMLButtonElement {
+  const buttons = [...notchMenuRow(label).querySelectorAll('.tiao-tab-button')]
+  return buttons.find((b) => b.textContent === tab) as HTMLButtonElement
+}
+
 /** pick an option by its visible label, the way a user would */
 function selectOption(select: HTMLSelectElement, label: string): void {
   const option = [...select.options].find((o) => o.textContent === label)
@@ -504,27 +509,52 @@ describe('Pane registry and chrome', () => {
     const pane = new Pane({ size: 's' })
     const inline = new Pane({ container: document.body.appendChild(document.createElement('div')) })
     expect(pane.size).toBe('s')
+    expect(notchMenuTab('Font Size', 'S').classList.contains('tiao-selected')).toBe(true)
 
-    const fontSize = notchMenuSelect('Font Size')
-    expect(fontSize.selectedOptions[0]?.textContent).toBe('Small')
-
-    selectOption(fontSize, 'Normal')
-    expect(pane.size).toBe('l')
+    notchMenuTab('Font Size', 'M').click()
+    expect(pane.size).toBe('m')
     // the global size covers floating panes; inline ones keep their own
     expect(inline.size).toBe('m')
     expect(JSON.parse(localStorage.getItem('tiao:notch')!).fontSize).toBe('normal')
 
-    // panes created at Normal match, and fall back to their declared size after
     const later = new Pane()
-    expect(later.size).toBe('l')
-
-    selectOption(fontSize, 'Small')
-    expect(pane.size).toBe('s')
     expect(later.size).toBe('m')
+
+    notchMenuTab('Font Size', 'L').click()
+    expect(pane.size).toBe('l')
+    expect(later.size).toBe('l')
+    expect(inline.size).toBe('m')
+    expect(JSON.parse(localStorage.getItem('tiao:notch')!).fontSize).toBe('large')
+
+    notchMenuTab('Font Size', 'S').click()
+    expect(pane.size).toBe('s')
+    expect(later.size).toBe('s')
     expect(JSON.parse(localStorage.getItem('tiao:notch')!).fontSize).toBe('small')
 
     pane.dispose()
     inline.dispose()
+    later.dispose()
+  })
+
+  it('notch spacing pads every floating pane and persists', () => {
+    const pane = new Pane()
+    expect(pane.spacing).toBe('s')
+    expect(notchMenuTab('Spacing', 'S').classList.contains('tiao-selected')).toBe(true)
+
+    notchMenuTab('Spacing', 'M').click()
+    expect(pane.spacing).toBe('m')
+    expect(pane.element.classList.contains('tiao-spacing-m')).toBe(true)
+    expect(JSON.parse(localStorage.getItem('tiao:notch')!).spacing).toBe('m')
+
+    const later = new Pane()
+    expect(later.spacing).toBe('m')
+
+    notchMenuTab('Spacing', 'L').click()
+    expect(pane.spacing).toBe('l')
+    expect(later.spacing).toBe('l')
+    expect(JSON.parse(localStorage.getItem('tiao:notch')!).spacing).toBe('l')
+
+    pane.dispose()
     later.dispose()
   })
 
@@ -1870,18 +1900,15 @@ describe('Pane registry and chrome', () => {
     revived.dispose()
   })
 
-  it('menu style select switches kiki style and persists per pane id', () => {
+  it('menu style tabs switch kiki style and persist per pane id', () => {
     const pane = new Pane({ id: 'styled' })
     pane.element.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))
     const menu = pane.element.querySelector('.tiao-pane-menu.tiao-open')!
-    const selects = menu.querySelectorAll('.tiao-select')
-    // theme is first select; style is second
-    const styleSelect = selects[1] as HTMLSelectElement
+    const kiki = [...menu.querySelectorAll('.tiao-tab-button')].find((b) => b.textContent === 'Kiki') as HTMLButtonElement
     expect(pane.style).toBe('bouba')
     expect(pane.element.classList.contains('tiao-style-kiki')).toBe(false)
 
-    styleSelect.value = '1'
-    styleSelect.dispatchEvent(new Event('change'))
+    kiki.click()
     expect(pane.style).toBe('kiki')
     expect(pane.element.classList.contains('tiao-style-kiki')).toBe(true)
     pane.dispose()

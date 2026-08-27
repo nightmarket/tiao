@@ -148,11 +148,14 @@ function normalizeStyle(v: string | undefined | null): PaneStyle {
 
 export type PaneSize = 's' | 'm' | 'l'
 
+/** row padding around controls; S is the default this library ships */
+export type PaneSpacing = 's' | 'm' | 'l'
+
 /**
  * How big every floating pane draws, set once for all of them from the notch.
- * 'small' is each pane's own declared size — the default this library ships.
+ * Maps onto PaneSize: small → s, normal → m, large → l.
  */
-export type PaneFontSize = 'small' | 'normal'
+export type PaneFontSize = 'small' | 'normal' | 'large'
 
 /** default --tiao-accent, used when the computed style is unavailable (e.g. jsdom) */
 const DEFAULT_ACCENT = '#facc15'
@@ -203,6 +206,7 @@ const notches = new WeakMap<Document, Notch>()
  */
 interface NotchState {
   fontSize?: PaneFontSize | undefined
+  spacing?: PaneSpacing | undefined
   /** the notch vanishes until the pointer comes near the top edge */
   hiding?: boolean | undefined
   theme?: PaneTheme | undefined
@@ -263,6 +267,10 @@ function ensureNotch(doc: Document): void {
       fontSize: {
         get: () => Pane.fontSize,
         set: (v) => Pane.setFontSize(v, doc),
+      },
+      spacing: {
+        get: () => Pane.spacing,
+        set: (v) => Pane.setSpacing(v, doc),
       },
       hiding: {
         get: () => readNotchState().hiding ?? true,
@@ -474,10 +482,22 @@ export class Pane extends Container {
     return readNotchState().fontSize ?? 'small'
   }
 
-  /** Draw every floating pane at `size`; 'small' restores each declared size. */
+  /** Draw every floating pane at `size`; small → s, normal → m, large → l. */
   static setFontSize(size: PaneFontSize, doc: Document = document): void {
     notchStore.patch({ fontSize: size })
     for (const p of panesIn(doc)) p.applyFontSize(size)
+    syncNotch(doc)
+  }
+
+  /** how much padding floating panes currently draw */
+  static get spacing(): PaneSpacing {
+    return readNotchState().spacing ?? 's'
+  }
+
+  /** Draw every floating pane at `spacing`; 's' is the default padding. */
+  static setSpacing(spacing: PaneSpacing, doc: Document = document): void {
+    notchStore.patch({ spacing })
+    for (const p of panesIn(doc)) p.spacing = spacing
     syncNotch(doc)
   }
 
@@ -586,6 +606,7 @@ export class Pane extends Container {
     const notchState = readNotchState()
     if (this.floating) this.applyFontSize(notchState.fontSize ?? 'small')
     else if (options.size) this.size = options.size
+    if (this.floating) this.spacing = notchState.spacing ?? 's'
 
     // restore persisted state before first paint: this pane's own saved chrome
     // wins, then whatever the global settings panel last broadcast
@@ -947,6 +968,16 @@ export class Pane extends Container {
     if (v !== 'm') this.element.classList.add(`tiao-size-${v}`)
   }
 
+  get spacing(): PaneSpacing {
+    if (this.element.classList.contains('tiao-spacing-m')) return 'm'
+    if (this.element.classList.contains('tiao-spacing-l')) return 'l'
+    return 's'
+  }
+  set spacing(v: PaneSpacing) {
+    this.element.classList.remove('tiao-spacing-m', 'tiao-spacing-l')
+    if (v !== 's') this.element.classList.add(`tiao-spacing-${v}`)
+  }
+
   get theme(): PaneTheme {
     return this._theme
   }
@@ -1241,9 +1272,23 @@ export class Pane extends Container {
     this.clampToViewport()
   }
 
-  /** internal: follow the global font size, falling back to the declared `size` */
+  /** internal: follow the global font size */
   private applyFontSize(size: PaneFontSize): void {
-    this.size = size === 'normal' ? 'l' : this.options.size ?? 'm'
+    switch (size) {
+      case 'large':
+        this.size = 'l'
+        return
+      case 'normal':
+        this.size = 'm'
+        return
+      case 'small':
+        this.size = 's'
+        return
+      default: {
+        const _exhaustive: never = size
+        return _exhaustive
+      }
+    }
   }
 
   private applyExpanded(): void {

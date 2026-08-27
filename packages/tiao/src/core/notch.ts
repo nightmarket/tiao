@@ -4,16 +4,18 @@ import {
   type PaneMenuFontSize,
   type PaneMenuHiding,
   type PaneMenuHost,
+  type PaneMenuSpacing,
 } from './pane-menu'
 
 /** the notch menu drives one theme, style, and accent for every pane at once */
 export interface NotchHost
   extends Omit<
     PaneMenuHost,
-    'element' | 'placement' | 'sides' | 'fontSize' | 'hiding' | 'menuBelow' | 'onDispose'
+    'element' | 'placement' | 'sides' | 'fontSize' | 'spacing' | 'hiding' | 'menuBelow' | 'onDispose'
   > {
-  /** these two are global, so they live here rather than in a pane's menu */
+  /** these three are global, so they live here rather than in a pane's menu */
   fontSize: PaneMenuFontSize
+  spacing: PaneMenuSpacing
   hiding: PaneMenuHiding
   getHidden(): boolean
   toggleHidden(): void
@@ -84,6 +86,7 @@ export function createNotch(host: NotchHost): Notch {
     getNumbers: host.getNumbers,
     setNumbers: host.setNumbers,
     fontSize: host.fontSize,
+    spacing: host.spacing,
     hiding: host.hiding,
     onDispose: (fn) => disposers.push(fn),
   })
