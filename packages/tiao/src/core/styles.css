@@ -59,6 +59,8 @@
   --tiao-font-size-mono: 10px;
   --tiao-row-height: 18px;
   --tiao-control-height: calc(var(--tiao-row-height) - 2px);
+  /* fill-edge / scrub bars; 3px inset each side of the track */
+  --tiao-handle-height: calc(var(--tiao-control-height) - 6px);
   --tiao-titlebar-height: 24px;
   --tiao-header-height: 24px;
   --tiao-gap: 6px;
@@ -1137,8 +1139,8 @@
   position: absolute;
   top: 50%;
   width: var(--tiao-handle-size);
-  height: 10px;
-  margin-top: -5px;
+  height: var(--tiao-handle-height);
+  margin-top: calc(var(--tiao-handle-height) / -2);
   border-radius: 1px;
   background: var(--tiao-fg-dim);
   opacity: 0.8;
@@ -1240,9 +1242,9 @@
   left: 50%;
   top: 50%;
   width: 2px;
-  height: 10px;
+  height: var(--tiao-handle-height);
   margin-left: -1px;
-  margin-top: -5px;
+  margin-top: calc(var(--tiao-handle-height) / -2);
   border-radius: 1px;
   background: var(--tiao-fg-dim);
   opacity: 0.8;
