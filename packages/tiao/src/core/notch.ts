@@ -21,7 +21,7 @@ export interface NotchHost
   toggleHidden(): void
   getDocked(): boolean
   toggleDocked(): void
-  /** restore every bound value to the default the code declared */
+  /** restore every bound value and pane position to the default the code declared */
   reset(): void
 }
 
@@ -37,9 +37,10 @@ export interface Notch {
 
 /**
  * Global control bar pinned to the top edge of the viewport: hide/show every
- * floating pane, dock them into the sidebar, reset every bound value, and open
- * the settings panel that themes every pane at once. Built by the Pane (which
- * owns the pane registry) so this module stays free of pane imports.
+ * floating pane, dock them into the sidebar, reset every bound value and
+ * pane position, and open the settings panel that themes every pane at once.
+ * Built by the Pane (which owns the pane registry) so this module stays free
+ * of pane imports.
  *
  * Auto-hide tracks the pointer's distance from the top edge instead of hovering
  * a hit strip: a strip would have to swallow clicks meant for the panes and the
@@ -53,7 +54,11 @@ export function createNotch(host: NotchHost): Notch {
     const dockBtn = notchButton('tiao-notch-dock', panelLeftIcon(), 'Dock panes to sidebar')
     const gear = notchButton('tiao-notch-gear', gearIcon(), 'Global settings')
     gear.setAttribute('data-tiao-menu-trigger', '')
-    const resetBtn = notchButton('tiao-notch-reset', rotateCcwIcon(), 'Reset values to defaults')
+    const resetBtn = notchButton(
+      'tiao-notch-reset',
+      rotateCcwIcon(),
+      'Reset values and positions to defaults',
+    )
     const element = h(
       'div',
       'tiao-notch',

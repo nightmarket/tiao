@@ -43,6 +43,21 @@ function selectOption(select: HTMLSelectElement, label: string): void {
   select.dispatchEvent(new Event('change'))
 }
 
+function sizePane(pane: Pane, width: number, height: number): void {
+  Object.defineProperty(pane.element, 'offsetWidth', { value: width, configurable: true })
+  Object.defineProperty(pane.element, 'offsetHeight', { value: height, configurable: true })
+}
+
+/** mock sizes then re-pack via the public anchor setter */
+function packSized(panes: Pane[], width: number, height: number | number[]): void {
+  for (let i = 0; i < panes.length; i++) {
+    const h = typeof height === 'number' ? height : height[i]!
+    sizePane(panes[i]!, width, h)
+  }
+  const last = panes[panes.length - 1]
+  if (last?.anchor) last.anchor = last.anchor
+}
+
 describe('Pane bindings', () => {
   it('writes slider changes back to the target object and emits change events', () => {
     const params = { speed: 0.5 }
@@ -494,7 +509,7 @@ describe('Pane registry and chrome', () => {
     expect(label('.tiao-notch-hide')).toBe('Hide debug panes')
     expect(label('.tiao-notch-dock')).toBe('Dock panes to sidebar')
     expect(label('.tiao-notch-gear')).toBe('Global settings')
-    expect(label('.tiao-notch-reset')).toBe('Reset values to defaults')
+    expect(label('.tiao-notch-reset')).toBe('Reset values and positions to defaults')
 
     ;(document.querySelector('.tiao-notch-hide') as HTMLButtonElement).click()
     ;(document.querySelector('.tiao-notch-dock') as HTMLButtonElement).click()
@@ -1051,6 +1066,111 @@ describe('Pane registry and chrome', () => {
     expect(pane.element.style.width).toBe('350px')
     expect(pane.element.style.getPropertyValue('--tiao-max-height')).toBe('480px')
     pane.dispose()
+  })
+
+  it('packs co-anchored default panes down from the corner with a gap', () => {
+    const a = new Pane()
+    const b = new Pane()
+    packSized([a, b], 280, [200, 150])
+
+    expect(a.element.style.top).toBe('8px')
+    expect(a.element.style.right).toBe('8px')
+    expect(b.element.style.top).toBe('216px')
+    expect(b.element.style.right).toBe('8px')
+
+    a.dispose()
+    b.dispose()
+  })
+
+  it('packs panes that share an explicit top-left anchor', () => {
+    const a = new Pane({ anchor: 'top-left' })
+    const b = new Pane({ anchor: 'top-left' })
+    packSized([a, b], 280, [200, 150])
+
+    expect(a.element.style.top).toBe('8px')
+    expect(a.element.style.left).toBe('8px')
+    expect(b.element.style.top).toBe('216px')
+    expect(b.element.style.left).toBe('8px')
+
+    a.dispose()
+    b.dispose()
+  })
+
+  it('does not pack panes on different anchors against each other', () => {
+    const right = new Pane({ anchor: 'top-right' })
+    const left = new Pane({ anchor: 'top-left' })
+    packSized([right, left], 280, 200)
+
+    expect(right.element.style.top).toBe('8px')
+    expect(right.element.style.right).toBe('8px')
+    expect(left.element.style.top).toBe('8px')
+    expect(left.element.style.left).toBe('8px')
+
+    right.dispose()
+    left.dispose()
+  })
+
+  it('reflows the pack when a pane is dragged free', () => {
+    const a = new Pane()
+    const b = new Pane()
+    packSized([a, b], 280, [200, 150])
+    b.moveTo(10, 20)
+
+    expect(b.anchor).toBeNull()
+    expect(b.element.style.left).toBe('10px')
+    expect(a.element.style.top).toBe('8px')
+    expect(a.element.style.right).toBe('8px')
+
+    a.dispose()
+    b.dispose()
+  })
+
+  it('reflows the pack when a sibling is disposed', () => {
+    const a = new Pane()
+    const b = new Pane()
+    packSized([a, b], 280, [200, 150])
+    a.dispose()
+
+    expect(b.element.style.top).toBe('8px')
+    expect(b.element.style.right).toBe('8px')
+
+    b.dispose()
+  })
+
+  it('wraps a packed column inward when it would leave the viewport', () => {
+    const a = new Pane()
+    const b = new Pane()
+    packSized([a, b], 280, 400)
+
+    expect(a.element.style.top).toBe('8px')
+    expect(a.element.style.right).toBe('8px')
+    expect(b.element.style.top).toBe('8px')
+    expect(b.element.style.right).toBe('296px')
+
+    a.dispose()
+    b.dispose()
+  })
+
+  it('restores the floating pack on undock and leaves sidebar order alone', () => {
+    const a = new Pane({ title: 'A' })
+    const b = new Pane({ title: 'B', order: 1 })
+    packSized([a, b], 280, [200, 150])
+    const dockBtn = document.querySelector('.tiao-notch-dock') as HTMLButtonElement
+    dockBtn.click()
+
+    const titles = [...document.querySelectorAll('.tiao-dock-body .tiao-pane-title')].map(
+      (t) => t.textContent,
+    )
+    expect(titles).toEqual(['A', 'B'])
+
+    dockBtn.click()
+    expect(a.element.style.top).toBe('8px')
+    expect(a.element.style.right).toBe('8px')
+    expect(b.element.style.top).toBe('216px')
+    expect(b.element.style.right).toBe('8px')
+
+    a.dispose()
+    b.dispose()
   })
 
   it('exposes folder nesting depth to CSS for column alignment', () => {
@@ -2049,12 +2169,68 @@ describe('Pane registry and chrome', () => {
     const pane = new Pane({ id: 'resettable' })
     const binding = pane.addBinding(params, 'speed')
     binding.value.set(7)
+    pane.moveTo(40, 60)
     expect(localStorage.getItem('tiao:resettable:values')).not.toBeNull()
 
     ;(document.querySelector('.tiao-notch-reset') as HTMLButtonElement).click()
     expect(params.speed).toBe(1)
     expect(binding.value.get()).toBe(1)
     expect(localStorage.getItem('tiao:resettable:values')).toBeNull()
+    expect(pane.anchor).toBe('top-right')
+    expect(pane.element.style.right).toBe('8px')
+    expect(pane.element.style.top).toBe('8px')
+    pane.dispose()
+  })
+
+  it('notch reset snaps panes back to their declared position', () => {
+    localStorage.setItem('tiao:placed', JSON.stringify({ x: 40, y: 60 }))
+    const pane = new Pane({ id: 'placed', anchor: 'bottom-left' })
+    expect(pane.anchor).toBeNull()
+    expect(pane.element.style.left).toBe('40px')
+    expect(pane.element.style.top).toBe('60px')
+
+    Pane.resetValues()
+    expect(pane.anchor).toBe('bottom-left')
+    expect(pane.element.style.left).toBe('8px')
+    expect(pane.element.style.bottom).toBe('8px')
+    expect(pane.element.style.top).toBe('auto')
+    const saved = JSON.parse(localStorage.getItem('tiao:placed') ?? '{}')
+    expect(saved.x).toBeUndefined()
+    expect(saved.y).toBeUndefined()
+    expect(saved.anchor).toBeUndefined()
+
+    pane.dispose()
+    const revived = new Pane({ id: 'placed', anchor: 'bottom-left' })
+    expect(revived.anchor).toBe('bottom-left')
+    expect(revived.element.style.left).toBe('8px')
+    expect(revived.element.style.bottom).toBe('8px')
+    revived.dispose()
+  })
+
+  it('notch reset restores a re-anchored pane to its declared anchor', () => {
+    const pane = new Pane({ id: 'reanchored', anchor: 'top-right' })
+    pane.anchor = 'bottom-center'
+    expect(pane.element.style.left).toBe('50%')
+
+    Pane.resetValues()
+    expect(pane.anchor).toBe('top-right')
+    expect(pane.element.style.right).toBe('8px')
+    expect(pane.element.style.top).toBe('8px')
+    pane.dispose()
+  })
+
+  it('notch reset updates a docked pane so undock returns to the declared position', () => {
+    const pane = new Pane({ id: 'parked', anchor: 'top-left' })
+    pane.moveTo(40, 60)
+    Pane.toggleDock()
+
+    Pane.resetValues()
+    expect(pane.docked).toBe(true)
+
+    Pane.toggleDock()
+    expect(pane.anchor).toBe('top-left')
+    expect(pane.element.style.left).toBe('8px')
+    expect(pane.element.style.top).toBe('8px')
     pane.dispose()
   })
 

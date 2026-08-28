@@ -178,6 +178,9 @@ const MAX_WIDTH = 640
 const MIN_HEIGHT = 120
 const MAX_HEIGHT = 2000
 
+/** gap between co-anchored floating panes; matches the default window inset */
+const PACK_GAP = 8
+
 const panes = new Map<string, Pane>()
 
 /** all live floating panes (for the global H toggle) */
@@ -244,6 +247,111 @@ function panesIn(doc: Document): Pane[] {
     if (p.element.ownerDocument === doc) list.push(p)
   }
   return list
+}
+
+/** which way a packed column grows; `mid` centers the group on the viewport */
+function packStack(anchor: Anchor): 'start' | 'mid' {
+  switch (anchor) {
+    case 'left-center':
+    case 'right-center':
+    case 'center':
+      return 'mid'
+    case 'top-left':
+    case 'top-center':
+    case 'top-right':
+    case 'bottom-left':
+    case 'bottom-center':
+    case 'bottom-right':
+      return 'start'
+    default: {
+      const _exhaustive: never = anchor
+      return _exhaustive
+    }
+  }
+}
+
+/** wrap a full column inward from this edge; center anchors stay a single column */
+function packWrap(anchor: Anchor): 'left' | 'right' | null {
+  switch (anchor) {
+    case 'top-left':
+    case 'bottom-left':
+      return 'left'
+    case 'top-right':
+    case 'bottom-right':
+      return 'right'
+    case 'top-center':
+    case 'bottom-center':
+    case 'left-center':
+    case 'right-center':
+    case 'center':
+      return null
+    default: {
+      const _exhaustive: never = anchor
+      return _exhaustive
+    }
+  }
+}
+
+let packing = false
+
+/**
+ * Lay out every movable, visible, still-anchored pane in `doc` so siblings
+ * that share an anchor sit along that edge instead of occupying one spot.
+ */
+function packAnchored(doc: Document, only?: Anchor): void {
+  if (packing) return
+  packing = true
+  try {
+    const groups = new Map<Anchor, Pane[]>()
+    for (const p of panesIn(doc)) {
+      if (p.docked || p.hidden) continue
+      const anchor = p.anchor
+      if (!anchor) continue
+      if (only && anchor !== only) continue
+      const list = groups.get(anchor)
+      if (list) list.push(p)
+      else groups.set(anchor, [p])
+    }
+    const viewH = doc.defaultView?.innerHeight ?? 0
+    for (const [anchor, list] of groups) {
+      // order, then creation (panesIn walks the insertion-ordered floating set)
+      list.sort((a, b) => a.order - b.order)
+      layoutAnchorGroup(anchor, list, viewH)
+    }
+  } finally {
+    packing = false
+  }
+}
+
+function layoutAnchorGroup(anchor: Anchor, list: Pane[], viewH: number): void {
+  if (packStack(anchor) === 'mid') {
+    const heights = list.map((p) => p.element.offsetHeight)
+    const total =
+      heights.reduce((sum, h) => sum + h, 0) + PACK_GAP * Math.max(0, list.length - 1)
+    let y = -total / 2
+    for (let i = 0; i < list.length; i++) {
+      list[i]!.placePacked(y, 0)
+      y += heights[i]! + PACK_GAP
+    }
+    return
+  }
+  const wrap = packWrap(anchor)
+  const limit = Math.max(0, viewH - 2 * PACK_GAP)
+  let stack = 0
+  let column = 0
+  let colWidth = 0
+  for (const p of list) {
+    const h = p.element.offsetHeight
+    const w = p.element.offsetWidth
+    if (wrap && stack > 0 && limit > 0 && stack + h > limit) {
+      column += colWidth + PACK_GAP
+      stack = 0
+      colWidth = 0
+    }
+    p.placePacked(stack, column)
+    stack += h + PACK_GAP
+    colWidth = Math.max(colWidth, w)
+  }
 }
 
 /** persistence is opt-out, but needs a stable id to key on */
@@ -460,6 +568,8 @@ export class Pane extends Container {
   private _theme: PaneTheme = 'dark'
   private _anchor: Anchor | null = null
   private _order: number
+  private _stack = 0
+  private _column = 0
   private margin: number
   private readonly doc: Document
   /** created without a container: owns its own window position and joins the H toggle */
@@ -543,7 +653,8 @@ export class Pane extends Container {
 
   /**
    * Restore every bound value in `doc` to the default its code declared and
-   * forget the persisted copies. Layout, theme, and dock state stay as they are.
+   * forget the persisted copies. Floating panes also snap back to the
+   * position their code declared. Theme and dock state stay as they are.
    */
   static resetValues(doc: Document = document): void {
     // floating panes plus every id'd pane: inline panes without an id (the
@@ -552,7 +663,9 @@ export class Pane extends Container {
       if (p.element.ownerDocument !== doc) continue
       walkBindings(p, (b) => b.reset())
       p.values?.clear()
+      p.resetPosition()
     }
+    packAnchored(doc)
   }
 
   constructor(options: PaneOptions = {}) {
@@ -653,9 +766,8 @@ export class Pane extends Container {
     if (this.floating) {
       if (persisted.x !== undefined && persisted.y !== undefined) {
         this.moveTo(persisted.x, persisted.y)
-      } else {
-        if (persisted.anchor) this._anchor = persisted.anchor
-        this.applyAnchor()
+      } else if (persisted.anchor) {
+        this._anchor = persisted.anchor
       }
     }
     this.applyExpanded()
@@ -759,7 +871,8 @@ export class Pane extends Container {
           if (resizeRaf) return
           resizeRaf = win.requestAnimationFrame(() => {
             resizeRaf = 0
-            this.clampToViewport()
+            if (this._anchor) packAnchored(this.doc, this._anchor)
+            else this.clampToViewport()
           })
         }
         win.addEventListener('resize', onResize)
@@ -861,8 +974,10 @@ export class Pane extends Container {
       }
       this.disposers.push(() => {
         floatingPanes.delete(this)
+        const anchor = this._anchor
         releaseNotch(doc)
         syncNotch(doc)
+        if (anchor) packAnchored(doc, anchor)
       })
     }
 
@@ -876,6 +991,14 @@ export class Pane extends Container {
     }
     // a persisted free position may be off-screen on a smaller window
     this.clampToViewport()
+    if (this.floating && this._anchor && !this.docked) packAnchored(doc, this._anchor)
+    if (this.floating && typeof ResizeObserver !== 'undefined') {
+      const ro = new ResizeObserver(() => {
+        if (this._anchor && this.movable && !this.hidden) packAnchored(this.doc, this._anchor)
+      })
+      ro.observe(this.element)
+      this.disposers.push(() => ro.disconnect())
+    }
     syncNotch(doc)
 
     const id = options.id
@@ -924,6 +1047,7 @@ export class Pane extends Container {
     if (super.hidden === v) return
     super.hidden = v
     syncNotch(this.doc)
+    if (this._anchor) packAnchored(this.doc, this._anchor)
   }
 
   /** sidebar position, z-index style: lower sorts first, ties keep creation order */
@@ -936,6 +1060,7 @@ export class Pane extends Container {
     this.element.dataset['tiaoOrder'] = String(v)
     const body = this.docked ? dockBody(this.doc) : null
     if (body) this.insertDocked(body)
+    else if (this._anchor) packAnchored(this.doc, this._anchor)
   }
 
   get draggable(): boolean {
@@ -986,9 +1111,11 @@ export class Pane extends Container {
   }
   set anchor(anchor: Anchor | null) {
     if (!this.movable || anchor === null) return
+    const prev = this._anchor
     this._anchor = anchor
-    this.applyAnchor()
     this.saveState({ anchor, x: undefined, y: undefined })
+    packAnchored(this.doc, anchor)
+    if (prev && prev !== anchor) packAnchored(this.doc, prev)
   }
 
   get size(): PaneSize {
@@ -1082,7 +1209,10 @@ export class Pane extends Container {
 
   /** moveTo with a known size, so drag moves skip the layout read */
   private setPosition(x: number, y: number, w: number, h: number): void {
+    const prev = this._anchor
     this._anchor = null
+    this._stack = 0
+    this._column = 0
     const win = this.doc.defaultView
     if (win && w) x = clamp(x, 0, Math.max(0, win.innerWidth - w))
     if (win && h) y = clamp(y, 0, Math.max(0, win.innerHeight - h))
@@ -1092,6 +1222,7 @@ export class Pane extends Container {
     s.right = 'auto'
     s.bottom = 'auto'
     s.transform = 'none'
+    if (prev) packAnchored(this.doc, prev)
   }
 
   /** invisible strips along the left/right/bottom edges; dragging them resizes the pane */
@@ -1156,11 +1287,32 @@ export class Pane extends Container {
     if (x !== rect.left || y !== rect.top) this.moveTo(x, y)
   }
 
+  /** snap back to the anchor the constructor declared and forget a saved free position */
+  private resetPosition(): void {
+    if (!this.floating) return
+    this._anchor = this.options.anchor ?? 'top-right'
+    this._stack = 0
+    this._column = 0
+    this.saveState({ x: undefined, y: undefined, anchor: undefined })
+  }
+
+  /**
+   * internal: pin this pane to its anchor using the current pack offsets.
+   * Co-anchored siblings share a column; `_stack` / `_column` come from packAnchored.
+   */
+  placePacked(stack: number, column: number): void {
+    this._stack = stack
+    this._column = column
+    this.applyAnchor()
+  }
+
   private applyAnchor(): void {
     const anchor = this._anchor
     if (!anchor) return
     const s = this.element.style
-    const m = `${this.margin}px`
+    const inset = this.margin
+    const stack = this._stack
+    const col = this._column
     s.left = 'auto'
     s.right = 'auto'
     s.top = 'auto'
@@ -1168,45 +1320,58 @@ export class Pane extends Container {
     s.transform = 'none'
     switch (anchor) {
       case 'top-left':
-        s.top = m
-        s.left = m
+        s.top = `${inset + stack}px`
+        s.left = `${inset + col}px`
         break
       case 'top-center':
-        s.top = m
+        s.top = `${inset + stack}px`
         s.left = '50%'
         s.transform = 'translateX(-50%)'
         break
       case 'top-right':
-        s.top = m
-        s.right = m
+        s.top = `${inset + stack}px`
+        s.right = `${inset + col}px`
         break
       case 'left-center':
-        s.left = m
-        s.top = '50%'
-        s.transform = 'translateY(-50%)'
+        s.left = `${inset + col}px`
+        if (stack === 0) {
+          s.top = '50%'
+          s.transform = 'translateY(-50%)'
+        } else {
+          s.top = `calc(50% + ${stack}px)`
+        }
         break
       case 'center':
         s.left = '50%'
-        s.top = '50%'
-        s.transform = 'translate(-50%, -50%)'
+        if (stack === 0) {
+          s.top = '50%'
+          s.transform = 'translate(-50%, -50%)'
+        } else {
+          s.top = `calc(50% + ${stack}px)`
+          s.transform = 'translateX(-50%)'
+        }
         break
       case 'right-center':
-        s.right = m
-        s.top = '50%'
-        s.transform = 'translateY(-50%)'
+        s.right = `${inset + col}px`
+        if (stack === 0) {
+          s.top = '50%'
+          s.transform = 'translateY(-50%)'
+        } else {
+          s.top = `calc(50% + ${stack}px)`
+        }
         break
       case 'bottom-left':
-        s.bottom = m
-        s.left = m
+        s.bottom = `${inset + stack}px`
+        s.left = `${inset + col}px`
         break
       case 'bottom-center':
-        s.bottom = m
+        s.bottom = `${inset + stack}px`
         s.left = '50%'
         s.transform = 'translateX(-50%)'
         break
       case 'bottom-right':
-        s.bottom = m
-        s.right = m
+        s.bottom = `${inset + stack}px`
+        s.right = `${inset + col}px`
         break
       default: {
         const _exhaustive: never = anchor
@@ -1269,6 +1434,7 @@ export class Pane extends Container {
     this.element.classList.add('tiao-docked')
     this.applyDraggable()
     this.insertDocked(container)
+    if (this._anchor) packAnchored(this.doc, this._anchor)
   }
 
   /**
@@ -1300,7 +1466,8 @@ export class Pane extends Container {
       this.element.style.setProperty(prop, value)
     }
     this.doc.body.append(this.element)
-    this.applyAnchor()
+    if (this._anchor) packAnchored(this.doc, this._anchor)
+    else this.applyAnchor()
     this.applyDraggable()
     this.clampToViewport()
   }

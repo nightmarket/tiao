@@ -33,6 +33,9 @@ Everything ships in one package with tree-shakeable subpath exports:
 
 The package is ESM-only.
 
+Floating panes that share an `anchor` pack along that edge instead of occupying
+the same spot. Drag a pane or pick another cell to leave the pack.
+
 React is an optional peer dependency and is only required for
 `@nightmarket/tiao/react`. The core injects its styles automatically; importing
 `@nightmarket/tiao/styles.css` disables that runtime injection.
