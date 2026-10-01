@@ -60,7 +60,12 @@ function benchShift(n, size) {
       }
     }
   }
-  return { ms: performance.now() - t0, lastMin: observedMin, lastMax: observedMax, len: buffer.length }
+  return {
+    ms: performance.now() - t0,
+    lastMin: observedMin,
+    lastMax: observedMax,
+    len: buffer.length,
+  }
 }
 
 function benchRing(n, size) {
@@ -142,7 +147,8 @@ const out = {
   speedup: shift.ms / ring.ms,
   nsPerShift: (shift.ms * 1e6) / samples,
   nsPerRing: (ring.ms * 1e6) / samples,
-  parity: shift.lastMin === ring.lastMin && shift.lastMax === ring.lastMax && shift.len === ring.len,
+  parity:
+    shift.lastMin === ring.lastMin && shift.lastMax === ring.lastMax && shift.len === ring.len,
 }
 const path = join(artifacts, `ring-buffer-${label}.json`)
 writeFileSync(path, JSON.stringify(out, null, 2))

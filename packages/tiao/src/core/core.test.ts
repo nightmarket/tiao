@@ -1,8 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+  maxChroma,
+  maxChromaP3,
+  oklchInGamut,
+  oklchInP3Gamut,
+  parseColor,
+  serializeColor,
+} from './controls/color-model'
 import { Pane } from './pane'
 import { registerPlugin } from './plugin'
-import { maxChroma, maxChromaP3, oklchInGamut, oklchInP3Gamut, parseColor, serializeColor } from './controls/color-model'
-import { jsonStore, snap, formatNumber, withoutPersisting } from './util'
+import { formatNumber, jsonStore, snap, withoutPersisting } from './util'
 
 beforeEach(() => {
   document.body.innerHTML = ''
@@ -55,6 +62,7 @@ function packSized(panes: Pane[], width: number, height: number | number[]): voi
     sizePane(panes[i]!, width, h)
   }
   const last = panes[panes.length - 1]
+  // biome-ignore lint/correctness/noSelfAssign: re-running the anchor setter re-packs the column.
   if (last?.anchor) last.anchor = last.anchor
 }
 
@@ -126,21 +134,37 @@ describe('Pane bindings', () => {
       toJSON: () => ({}),
     })
 
-    track.dispatchEvent(new MouseEvent('pointerdown', { button: 0, clientX: 10, clientY: 10, bubbles: true }))
-    track.dispatchEvent(new MouseEvent('pointermove', { clientX: 25, clientY: 10, bubbles: true, buttons: 1 }))
-    track.dispatchEvent(new MouseEvent('pointerup', { button: 0, clientX: 25, clientY: 10, bubbles: true }))
+    track.dispatchEvent(
+      new MouseEvent('pointerdown', { button: 0, clientX: 10, clientY: 10, bubbles: true }),
+    )
+    track.dispatchEvent(
+      new MouseEvent('pointermove', { clientX: 25, clientY: 10, bubbles: true, buttons: 1 }),
+    )
+    track.dispatchEvent(
+      new MouseEvent('pointerup', { button: 0, clientX: 25, clientY: 10, bubbles: true }),
+    )
     expect(params.range.min).toBe(25)
     expect(params.range.max).toBe(80)
 
-    track.dispatchEvent(new MouseEvent('pointerdown', { button: 0, clientX: 90, clientY: 10, bubbles: true }))
-    track.dispatchEvent(new MouseEvent('pointermove', { clientX: 60, clientY: 10, bubbles: true, buttons: 1 }))
-    track.dispatchEvent(new MouseEvent('pointerup', { button: 0, clientX: 60, clientY: 10, bubbles: true }))
+    track.dispatchEvent(
+      new MouseEvent('pointerdown', { button: 0, clientX: 90, clientY: 10, bubbles: true }),
+    )
+    track.dispatchEvent(
+      new MouseEvent('pointermove', { clientX: 60, clientY: 10, bubbles: true, buttons: 1 }),
+    )
+    track.dispatchEvent(
+      new MouseEvent('pointerup', { button: 0, clientX: 60, clientY: 10, bubbles: true }),
+    )
     expect(params.range.min).toBe(25)
     expect(params.range.max).toBe(60)
 
     // left of the band always grabs from; right of the band always grabs to
-    track.dispatchEvent(new MouseEvent('pointerdown', { button: 0, clientX: 5, clientY: 10, bubbles: true }))
-    track.dispatchEvent(new MouseEvent('pointerup', { button: 0, clientX: 5, clientY: 10, bubbles: true }))
+    track.dispatchEvent(
+      new MouseEvent('pointerdown', { button: 0, clientX: 5, clientY: 10, bubbles: true }),
+    )
+    track.dispatchEvent(
+      new MouseEvent('pointerup', { button: 0, clientX: 5, clientY: 10, bubbles: true }),
+    )
     expect(params.range.min).toBe(5)
     expect(params.range.max).toBe(60)
     pane.dispose()
@@ -339,7 +363,9 @@ describe('Pane bindings', () => {
     knob.click()
     expect(document.querySelector('.tiao-angle-overlay')).not.toBeNull()
     // hover-follow: origin is knob center (50,50) → (100, 50) is right = 90°
-    document.dispatchEvent(new MouseEvent('pointermove', { clientX: 100, clientY: 50, bubbles: true }))
+    document.dispatchEvent(
+      new MouseEvent('pointermove', { clientX: 100, clientY: 50, bubbles: true }),
+    )
     expect(params.yaw).toBe(90)
     expect(document.querySelector('.tiao-scrub-tooltip')?.textContent).toBe('90°')
     // mousedown commits and closes
@@ -372,7 +398,9 @@ describe('Pane bindings', () => {
     })
     toggle.click()
     // pad centered at (10,10), size 136 → right edge ≈ (10+68, 10) = x max
-    document.dispatchEvent(new MouseEvent('pointermove', { clientX: 78, clientY: 10, bubbles: true }))
+    document.dispatchEvent(
+      new MouseEvent('pointermove', { clientX: 78, clientY: 10, bubbles: true }),
+    )
     expect(params.pos.x).toBeCloseTo(1, 5)
     expect(params.pos.y).toBeCloseTo(0, 5)
     expect(document.querySelector('.tiao-scrub-tooltip')?.textContent).toBe('1.00, 0.00')
@@ -444,7 +472,10 @@ describe('Pane registry and chrome', () => {
   it('H toggles all floating panes but leaves inline ones alone', () => {
     const a = new Pane({ title: 'A' })
     const b = new Pane({ title: 'B' })
-    const inline = new Pane({ title: 'Inline', container: document.body.appendChild(document.createElement('div')) })
+    const inline = new Pane({
+      title: 'Inline',
+      container: document.body.appendChild(document.createElement('div')),
+    })
 
     expect(Pane.toggleAll()).toBe(true)
     expect(a.hidden).toBe(true)
@@ -717,7 +748,9 @@ describe('Pane registry and chrome', () => {
 
     const search = document.querySelector('.tiao-dock-search') as HTMLButtonElement
     search.click()
-    const input = document.querySelector('.tiao-dock-searchbar .tiao-search-input') as HTMLInputElement
+    const input = document.querySelector(
+      '.tiao-dock-searchbar .tiao-search-input',
+    ) as HTMLInputElement
     input.value = 'gamma'
     input.dispatchEvent(new Event('input'))
     expect(gamma.element.classList.contains('tiao-search-miss')).toBe(false)
@@ -743,7 +776,9 @@ describe('Pane registry and chrome', () => {
     expect(b.element.classList.contains('tiao-theme-nord')).toBe(true)
     const gear = document.querySelector('.tiao-dock-gear') as HTMLButtonElement
     gear.click()
-    const select = document.querySelector('.tiao-dock .tiao-pane-menu .tiao-select') as HTMLSelectElement
+    const select = document.querySelector(
+      '.tiao-dock .tiao-pane-menu .tiao-select',
+    ) as HTMLSelectElement
     selectOption(select, 'Catppuccin')
     expect(a.element.classList.contains('tiao-theme-catppuccin')).toBe(true)
     expect(b.element.classList.contains('tiao-theme-catppuccin')).toBe(true)
@@ -925,7 +960,7 @@ describe('Pane registry and chrome', () => {
   })
 
   it('does not inject styles when the stylesheet was imported manually', () => {
-    document.querySelectorAll('style[data-tiao]').forEach((style) => style.remove())
+    for (const style of document.querySelectorAll('style[data-tiao]')) style.remove()
     const stylesheet = document.createElement('style')
     stylesheet.textContent = ':root { --tiao-styles-loaded: 1; }'
     document.head.append(stylesheet)
@@ -971,16 +1006,26 @@ describe('Pane registry and chrome', () => {
     pane.addBinding(params, 'a')
     pane.addBinding(params, 'b')
     const pickers = pane.element.querySelectorAll('.tiao-color-picker')
-    expect(pickers[0]?.querySelector('.tiao-color-ok')?.classList.contains('tiao-hidden')).toBe(false)
-    expect(pickers[0]?.querySelector('.tiao-color-sv')?.classList.contains('tiao-hidden')).toBe(true)
-    expect(pickers[1]?.querySelector('.tiao-color-ok')?.classList.contains('tiao-hidden')).toBe(true)
-    expect(pickers[1]?.querySelector('.tiao-color-sv')?.classList.contains('tiao-hidden')).toBe(false)
+    expect(pickers[0]?.querySelector('.tiao-color-ok')?.classList.contains('tiao-hidden')).toBe(
+      false,
+    )
+    expect(pickers[0]?.querySelector('.tiao-color-sv')?.classList.contains('tiao-hidden')).toBe(
+      true,
+    )
+    expect(pickers[1]?.querySelector('.tiao-color-ok')?.classList.contains('tiao-hidden')).toBe(
+      true,
+    )
+    expect(pickers[1]?.querySelector('.tiao-color-sv')?.classList.contains('tiao-hidden')).toBe(
+      false,
+    )
 
     // switching the format dropdown swaps the picker mode
     const select = pickers[1]?.querySelector('.tiao-select') as HTMLSelectElement
     select.value = 'oklch'
     select.dispatchEvent(new Event('change'))
-    expect(pickers[1]?.querySelector('.tiao-color-ok')?.classList.contains('tiao-hidden')).toBe(false)
+    expect(pickers[1]?.querySelector('.tiao-color-ok')?.classList.contains('tiao-hidden')).toBe(
+      false,
+    )
     pane.dispose()
   })
 
@@ -1016,7 +1061,7 @@ describe('Pane registry and chrome', () => {
 
     // shrink the window; the free-positioned pane must move back inside
     pane.element.getBoundingClientRect = () =>
-      ({ left: 724, top: 0, width: 300, height: 200 } as DOMRect)
+      ({ left: 724, top: 0, width: 300, height: 200 }) as DOMRect
     const originalWidth = window.innerWidth
     Object.defineProperty(window, 'innerWidth', { value: 600, configurable: true })
     window.dispatchEvent(new Event('resize'))
@@ -1029,7 +1074,7 @@ describe('Pane registry and chrome', () => {
   it('resizes via edge handles, clamps, and persists the result', () => {
     const pane = new Pane({ id: 'rsz' })
     pane.element.getBoundingClientRect = () =>
-      ({ left: 100, top: 0, width: 280, height: 400 } as DOMRect)
+      ({ left: 100, top: 0, width: 280, height: 400 }) as DOMRect
 
     const drag = (edge: string, dx: number, dy: number) => {
       const handle = pane.element.querySelector(`.tiao-resize-${edge}`) as HTMLElement
@@ -1178,8 +1223,11 @@ describe('Pane registry and chrome', () => {
     const outer = pane.addFolder({ title: 'outer' })
     const inner = outer.addFolder({ title: 'inner' })
     const rackDepth = (el: Element) =>
-      (el.querySelector(':scope > .tiao-folder-body > .tiao-folder-clip > .tiao-rack') as HTMLElement)
-        .style.getPropertyValue('--tiao-depth')
+      (
+        el.querySelector(
+          ':scope > .tiao-folder-body > .tiao-folder-clip > .tiao-rack',
+        ) as HTMLElement
+      ).style.getPropertyValue('--tiao-depth')
     expect(rackDepth(outer.element)).toBe('1')
     expect(rackDepth(inner.element)).toBe('2')
     pane.dispose()
@@ -1507,10 +1555,14 @@ describe('Pane registry and chrome', () => {
     expect(input.selectionStart).toBe(0)
     expect(input.selectionEnd).toBe(input.value.length)
 
-    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', shiftKey: true, bubbles: true }))
+    input.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'ArrowDown', shiftKey: true, bubbles: true }),
+    )
     expect(params.seed).toBe(1)
 
-    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', altKey: true, bubbles: true }))
+    input.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'ArrowUp', altKey: true, bubbles: true }),
+    )
     expect(params.seed).toBe(1.1)
 
     // read-only scrub mode still nudges
@@ -1569,8 +1621,12 @@ describe('Pane registry and chrome', () => {
     const input = binding.element.querySelector('.tiao-num-input') as HTMLInputElement
     const grip = binding.element.querySelector('.tiao-scrub-grip') as HTMLElement
 
-    grip.dispatchEvent(new MouseEvent('pointerdown', { button: 0, clientX: 0, clientY: 0, bubbles: true }))
-    grip.dispatchEvent(new MouseEvent('pointermove', { clientX: 12, clientY: 0, bubbles: true, buttons: 1 }))
+    grip.dispatchEvent(
+      new MouseEvent('pointerdown', { button: 0, clientX: 0, clientY: 0, bubbles: true }),
+    )
+    grip.dispatchEvent(
+      new MouseEvent('pointermove', { clientX: 12, clientY: 0, bubbles: true, buttons: 1 }),
+    )
     expect(scrub.classList.contains('tiao-scrub-dragging')).toBe(true)
     const overlay = document.querySelector('.tiao-scrub-overlay') as HTMLElement
     expect(overlay).not.toBeNull()
@@ -1579,7 +1635,9 @@ describe('Pane registry and chrome', () => {
     expect(input.selectionStart).toBe(input.selectionEnd)
     expect(document.activeElement).not.toBe(input)
 
-    grip.dispatchEvent(new MouseEvent('pointerup', { button: 0, clientX: 12, clientY: 0, bubbles: true }))
+    grip.dispatchEvent(
+      new MouseEvent('pointerup', { button: 0, clientX: 12, clientY: 0, bubbles: true }),
+    )
     expect(document.querySelector('.tiao-scrub-overlay')).toBeNull()
     expect(scrub.classList.contains('tiao-scrub-dragging')).toBe(false)
     pane.dispose()
@@ -1594,19 +1652,29 @@ describe('Pane registry and chrome', () => {
     const gripB = b.element.querySelector('.tiao-scrub-grip') as HTMLElement
     const scrubA = a.element.querySelector('.tiao-scrub') as HTMLElement
 
-    gripA.dispatchEvent(new MouseEvent('pointerdown', { button: 0, clientX: 0, clientY: 0, bubbles: true }))
-    gripA.dispatchEvent(new MouseEvent('pointermove', { clientX: 16, clientY: 0, bubbles: true, buttons: 1 }))
+    gripA.dispatchEvent(
+      new MouseEvent('pointerdown', { button: 0, clientX: 0, clientY: 0, bubbles: true }),
+    )
+    gripA.dispatchEvent(
+      new MouseEvent('pointermove', { clientX: 16, clientY: 0, bubbles: true, buttons: 1 }),
+    )
     expect(scrubA.classList.contains('tiao-scrub-dragging')).toBe(true)
     expect(document.querySelectorAll('.tiao-scrub-overlay')).toHaveLength(1)
 
     // click another scrubber without pointerup on the first — must not leave a stuck overlay
-    gripB.dispatchEvent(new MouseEvent('pointerdown', { button: 0, clientX: 0, clientY: 0, bubbles: true }))
+    gripB.dispatchEvent(
+      new MouseEvent('pointerdown', { button: 0, clientX: 0, clientY: 0, bubbles: true }),
+    )
     expect(scrubA.classList.contains('tiao-scrub-dragging')).toBe(false)
     expect(document.querySelectorAll('.tiao-scrub-overlay')).toHaveLength(0)
 
-    gripB.dispatchEvent(new MouseEvent('pointermove', { clientX: 20, clientY: 0, bubbles: true, buttons: 1 }))
+    gripB.dispatchEvent(
+      new MouseEvent('pointermove', { clientX: 20, clientY: 0, bubbles: true, buttons: 1 }),
+    )
     expect(document.querySelectorAll('.tiao-scrub-overlay')).toHaveLength(1)
-    gripB.dispatchEvent(new MouseEvent('pointerup', { button: 0, clientX: 20, clientY: 0, bubbles: true }))
+    gripB.dispatchEvent(
+      new MouseEvent('pointerup', { button: 0, clientX: 20, clientY: 0, bubbles: true }),
+    )
     expect(document.querySelector('.tiao-scrub-overlay')).toBeNull()
     pane.dispose()
   })
@@ -1632,24 +1700,40 @@ describe('Pane registry and chrome', () => {
     vi.spyOn(trackA, 'getBoundingClientRect').mockReturnValue(rect)
     vi.spyOn(trackB, 'getBoundingClientRect').mockReturnValue(rect)
 
-    trackA.dispatchEvent(new MouseEvent('pointerdown', { button: 0, clientX: 20, clientY: 10, bubbles: true }))
-    trackA.dispatchEvent(new MouseEvent('pointermove', { clientX: 40, clientY: 10, bubbles: true, buttons: 1 }))
+    trackA.dispatchEvent(
+      new MouseEvent('pointerdown', { button: 0, clientX: 20, clientY: 10, bubbles: true }),
+    )
+    trackA.dispatchEvent(
+      new MouseEvent('pointermove', { clientX: 40, clientY: 10, bubbles: true, buttons: 1 }),
+    )
     expect(params.gain).toBe(0.4)
 
     // no pointerup — click/drag the other track; prior drag must end first
-    trackB.dispatchEvent(new MouseEvent('pointerdown', { button: 0, clientX: 10, clientY: 10, bubbles: true }))
+    trackB.dispatchEvent(
+      new MouseEvent('pointerdown', { button: 0, clientX: 10, clientY: 10, bubbles: true }),
+    )
     expect(params.threshold).toBe(0.1)
-    trackB.dispatchEvent(new MouseEvent('pointermove', { clientX: 70, clientY: 10, bubbles: true, buttons: 1 }))
+    trackB.dispatchEvent(
+      new MouseEvent('pointermove', { clientX: 70, clientY: 10, bubbles: true, buttons: 1 }),
+    )
     expect(params.threshold).toBe(0.7)
     expect(params.gain).toBe(0.4)
-    trackB.dispatchEvent(new MouseEvent('pointerup', { button: 0, clientX: 70, clientY: 10, bubbles: true }))
+    trackB.dispatchEvent(
+      new MouseEvent('pointerup', { button: 0, clientX: 70, clientY: 10, bubbles: true }),
+    )
 
     // after a completed drag, clicking the filled track of another slider still works
-    trackA.dispatchEvent(new MouseEvent('pointerdown', { button: 0, clientX: 30, clientY: 10, bubbles: true }))
+    trackA.dispatchEvent(
+      new MouseEvent('pointerdown', { button: 0, clientX: 30, clientY: 10, bubbles: true }),
+    )
     expect(params.gain).toBe(0.3)
-    trackA.dispatchEvent(new MouseEvent('pointermove', { clientX: 55, clientY: 10, bubbles: true, buttons: 1 }))
+    trackA.dispatchEvent(
+      new MouseEvent('pointermove', { clientX: 55, clientY: 10, bubbles: true, buttons: 1 }),
+    )
     expect(params.gain).toBe(0.55)
-    trackA.dispatchEvent(new MouseEvent('pointerup', { button: 0, clientX: 55, clientY: 10, bubbles: true }))
+    trackA.dispatchEvent(
+      new MouseEvent('pointerup', { button: 0, clientX: 55, clientY: 10, bubbles: true }),
+    )
     pane.dispose()
   })
 
@@ -1681,20 +1765,34 @@ describe('Pane registry and chrome', () => {
     }
     vi.spyOn(track, 'getBoundingClientRect').mockReturnValue(rect)
 
-    btn.dispatchEvent(new MouseEvent('pointerdown', { button: 0, clientX: 5, clientY: 5, bubbles: true }))
-    btn.dispatchEvent(new MouseEvent('pointerup', { button: 0, clientX: 5, clientY: 5, bubbles: true }))
+    btn.dispatchEvent(
+      new MouseEvent('pointerdown', { button: 0, clientX: 5, clientY: 5, bubbles: true }),
+    )
+    btn.dispatchEvent(
+      new MouseEvent('pointerup', { button: 0, clientX: 5, clientY: 5, bubbles: true }),
+    )
     btn.click()
     expect(params.speed).toBe(0.5)
 
-    track.dispatchEvent(new MouseEvent('pointerdown', { button: 0, clientX: 25, clientY: 10, bubbles: true }))
+    track.dispatchEvent(
+      new MouseEvent('pointerdown', { button: 0, clientX: 25, clientY: 10, bubbles: true }),
+    )
     expect(params.speed).toBe(1)
     // a buttons:0 move before any pressed move must not kill the drag
-    track.dispatchEvent(new MouseEvent('pointermove', { clientX: 26, clientY: 10, bubbles: true, buttons: 0 }))
-    track.dispatchEvent(new MouseEvent('pointermove', { clientX: 50, clientY: 10, bubbles: true, buttons: 1 }))
+    track.dispatchEvent(
+      new MouseEvent('pointermove', { clientX: 26, clientY: 10, bubbles: true, buttons: 0 }),
+    )
+    track.dispatchEvent(
+      new MouseEvent('pointermove', { clientX: 50, clientY: 10, bubbles: true, buttons: 1 }),
+    )
     expect(params.speed).toBe(2)
-    track.dispatchEvent(new MouseEvent('pointermove', { clientX: 75, clientY: 10, bubbles: true, buttons: 1 }))
+    track.dispatchEvent(
+      new MouseEvent('pointermove', { clientX: 75, clientY: 10, bubbles: true, buttons: 1 }),
+    )
     expect(params.speed).toBe(3)
-    track.dispatchEvent(new MouseEvent('pointerup', { button: 0, clientX: 75, clientY: 10, bubbles: true }))
+    track.dispatchEvent(
+      new MouseEvent('pointerup', { button: 0, clientX: 75, clientY: 10, bubbles: true }),
+    )
     pane.dispose()
   })
 
@@ -1716,18 +1814,24 @@ describe('Pane registry and chrome', () => {
     }
     vi.spyOn(track, 'getBoundingClientRect').mockReturnValue(rect)
 
-    track.dispatchEvent(new MouseEvent('pointerdown', { button: 0, clientX: 25, clientY: 10, bubbles: true }))
+    track.dispatchEvent(
+      new MouseEvent('pointerdown', { button: 0, clientX: 25, clientY: 10, bubbles: true }),
+    )
     expect(params.speed).toBe(1)
     // focus moving off another control fires blur on that element; the event
     // passes window in the capture phase and must not kill the fresh drag
     // (this is what froze "drag count, then drag size" and pane→pane drags)
     track.dispatchEvent(new FocusEvent('blur'))
-    track.dispatchEvent(new MouseEvent('pointermove', { clientX: 50, clientY: 10, bubbles: true, buttons: 1 }))
+    track.dispatchEvent(
+      new MouseEvent('pointermove', { clientX: 50, clientY: 10, bubbles: true, buttons: 1 }),
+    )
     expect(params.speed).toBe(2)
 
     // an actual window blur (target = window) still finishes the drag
     window.dispatchEvent(new FocusEvent('blur'))
-    track.dispatchEvent(new MouseEvent('pointermove', { clientX: 75, clientY: 10, bubbles: true, buttons: 1 }))
+    track.dispatchEvent(
+      new MouseEvent('pointermove', { clientX: 75, clientY: 10, bubbles: true, buttons: 1 }),
+    )
     expect(params.speed).toBe(2)
     pane.dispose()
   })
@@ -1741,17 +1845,25 @@ describe('Pane registry and chrome', () => {
     const label = binding.element.querySelector('.tiao-label') as HTMLElement
     const root = document.documentElement
 
-    track.dispatchEvent(new MouseEvent('pointerdown', { button: 0, clientX: 25, clientY: 10, bubbles: true }))
+    track.dispatchEvent(
+      new MouseEvent('pointerdown', { button: 0, clientX: 25, clientY: 10, bubbles: true }),
+    )
     expect(root.classList.contains('tiao-cursor-ew')).toBe(true)
-    track.dispatchEvent(new MouseEvent('pointerup', { button: 0, clientX: 25, clientY: 10, bubbles: true }))
+    track.dispatchEvent(
+      new MouseEvent('pointerup', { button: 0, clientX: 25, clientY: 10, bubbles: true }),
+    )
     expect(root.classList.contains('tiao-cursor-ew')).toBe(false)
 
     // long-press on the label: cursor engages when the hold fires, before any move
-    label.dispatchEvent(new MouseEvent('pointerdown', { button: 0, clientX: 25, clientY: 10, bubbles: true }))
+    label.dispatchEvent(
+      new MouseEvent('pointerdown', { button: 0, clientX: 25, clientY: 10, bubbles: true }),
+    )
     expect(root.classList.contains('tiao-cursor-ew')).toBe(false)
     vi.advanceTimersByTime(200)
     expect(root.classList.contains('tiao-cursor-ew')).toBe(true)
-    label.dispatchEvent(new MouseEvent('pointerup', { button: 0, clientX: 25, clientY: 10, bubbles: true }))
+    label.dispatchEvent(
+      new MouseEvent('pointerup', { button: 0, clientX: 25, clientY: 10, bubbles: true }),
+    )
     expect(root.classList.contains('tiao-cursor-ew')).toBe(false)
     pane.dispose()
     vi.useRealTimers()
@@ -1767,15 +1879,21 @@ describe('Pane registry and chrome', () => {
 
     const grip = grips[1] as HTMLElement
     const input = inputs[1] as HTMLInputElement
-    grip.dispatchEvent(new MouseEvent('pointerdown', { button: 0, clientX: 0, clientY: 0, bubbles: true }))
-    grip.dispatchEvent(new MouseEvent('pointermove', { clientX: 20, clientY: 0, bubbles: true, buttons: 1 }))
+    grip.dispatchEvent(
+      new MouseEvent('pointerdown', { button: 0, clientX: 0, clientY: 0, bubbles: true }),
+    )
+    grip.dispatchEvent(
+      new MouseEvent('pointermove', { clientX: 20, clientY: 0, bubbles: true, buttons: 1 }),
+    )
     expect((grip.parentElement as HTMLElement).classList.contains('tiao-scrub-dragging')).toBe(true)
     expect(document.querySelector('.tiao-scrub-overlay')).not.toBeNull()
     expect(input.readOnly).toBe(true)
     expect(document.activeElement).not.toBe(input)
     expect(params.pos.y).not.toBe(2)
 
-    grip.dispatchEvent(new MouseEvent('pointerup', { button: 0, clientX: 20, clientY: 0, bubbles: true }))
+    grip.dispatchEvent(
+      new MouseEvent('pointerup', { button: 0, clientX: 20, clientY: 0, bubbles: true }),
+    )
     expect(document.querySelector('.tiao-scrub-overlay')).toBeNull()
     pane.dispose()
   })
@@ -1881,10 +1999,16 @@ describe('Pane registry and chrome', () => {
     const titlebar = pane.element.querySelector('.tiao-titlebar') as HTMLElement
     expect(pane.expanded).toBe(true)
 
-    titlebar.dispatchEvent(new MouseEvent('pointerdown', { button: 0, clientX: 10, clientY: 10, bubbles: true }))
+    titlebar.dispatchEvent(
+      new MouseEvent('pointerdown', { button: 0, clientX: 10, clientY: 10, bubbles: true }),
+    )
     // move past the drag threshold, then release — browsers still fire click after this
-    document.dispatchEvent(new MouseEvent('pointermove', { clientX: 40, clientY: 10, bubbles: true, buttons: 1 }))
-    document.dispatchEvent(new MouseEvent('pointerup', { button: 0, clientX: 40, clientY: 10, bubbles: true }))
+    document.dispatchEvent(
+      new MouseEvent('pointermove', { clientX: 40, clientY: 10, bubbles: true, buttons: 1 }),
+    )
+    document.dispatchEvent(
+      new MouseEvent('pointerup', { button: 0, clientX: 40, clientY: 10, bubbles: true }),
+    )
     titlebar.dispatchEvent(new MouseEvent('click', { bubbles: true }))
 
     expect(pane.expanded).toBe(true)
@@ -2038,7 +2162,9 @@ describe('Pane registry and chrome', () => {
     const pane = new Pane({ id: 'styled' })
     pane.element.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))
     const menu = pane.element.querySelector('.tiao-pane-menu.tiao-open')!
-    const kiki = [...menu.querySelectorAll('.tiao-tab-button')].find((b) => b.textContent === 'Kiki') as HTMLButtonElement
+    const kiki = [...menu.querySelectorAll('.tiao-tab-button')].find(
+      (b) => b.textContent === 'Kiki',
+    ) as HTMLButtonElement
     expect(pane.style).toBe('bouba')
     expect(pane.element.classList.contains('tiao-style-kiki')).toBe(false)
 
@@ -2348,7 +2474,9 @@ describe('color model', () => {
     const lab = parseColor('oklab(62.8% -0.1 0.1 / 50%)')
     expect(lab?.format).toBe('oklab-alpha')
     expect(lab!.rgba.a).toBeCloseTo(0.5)
-    expect(serializeColor(lab!.rgba, 'oklab-alpha')).toMatch(/^oklab\(0\.62\d* -0\.\d+ 0\.\d+ \/ 0\.5\)$/)
+    expect(serializeColor(lab!.rgba, 'oklab-alpha')).toMatch(
+      /^oklab\(0\.62\d* -0\.\d+ 0\.\d+ \/ 0\.5\)$/,
+    )
 
     // white round-trips losslessly enough
     const white = parseColor('oklch(1 0 0)')

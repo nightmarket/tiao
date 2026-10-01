@@ -1,11 +1,11 @@
-import { Pane, type Anchor, type PaneOptions } from '../core'
+import { type Anchor, Pane, type PaneOptions } from '../core'
 import {
   downloadBlob,
   exportPng,
+  type Recorder,
   recordMp4,
   recordWebm,
   supportsMp4,
-  type Recorder,
 } from './recorders'
 
 export interface ExportPaneOptions {
@@ -109,7 +109,8 @@ export function createExportPane(options: ExportPaneOptions): Pane {
       }
       try {
         const opts = { fps: params.fps, bitrateMbps: params.bitrate }
-        recorder = params.format === 'mp4' ? await recordMp4(canvas, opts) : recordWebm(canvas, opts)
+        recorder =
+          params.format === 'mp4' ? await recordMp4(canvas, opts) : recordWebm(canvas, opts)
       } catch (err) {
         params.status = 'error'
         throw err
@@ -125,5 +126,5 @@ export function createExportPane(options: ExportPaneOptions): Pane {
   return pane
 }
 
-export { exportPng, recordWebm, recordMp4, supportsMp4, downloadBlob } from './recorders'
 export type { Recorder, RecordOptions } from './recorders'
+export { downloadBlob, exportPng, recordMp4, recordWebm, supportsMp4 } from './recorders'

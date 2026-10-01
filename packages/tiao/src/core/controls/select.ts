@@ -1,6 +1,6 @@
 import { h, icon } from '../dom'
-import { clamp } from '../util'
 import type { BindingOptions, InputPlugin } from '../plugin'
+import { clamp } from '../util'
 import { createPopup } from './popup'
 
 export interface SelectEntry {
@@ -95,7 +95,11 @@ export function createSelectMenu(
   }
   const onKeyDown = (e: KeyboardEvent) => {
     if (!popup.isOpen()) {
-      if (e.key === 'Enter' || e.key === ' ' || ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && e.altKey)) {
+      if (
+        e.key === 'Enter' ||
+        e.key === ' ' ||
+        ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && e.altKey)
+      ) {
         e.preventDefault()
         open()
       } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {

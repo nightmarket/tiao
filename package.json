@@ -6,10 +6,12 @@
     "build": "pnpm --filter '@nightmarket/tiao' build",
     "dev": "pnpm --filter playground dev",
     "test": "vitest run",
+    "lint": "biome check",
     "typecheck": "pnpm -r typecheck",
     "publish:package": "pnpm test && pnpm typecheck && pnpm --filter '@nightmarket/tiao' publish --access public"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.2.0",
     "jsdom": "^25.0.1",
     "typescript": "^5.7.3",
     "vitest": "^3.0.5"

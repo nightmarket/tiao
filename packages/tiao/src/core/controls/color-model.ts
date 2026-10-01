@@ -49,7 +49,12 @@ export function parseColor(value: unknown): ParsedColor | null {
       format: 'number',
     }
   }
-  if (isRecord(value) && typeof value['r'] === 'number' && typeof value['g'] === 'number' && typeof value['b'] === 'number') {
+  if (
+    isRecord(value) &&
+    typeof value['r'] === 'number' &&
+    typeof value['g'] === 'number' &&
+    typeof value['b'] === 'number'
+  ) {
     const hasAlpha = typeof value['a'] === 'number'
     return {
       rgba: {
@@ -123,8 +128,12 @@ function parseColorString(s: string): ParsedColor | null {
     const a = aRaw !== undefined ? clamp(Number(aRaw) / (aPct ? 100 : 1), 0, 1) : 1
     const { r, g, b } = isHsv ? hsvToRgb(hue, s, third) : hslToRgb(hue, s, third)
     const base: ColorFormat = isHsv
-      ? aRaw !== undefined ? 'hsva-string' : 'hsv-string'
-      : aRaw !== undefined ? 'hsla-string' : 'hsl-string'
+      ? aRaw !== undefined
+        ? 'hsva-string'
+        : 'hsv-string'
+      : aRaw !== undefined
+        ? 'hsla-string'
+        : 'hsl-string'
     return { rgba: { r, g, b, a }, format: base }
   }
   const ok = OK_RE.exec(str)
@@ -134,7 +143,10 @@ function parseColorString(s: string): ParsedColor | null {
     const alpha = aRaw !== undefined ? Number(aRaw) / (aPct ? 100 : 1) : 1
     const isLch = (fn as string).toLowerCase() === 'oklch'
     const [labA, labB] = isLch
-      ? [Number(second) * Math.cos((Number(third) * Math.PI) / 180), Number(second) * Math.sin((Number(third) * Math.PI) / 180)]
+      ? [
+          Number(second) * Math.cos((Number(third) * Math.PI) / 180),
+          Number(second) * Math.sin((Number(third) * Math.PI) / 180),
+        ]
       : [Number(second), Number(third)]
     const { r, g, b } = oklabToRgb(L, labA, labB)
     const base: ColorFormat = isLch ? 'oklch' : 'oklab'
@@ -248,11 +260,11 @@ function toHex(n: number): string {
 
 function srgbToLinear(c: number): number {
   const n = c / 255
-  return n <= 0.04045 ? n / 12.92 : Math.pow((n + 0.055) / 1.055, 2.4)
+  return n <= 0.04045 ? n / 12.92 : ((n + 0.055) / 1.055) ** 2.4
 }
 
 function linearToSrgb(c: number): number {
-  const n = c <= 0.0031308 ? c * 12.92 : 1.055 * Math.pow(c, 1 / 2.4) - 0.055
+  const n = c <= 0.0031308 ? c * 12.92 : 1.055 * c ** (1 / 2.4) - 0.055
   return clamp(n * 255, 0, 255)
 }
 
@@ -272,9 +284,9 @@ export function rgbToOklab(r: number, g: number, b: number): { L: number; a: num
 
 /** unclamped linear-light sRGB (0-1 range when in gamut) */
 function oklabToLinear(L: number, a: number, b: number): [number, number, number] {
-  const l = Math.pow(L + 0.3963377774 * a + 0.2158037573 * b, 3)
-  const m = Math.pow(L - 0.1055613458 * a - 0.0638541728 * b, 3)
-  const s = Math.pow(L - 0.0894841775 * a - 1.291485548 * b, 3)
+  const l = (L + 0.3963377774 * a + 0.2158037573 * b) ** 3
+  const m = (L - 0.1055613458 * a - 0.0638541728 * b) ** 3
+  const s = (L - 0.0894841775 * a - 1.291485548 * b) ** 3
   return [
     4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
     -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
@@ -310,9 +322,12 @@ const GAMUT_EPS = 1e-4
 
 function channelsInUnitCube(r: number, g: number, b: number): boolean {
   return (
-    r >= -GAMUT_EPS && r <= 1 + GAMUT_EPS &&
-    g >= -GAMUT_EPS && g <= 1 + GAMUT_EPS &&
-    b >= -GAMUT_EPS && b <= 1 + GAMUT_EPS
+    r >= -GAMUT_EPS &&
+    r <= 1 + GAMUT_EPS &&
+    g >= -GAMUT_EPS &&
+    g <= 1 + GAMUT_EPS &&
+    b >= -GAMUT_EPS &&
+    b <= 1 + GAMUT_EPS
   )
 }
 

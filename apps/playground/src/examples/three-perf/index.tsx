@@ -1,6 +1,6 @@
-import { useEffect, useRef } from 'react'
 import { Pane } from '@nightmarket/tiao/core'
 import { createPerfPane } from '@nightmarket/tiao/perf-pane'
+import { useEffect, useRef } from 'react'
 import { startThreeScene } from './scene'
 
 /**
@@ -23,7 +23,9 @@ export function ThreePerfExample() {
     demo.addButtonGroup({
       buttons: {
         'Add 20': () => scene.addMeshes(20),
+        // biome-ignore lint/correctness/noNestedComponentDefinitions: button labels, not components.
         Clear: () => scene.clear(true),
+        // biome-ignore lint/correctness/noNestedComponentDefinitions: button labels, not components.
         Leak: () => scene.clear(false),
       },
     })
@@ -34,10 +36,5 @@ export function ThreePerfExample() {
     }
   }, [])
 
-  return (
-    <canvas
-      ref={canvasRef}
-      style={{ width: '100vw', height: '100vh', display: 'block' }}
-    />
-  )
+  return <canvas ref={canvasRef} style={{ width: '100vw', height: '100vh', display: 'block' }} />
 }

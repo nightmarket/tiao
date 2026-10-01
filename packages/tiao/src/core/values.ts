@@ -31,5 +31,5 @@ export function sameShape(saved: unknown, fallback: unknown): boolean {
   if (isRecord(fallback)) {
     return isRecord(saved) && Object.keys(fallback).every((k) => k in saved)
   }
-  return saved === null === (fallback === null)
+  return (saved === null) === (fallback === null)
 }

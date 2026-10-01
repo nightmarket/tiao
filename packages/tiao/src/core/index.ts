@@ -1,5 +1,4 @@
-export { Pane } from './pane'
-export type { Anchor, PaneOptions, PaneSize, PaneSpacing, PaneFontSize, PaneStyle, PaneTheme } from './pane'
+export type { BladeHost, TiaoChangeEvent } from './blade'
 export {
   BindingApi,
   BladeApi,
@@ -12,8 +11,40 @@ export {
   TabApi,
   TabPageApi,
 } from './blade'
-export type { BladeHost, TiaoChangeEvent } from './blade'
-export { registerPlugin, globalRegistry, PluginRegistry } from './plugin'
+export { ensureBuiltins, registerBuiltins } from './controls/index'
+export { createGraph } from './controls/monitor'
+export { bindOverlayPointerGuard, createPopup, onPaneScroll } from './controls/popup'
+export { createComponentScrubber, createScrubber } from './controls/scrubber'
+export type { SelectEntry, SelectMenu } from './controls/select'
+export { createSelectMenu, normalizeOptions } from './controls/select'
+export type { DragHandlers, DragState, LongPressHandlers } from './dom'
+export {
+  cancelActiveDrag,
+  draggable,
+  eyeIcon,
+  eyeOffIcon,
+  gearIcon,
+  h,
+  icon,
+  longPress,
+  panelLeftIcon,
+  rotateCcwIcon,
+  SVG_NS,
+  searchIcon,
+  setRowActive,
+  startDrag,
+  withDocument,
+} from './dom'
+export type {
+  Anchor,
+  PaneFontSize,
+  PaneOptions,
+  PaneSize,
+  PaneSpacing,
+  PaneStyle,
+  PaneTheme,
+} from './pane'
+export { Pane } from './pane'
 export type {
   AddBindingOptions,
   BindingOptions,
@@ -26,32 +57,9 @@ export type {
   TiaoPlugin,
   VisibilityOptions,
 } from './plugin'
-export { Value } from './value'
+export { globalRegistry, PluginRegistry, registerPlugin } from './plugin'
+export { injectCss, injectStyles } from './styles'
+export { onFpsSample, onInterval, onTick } from './ticker'
+export { clamp, decimalCount, formatNumber, mapRange, round2, roundN, snap } from './util'
 export type { ValueListener, ValueMeta } from './value'
-export { onTick, onInterval, onFpsSample } from './ticker'
-export {
-  SVG_NS,
-  h,
-  icon,
-  gearIcon,
-  searchIcon,
-  eyeIcon,
-  eyeOffIcon,
-  panelLeftIcon,
-  rotateCcwIcon,
-  draggable,
-  startDrag,
-  longPress,
-  cancelActiveDrag,
-  setRowActive,
-  withDocument,
-} from './dom'
-export type { DragState, DragHandlers, LongPressHandlers } from './dom'
-export { clamp, mapRange, snap, formatNumber, decimalCount, round2, roundN } from './util'
-export { createGraph } from './controls/monitor'
-export { createScrubber, createComponentScrubber } from './controls/scrubber'
-export { createPopup, onPaneScroll, bindOverlayPointerGuard } from './controls/popup'
-export { normalizeOptions, createSelectMenu } from './controls/select'
-export type { SelectEntry, SelectMenu } from './controls/select'
-export { registerBuiltins, ensureBuiltins } from './controls/index'
-export { injectStyles, injectCss } from './styles'
+export { Value } from './value'

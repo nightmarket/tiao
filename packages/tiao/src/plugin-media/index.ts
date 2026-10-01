@@ -1,4 +1,4 @@
-import { h, injectCss, registerPlugin, type InputPlugin } from '../core'
+import { h, type InputPlugin, injectCss, registerPlugin } from '../core'
 
 /**
  * Loaded media, ready to upload as a texture: both element types are valid

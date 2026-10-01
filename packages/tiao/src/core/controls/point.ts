@@ -1,8 +1,8 @@
-import { h, icon, startDrag, SVG_NS } from '../dom'
+import { h, icon, SVG_NS, startDrag } from '../dom'
+import type { BindingOptions, InputPlugin, PluginContext } from '../plugin'
 import { clamp, formatNumber, isRecord, mapRange, snap } from '../util'
 import { createStickyOverlay } from './popup'
 import { createComponentScrubber, createOverlayTooltip } from './scrubber'
-import type { BindingOptions, InputPlugin, PluginContext } from '../plugin'
 
 const AXES = ['x', 'y', 'z', 'w'] as const
 type Axis = (typeof AXES)[number]

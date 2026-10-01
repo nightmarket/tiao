@@ -3,10 +3,11 @@
  * Prereq: playground dev server on :5173
  * Run: node scripts/perf/profile-three-perf.mjs [label]
  */
-import { mkdirSync, writeFileSync, rmSync } from 'node:fs'
+
+import { spawn } from 'node:child_process'
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { spawn } from 'node:child_process'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const artifacts = join(__dirname, 'artifacts')
@@ -106,7 +107,9 @@ function summarizeProfile(profile) {
     .sort((a, b) => b.hitCount - a.hitCount)
   const totalHits = rows.reduce((s, r) => s + r.hitCount, 0)
   const tiao = rows
-    .filter((r) => /tiao|perf-pane|plugin-fps|bench-graph|monitor|ticker|blade|pane\.ts/.test(r.url + r.name))
+    .filter((r) =>
+      /tiao|perf-pane|plugin-fps|bench-graph|monitor|ticker|blade|pane\.ts/.test(r.url + r.name),
+    )
     .slice(0, 40)
   return {
     totalHits,
@@ -131,8 +134,7 @@ try {
   const mountDeadline = Date.now() + 15000
   while (Date.now() < mountDeadline) {
     const r = await client.send('Runtime.evaluate', {
-      expression:
-        "!!(document.querySelector('.tiao-pane') && document.querySelector('canvas'))",
+      expression: "!!(document.querySelector('.tiao-pane') && document.querySelector('canvas'))",
       returnByValue: true,
     })
     if (r.result?.value) break

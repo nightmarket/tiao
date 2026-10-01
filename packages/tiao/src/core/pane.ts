@@ -1,30 +1,30 @@
 import {
+  type BladeHost,
   Container,
   FolderApi,
-  TabApi,
   markPointerBlur,
+  TabApi,
   walkBindings,
-  type BladeHost,
 } from './blade'
-import { ensureBuiltins } from './controls/index'
 import { installCaret } from './controls/caret'
+import { ensureBuiltins } from './controls/index'
 import {
   closeDock,
+  type DockHost,
+  type DockState,
   dockBody,
   dockRoot,
   ensureDock,
   readDockState,
   setDockVisible,
   writeDockState,
-  type DockHost,
-  type DockState,
 } from './dock'
 import { collapseSelection, draggable, gearIcon, h, icon, searchIcon, withDocument } from './dom'
 import { createNotch, type Notch } from './notch'
 import { createPaneMenu } from './pane-menu'
-import { PluginRegistry, globalRegistry, type TiaoPlugin } from './plugin'
+import { globalRegistry, PluginRegistry, type TiaoPlugin } from './plugin'
 import { injectStyles } from './styles'
-import { clamp, jsonStore, type JSONStore } from './util'
+import { clamp, type JSONStore, jsonStore } from './util'
 import { createValueStore, type ValueStore } from './values'
 
 export type Anchor =
@@ -326,8 +326,7 @@ function packAnchored(doc: Document, only?: Anchor): void {
 function layoutAnchorGroup(anchor: Anchor, list: Pane[], viewH: number): void {
   if (packStack(anchor) === 'mid') {
     const heights = list.map((p) => p.element.offsetHeight)
-    const total =
-      heights.reduce((sum, h) => sum + h, 0) + PACK_GAP * Math.max(0, list.length - 1)
+    const total = heights.reduce((sum, h) => sum + h, 0) + PACK_GAP * Math.max(0, list.length - 1)
     let y = -total / 2
     for (let i = 0; i < list.length; i++) {
       list[i]!.placePacked(y, 0)
@@ -716,7 +715,18 @@ export class Pane extends Container {
       const searchbar = h('div', 'tiao-searchbar', searchInput)
       const body = h('div', 'tiao-pane-body', h('div', 'tiao-pane-clip', rack))
       const element = h('div', 'tiao-pane', titlebar, searchbar, body)
-      return { rack, gear, searchBtn, titlebar, titleMain: collapseButton, titleEl, searchInput, searchbar, body, element }
+      return {
+        rack,
+        gear,
+        searchBtn,
+        titlebar,
+        titleMain: collapseButton,
+        titleEl,
+        searchInput,
+        searchbar,
+        body,
+        element,
+      }
     })
     const { gear, searchBtn } = chrome
     this.rack = chrome.rack
@@ -820,9 +830,7 @@ export class Pane extends Container {
       }
       bringToFront()
       this.element.addEventListener('pointerdown', bringToFront, true)
-      this.disposers.push(() =>
-        this.element.removeEventListener('pointerdown', bringToFront, true),
-      )
+      this.disposers.push(() => this.element.removeEventListener('pointerdown', bringToFront, true))
 
       let baseX = 0
       let baseY = 0
@@ -1486,7 +1494,7 @@ export class Pane extends Container {
         return
       default: {
         const _exhaustive: never = size
-        return _exhaustive
+        return
       }
     }
   }

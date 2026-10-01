@@ -1,4 +1,4 @@
-import { h, injectCss, normalizeOptions, registerPlugin, type InputPlugin } from '../core'
+import { h, type InputPlugin, injectCss, normalizeOptions, registerPlugin } from '../core'
 
 /**
  * Segmented button grid input (the "Line | Scatter" control). Usage:
@@ -17,7 +17,8 @@ export const radioGridPlugin: InputPlugin<unknown> = {
   },
   create(ctx) {
     const items = normalizeOptions(ctx.options.options)
-    const columns = typeof ctx.options['columns'] === 'number' ? ctx.options['columns'] : items.length
+    const columns =
+      typeof ctx.options['columns'] === 'number' ? ctx.options['columns'] : items.length
     const grid = h('div', 'tiao-radiogrid')
     grid.setAttribute('role', 'radiogroup')
     grid.style.display = 'grid'

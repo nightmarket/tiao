@@ -1,4 +1,4 @@
-import { Pane, type Anchor, type Container, type PaneOptions } from '../core'
+import { type Anchor, type Container, Pane, type PaneOptions } from '../core'
 import { createPerfMonitor, type PerfMonitor, type PerfMonitorOptions } from './monitor'
 
 export interface PerfMonitorUiOptions {
@@ -97,7 +97,6 @@ export function addPerfMonitors(
   }
 }
 
-export { createPerfMonitor } from './monitor'
 export type {
   PerfCapabilities,
   PerfMonitor,
@@ -106,3 +105,4 @@ export type {
   RendererInfoLike,
   RendererLike,
 } from './monitor'
+export { createPerfMonitor } from './monitor'

@@ -1,10 +1,10 @@
 import {
+  type BladePlugin,
+  type Container,
   createGraph,
   onFpsSample,
   registerPlugin,
   Value,
-  type BladePlugin,
-  type Container,
 } from '../core'
 
 const DEFAULT_SAMPLE_MS = 250
@@ -24,9 +24,11 @@ export const fpsPlugin: BladePlugin = {
     return params['view'] === 'fps'
   },
   create(ctx) {
-    const sampleMs = typeof ctx.params['interval'] === 'number' ? ctx.params['interval'] : DEFAULT_SAMPLE_MS
+    const sampleMs =
+      typeof ctx.params['interval'] === 'number' ? ctx.params['interval'] : DEFAULT_SAMPLE_MS
     const max = typeof ctx.params['max'] === 'number' ? ctx.params['max'] : 120
-    const bufferSize = typeof ctx.params['bufferSize'] === 'number' ? ctx.params['bufferSize'] : undefined
+    const bufferSize =
+      typeof ctx.params['bufferSize'] === 'number' ? ctx.params['bufferSize'] : undefined
     const value = new Value(0)
     ctx.onDispose(onFpsSample(sampleMs, (fps) => value.set(fps, SAMPLE_META)))
 

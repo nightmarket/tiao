@@ -1,10 +1,11 @@
-export { useControls } from './useControls'
-export type { ControlsResult } from './types'
-export { usePane } from './usePane'
-export { button, buttonGroup, monitor, tabs } from './types'
+export { setTiaoEnabled } from './config'
+export { DEFAULT_PANE_ID } from './controls'
+export { getManager, loadCore } from './manager'
+export { ControlStore } from './store'
 export type {
   ButtonGroupItem,
   ButtonItem,
+  ControlsResult,
   InputDef,
   MonitorItem,
   Schema,
@@ -15,7 +16,6 @@ export type {
   TabsItem,
   UseControlsOptions,
 } from './types'
-export { setTiaoEnabled } from './config'
-export { DEFAULT_PANE_ID } from './controls'
-export { loadCore, getManager } from './manager'
-export { ControlStore } from './store'
+export { button, buttonGroup, monitor, tabs } from './types'
+export { useControls } from './useControls'
+export { usePane } from './usePane'

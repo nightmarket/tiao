@@ -1,13 +1,14 @@
 import { draggable, gearIcon, h, searchIcon, withDocument } from './dom'
-import { createPaneMenu, type PaneMenuHost } from './pane-menu'
 import type { PaneStyle, PaneTheme } from './pane'
+import { createPaneMenu, type PaneMenuHost } from './pane-menu'
 import { clamp, jsonStore } from './util'
 
 /** page edge the sidebar sits against */
 export type DockSide = 'left' | 'right'
 
 /** the sidebar menu drives the same settings a pane menu does, for every pane */
-export interface DockHost extends Omit<PaneMenuHost, 'element' | 'placement' | 'sides' | 'onDispose'> {
+export interface DockHost
+  extends Omit<PaneMenuHost, 'element' | 'placement' | 'sides' | 'onDispose'> {
   /** filter every docked pane at once */
   filter(query: string): void
 }
@@ -238,7 +239,16 @@ function installFixedInsets(doc: Document, entry: DockEntry): void {
   if (!view) return
   const marked = new Set<Element>()
 
-  const SKIP_TAGS = new Set(['SCRIPT', 'STYLE', 'LINK', 'META', 'NOSCRIPT', 'BR', 'WBR', 'TEMPLATE'])
+  const SKIP_TAGS = new Set([
+    'SCRIPT',
+    'STYLE',
+    'LINK',
+    'META',
+    'NOSCRIPT',
+    'BR',
+    'WBR',
+    'TEMPLATE',
+  ])
 
   /** edge-to-edge fixed chrome; floating UI like a toast or modal is left be */
   const spansViewport = (el: Element): boolean => {

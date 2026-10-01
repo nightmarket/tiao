@@ -1,4 +1,4 @@
-import { collapseSelection, h, setEwCursor, setRowActive, startDrag, SVG_NS } from '../dom'
+import { collapseSelection, h, SVG_NS, setEwCursor, setRowActive, startDrag } from '../dom'
 import { arrowKeyStep, clamp, formatNumber, nudge, parseNumberInput, snap } from '../util'
 import { Value } from '../value'
 
@@ -326,6 +326,6 @@ export function createComponentScrubber<P>(
 function guessStep(v: number): number {
   const abs = Math.abs(v)
   if (abs === 0) return 0.1
-  const magnitude = Math.pow(10, Math.floor(Math.log10(abs)) - 1)
+  const magnitude = 10 ** (Math.floor(Math.log10(abs)) - 1)
   return clamp(magnitude, 0.001, 1)
 }

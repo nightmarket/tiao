@@ -1,9 +1,9 @@
-import { Emitter } from './emitter'
 import { h, icon, longPress, withDocument } from './dom'
+import { Emitter } from './emitter'
+import type { AddBindingOptions, BindingOptions, PluginRegistry, VisibilityOptions } from './plugin'
 import { onInterval } from './ticker'
 import { Value } from './value'
 import { sameShape, type ValueStore } from './values'
-import type { AddBindingOptions, BindingOptions, PluginRegistry, VisibilityOptions } from './plugin'
 
 /** Provided by the root Pane to every descendant. */
 export interface BladeHost {
@@ -174,13 +174,15 @@ export abstract class Container extends Item {
     return api
   }
 
-  addFolder(params: {
-    title: string
-    expanded?: boolean
-    collapsible?: boolean
-    /** tints the folder title; caret and depth line get softer mixes of it */
-    color?: string
-  } & VisibilityOptions): FolderApi {
+  addFolder(
+    params: {
+      title: string
+      expanded?: boolean
+      collapsible?: boolean
+      /** tints the folder title; caret and depth line get softer mixes of it */
+      color?: string
+    } & VisibilityOptions,
+  ): FolderApi {
     const { showIf, hidden, disabled, ...folderParams } = params
     const api = withDocument(this.host.document, () => new FolderApi(this.host, folderParams))
     this.attach(api)
@@ -377,7 +379,9 @@ export class BindingApi<T> extends Item {
       ? host.registry.findMonitor(initial, options)
       : host.registry.findInput(initial, options)
     if (!plugin) {
-      throw new Error(`tiao: no ${options.readonly ? 'monitor' : 'input'} plugin accepts key "${key}" (value: ${JSON.stringify(initial)})`)
+      throw new Error(
+        `tiao: no ${options.readonly ? 'monitor' : 'input'} plugin accepts key "${key}" (value: ${JSON.stringify(initial)})`,
+      )
     }
 
     const view = plugin.create({
@@ -392,12 +396,7 @@ export class BindingApi<T> extends Item {
       this.element = h('div', 'tiao-row tiao-row-full', view.element)
     } else {
       this.labelEl = h('div', 'tiao-label', label)
-      this.element = h(
-        'div',
-        'tiao-row',
-        this.labelEl,
-        h('div', 'tiao-control', view.element),
-      )
+      this.element = h('div', 'tiao-row', this.labelEl, h('div', 'tiao-control', view.element))
     }
 
     // clicking the row outside the concrete control activates it (focus input, open picker, ...);
@@ -529,7 +528,12 @@ export class ButtonApi extends Item {
     this.disposers.push(() => this.buttonEl.removeEventListener('click', onClick))
 
     this.element = params.label
-      ? h('div', 'tiao-row', h('div', 'tiao-label', params.label), h('div', 'tiao-control', this.buttonEl))
+      ? h(
+          'div',
+          'tiao-row',
+          h('div', 'tiao-label', params.label),
+          h('div', 'tiao-control', this.buttonEl),
+        )
       : h('div', 'tiao-row tiao-row-full', this.buttonEl)
   }
 
@@ -627,7 +631,7 @@ export class FolderApi extends Container {
   ) {
     super(host)
     this.collapsible = params.collapsible ?? true
-    this._expanded = this.collapsible ? params.expanded ?? true : true
+    this._expanded = this.collapsible ? (params.expanded ?? true) : true
     this.rack = h('div', 'tiao-rack')
     this.headerEl = h(
       'button',
@@ -733,7 +737,10 @@ export class TabPageApi extends Container {
   readonly element: HTMLElement
   readonly rack: HTMLElement
 
-  constructor(host: BladeHost, readonly title: string) {
+  constructor(
+    host: BladeHost,
+    readonly title: string,
+  ) {
     super(host)
     this.rack = h('div', 'tiao-rack')
     this.element = h('div', 'tiao-tab-page', this.rack)

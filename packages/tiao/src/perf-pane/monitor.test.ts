@@ -120,10 +120,13 @@ describe('createPerfMonitor', () => {
     'shares renderer instrumentation when the %s monitor disposes first',
     (first) => {
       let nextFrame: FrameRequestCallback | undefined
-      vi.stubGlobal('requestAnimationFrame', vi.fn((callback: FrameRequestCallback) => {
-        nextFrame = callback
-        return 1
-      }))
+      vi.stubGlobal(
+        'requestAnimationFrame',
+        vi.fn((callback: FrameRequestCallback) => {
+          nextFrame = callback
+          return 1
+        }),
+      )
       vi.stubGlobal('cancelAnimationFrame', vi.fn())
 
       const originalRender = vi.fn()
@@ -151,19 +154,22 @@ describe('createPerfMonitor', () => {
   )
 
   it('does not overwrite host render changes and restores absent autoReset state', () => {
-    vi.stubGlobal('requestAnimationFrame', vi.fn(() => 1))
+    vi.stubGlobal(
+      'requestAnimationFrame',
+      vi.fn(() => 1),
+    )
     vi.stubGlobal('cancelAnimationFrame', vi.fn())
 
     const info: RendererLike['info'] = { render: {}, reset: vi.fn() }
     const renderer: RendererLike = { info, render: vi.fn() }
     const monitor = createPerfMonitor({ renderer })
-    expect(Object.prototype.hasOwnProperty.call(info, 'autoReset')).toBe(true)
+    expect(Object.hasOwn(info, 'autoReset')).toBe(true)
 
     const replacement = vi.fn()
     renderer.render = replacement
     monitor.dispose()
     monitor.dispose()
     expect(renderer.render).toBe(replacement)
-    expect(Object.prototype.hasOwnProperty.call(info, 'autoReset')).toBe(false)
+    expect(Object.hasOwn(info, 'autoReset')).toBe(false)
   })
 })

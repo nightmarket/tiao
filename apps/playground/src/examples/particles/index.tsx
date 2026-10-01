@@ -1,8 +1,8 @@
-import { useEffect, useRef } from 'react'
 import { createExportPane } from '@nightmarket/tiao/export-pane'
-import { type MediaValue } from '@nightmarket/tiao/plugin-media'
+import type { MediaValue } from '@nightmarket/tiao/plugin-media'
 import { button, buttonGroup, monitor, tabs, useControls } from '@nightmarket/tiao/react'
-import { startScene, type SceneHandle, type SceneParams } from './scene'
+import { useEffect, useRef } from 'react'
+import { type SceneHandle, type SceneParams, startScene } from './scene'
 
 /** Contributes motion controls to the default pane from one component... */
 function useMotionControls() {
@@ -14,7 +14,12 @@ function useMotionControls() {
       '1x': () => controls.$set({ speed: 1 }),
       '2x': () => controls.$set({ speed: 2 }),
     }),
-    mode: { value: 'orbit', view: 'radiogrid', options: { Orbit: 'orbit', Wave: 'wave' }, columns: 2 },
+    mode: {
+      value: 'orbit',
+      view: 'radiogrid',
+      options: { Orbit: 'orbit', Wave: 'wave' },
+      columns: 2,
+    },
     center: {
       value: { x: 0, y: 0 },
       x: { min: -1, max: 1, step: 0.01 },
@@ -27,19 +32,27 @@ function useMotionControls() {
 
 /** ...while a sibling component adds a Look folder to the same pane. */
 function useLookControls(scene: React.RefObject<SceneHandle | null>) {
-  return useControls('Look', tabs({
-    Sprite: {
-      count: { value: 400, min: 10, max: 2000, step: 10 },
-      size: { value: 2.5, min: 0.5, max: 10, step: 0.1 },
-      color: '#7dd3fc',
-      trail: { value: 0.12, min: 0.01, max: 1, step: 0.01 },
-      sprite: { value: null as MediaValue, view: 'media' },
-    },
-    Monitor: {
-      fps: monitor(() => scene.current?.fps() ?? 0, { view: 'graph', min: 0, max: 120, unit: 'FPS' }),
-      reset: button(() => localStorage.clear(), 'Clear saved pane state'),
-    },
-  }))
+  return useControls(
+    'Look',
+    tabs({
+      Sprite: {
+        count: { value: 400, min: 10, max: 2000, step: 10 },
+        size: { value: 2.5, min: 0.5, max: 10, step: 0.1 },
+        color: '#7dd3fc',
+        trail: { value: 0.12, min: 0.01, max: 1, step: 0.01 },
+        sprite: { value: null as MediaValue, view: 'media' },
+      },
+      Monitor: {
+        fps: monitor(() => scene.current?.fps() ?? 0, {
+          view: 'graph',
+          min: 0,
+          max: 120,
+          unit: 'FPS',
+        }),
+        reset: button(() => localStorage.clear(), 'Clear saved pane state'),
+      },
+    }),
+  )
 }
 
 export function ParticlesExample() {
@@ -79,10 +92,5 @@ export function ParticlesExample() {
     return () => pane.dispose()
   }, [])
 
-  return (
-    <canvas
-      ref={canvasRef}
-      style={{ width: '100vw', height: '100vh', display: 'block' }}
-    />
-  )
+  return <canvas ref={canvasRef} style={{ width: '100vw', height: '100vh', display: 'block' }} />
 }

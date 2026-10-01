@@ -1,13 +1,13 @@
+import type { PluginRegistry } from '../plugin'
 import { angleInputPlugin } from './angle'
 import { booleanInputPlugin } from './boolean'
 import { colorInputPlugin } from './color'
-import { graphMonitorPlugin, textMonitorPlugin } from './monitor'
 import { intervalInputPlugin } from './interval'
+import { graphMonitorPlugin, textMonitorPlugin } from './monitor'
 import { numberInputPlugin } from './number'
 import { pointInputPlugin } from './point'
 import { selectInputPlugin } from './select'
 import { stringInputPlugin } from './string'
-import type { PluginRegistry } from '../plugin'
 
 let registered = false
 

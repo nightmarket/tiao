@@ -5,11 +5,11 @@ import {
   createSelectMenu,
   draggable,
   h,
+  type InputPlugin,
   injectCss,
   mapRange,
   registerPlugin,
   round2,
-  type InputPlugin,
 } from '../core'
 
 export type BezierValue = [number, number, number, number]
@@ -114,11 +114,7 @@ export const bezierPlugin: InputPlugin<BezierValue> = {
     injectCss(ctx.document, 'data-tiao-bezier', CSS)
     const doc = ctx.document
 
-    const svgEl = <K extends keyof SVGElementTagNameMap>(
-      tag: K,
-      cls: string,
-      parent: Element,
-    ) => {
+    const svgEl = <K extends keyof SVGElementTagNameMap>(tag: K, cls: string, parent: Element) => {
       const node = doc.createElementNS(SVG_NS, tag)
       node.setAttribute('class', cls)
       parent.append(node)

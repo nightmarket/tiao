@@ -44,8 +44,8 @@ export function bindSliderTrack(opts: {
   const { el, track, min, max, handlers } = opts
   let rect: DOMRect | null = null
   const fromPointer = (clientX: number) => {
-    const r = (rect ??= track.getBoundingClientRect())
-    return mapRange(clientX, r.left, r.right, min, max)
+    rect ??= track.getBoundingClientRect()
+    return mapRange(clientX, rect.left, rect.right, min, max)
   }
   const setTrackActive = (on: boolean) => {
     el.classList.toggle('tiao-slider-dragging', on)

@@ -1,6 +1,6 @@
 import { h } from '../dom'
-import { formatNumber } from '../util'
 import type { MonitorPlugin, PluginContext } from '../plugin'
+import { formatNumber } from '../util'
 
 /** Readonly text display for any value; bufferSize > 1 turns it into a log. */
 export const textMonitorPlugin: MonitorPlugin<unknown> = {
@@ -98,7 +98,12 @@ export function createGraph(
   const numberEl = h('span', 'tiao-graph-number')
   // unit (e.g. "s", "FPS") renders after the number in a subtler color
   const unit = typeof ctx.options['unit'] === 'string' ? ctx.options['unit'] : ''
-  const valueEl = h('span', 'tiao-graph-value', numberEl, unit ? h('span', 'tiao-graph-unit', unit) : null)
+  const valueEl = h(
+    'span',
+    'tiao-graph-value',
+    numberEl,
+    unit ? h('span', 'tiao-graph-unit', unit) : null,
+  )
   // only an explicit options.label — not the binding key fallback — becomes the overlay
   const label = typeof ctx.options.label === 'string' && ctx.options.label ? ctx.options.label : ''
   const labelEl = label ? h('span', 'tiao-graph-label', label) : null
@@ -268,8 +273,7 @@ export function createGraph(
     lastLabelMax = observedMax
     const loText = format(observedMin)
     const hiText = format(observedMax)
-    const next =
-      loText === hiText ? `${label} (No Change)` : `${label} (${loText}-${hiText})`
+    const next = loText === hiText ? `${label} (No Change)` : `${label} (${loText}-${hiText})`
     if (next !== labelText) {
       labelText = next
       labelEl.textContent = next

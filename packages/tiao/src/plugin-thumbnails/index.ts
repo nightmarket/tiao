@@ -1,4 +1,4 @@
-import { h, injectCss, normalizeOptions, registerPlugin, type InputPlugin } from '../core'
+import { h, type InputPlugin, injectCss, normalizeOptions, registerPlugin } from '../core'
 
 /** A select entry with the artwork for its cell. */
 export interface ThumbEntry {
