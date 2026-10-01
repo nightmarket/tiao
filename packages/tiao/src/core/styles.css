@@ -19,14 +19,17 @@
   --tiao-neutral-800: #262626;
   --tiao-neutral-900: #171717;
   --tiao-neutral-950: #0a0a0a;
-  --tiao-bg: rgba(255, 255, 255, 0.94);
   --tiao-bg-solid: #ffffff;
+  /* the glass surface (global Glass setting); see .tiao-glass */
+  --tiao-bg: color-mix(in srgb, var(--tiao-bg-solid) 80%, transparent);
   --tiao-fg: var(--tiao-neutral-950);
   --tiao-fg-strong: var(--tiao-neutral-800);
   --tiao-fg-muted: var(--tiao-neutral-700);
+  /* contrast floors per theme: soft (labels) ~4.5:1 on the pane, dim (idle
+     values) ~3:1 on the control surface; faint is decorative only */
   --tiao-fg-soft: var(--tiao-neutral-500);
-  --tiao-fg-dim: var(--tiao-neutral-400);
-  --tiao-fg-faint: var(--tiao-neutral-300);
+  --tiao-fg-dim: color-mix(in srgb, var(--tiao-neutral-400), var(--tiao-neutral-500));
+  --tiao-fg-faint: var(--tiao-neutral-400);
   --tiao-titlebar-bg: rgba(15, 23, 42, 0.055);
   --tiao-folder-caret: color-mix(in srgb, var(--tiao-fg) 32%, var(--tiao-bg-solid));
   --tiao-folder-caret-hover: color-mix(in srgb, var(--tiao-fg) 55%, var(--tiao-bg-solid));
@@ -42,7 +45,8 @@
   --tiao-button-bg: rgba(15, 23, 42, 0.07);
   --tiao-button-bg-hover: rgba(15, 23, 42, 0.12);
   --tiao-fill: rgba(15, 23, 42, 0.1);
-  --tiao-accent: #facc15;
+  /* the dark themes' yellow washes out on white; this keeps 3:1 for thin marks */
+  --tiao-accent: #d97706;
   --tiao-accent-fg: #171717;
   --tiao-border: rgba(15, 23, 42, 0.1);
   --tiao-graph-accent: #a3a3a3;
@@ -94,34 +98,26 @@
   font-size: var(--tiao-font-size);
   line-height: var(--tiao-line-height);
   color: var(--tiao-fg);
-  background: var(--tiao-bg);
+  background: var(--tiao-bg-solid);
   border-radius: var(--tiao-radius);
   box-shadow: var(--tiao-shadow);
   width: var(--tiao-width);
   box-sizing: border-box;
   user-select: none;
   -webkit-user-select: none;
-  backdrop-filter: var(--tiao-backdrop-filter);
-  -webkit-backdrop-filter: var(--tiao-backdrop-filter);
 }
 
 .tiao-pane.tiao-theme-dark,
 .tiao-notch.tiao-theme-dark,
 .tiao-dock.tiao-theme-dark {
-  --tiao-bg: rgba(23, 23, 23, 0.95);
   --tiao-bg-solid: var(--tiao-neutral-900);
   --tiao-fg: var(--tiao-neutral-100);
   --tiao-fg-strong: var(--tiao-neutral-200);
   --tiao-fg-muted: var(--tiao-neutral-300);
-  --tiao-fg-soft: var(--tiao-neutral-500);
-  --tiao-fg-dim: var(--tiao-neutral-600);
-  --tiao-fg-faint: var(--tiao-neutral-700);
+  --tiao-fg-soft: color-mix(in srgb, var(--tiao-neutral-400), var(--tiao-neutral-500));
+  --tiao-fg-dim: var(--tiao-neutral-500);
+  --tiao-fg-faint: var(--tiao-neutral-600);
   --tiao-titlebar-bg: rgba(255, 255, 255, 0.06);
-  --tiao-folder-caret: color-mix(in srgb, var(--tiao-fg) 32%, var(--tiao-bg-solid));
-  --tiao-folder-caret-hover: color-mix(in srgb, var(--tiao-fg) 55%, var(--tiao-bg-solid));
-  --tiao-depth-line: color-mix(in srgb, var(--tiao-fg) 12%, var(--tiao-bg-solid));
-  --tiao-depth-line-hover: color-mix(in srgb, var(--tiao-fg) 30%, var(--tiao-bg-solid));
-  --tiao-depth-line-active: color-mix(in srgb, var(--tiao-fg) 45%, var(--tiao-bg-solid));
   --tiao-hover: rgba(255, 255, 255, 0.09);
   --tiao-hover-soft: rgba(255, 255, 255, 0.045);
   --tiao-hover-strong: rgba(255, 255, 255, 0.14);
@@ -131,7 +127,6 @@
   --tiao-button-bg-hover: rgba(255, 255, 255, 0.13);
   --tiao-fill: rgba(255, 255, 255, 0.11);
   --tiao-accent: #facc15;
-  --tiao-accent-fg: #171717;
   --tiao-border: rgba(255, 255, 255, 0.08);
   --tiao-graph-accent: #525252;
   --tiao-shadow: 0 4px 28px rgba(0, 0, 0, 0.45), 0 0 0 1px var(--tiao-border);
@@ -153,7 +148,6 @@
   --tiao-neutral-800: #0d4552;
   --tiao-neutral-900: #073642;
   --tiao-neutral-950: #002b36;
-  --tiao-bg: rgba(0, 43, 54, 0.96);
   --tiao-bg-solid: var(--tiao-neutral-950);
   --tiao-fg: var(--tiao-neutral-50);
   --tiao-fg-strong: var(--tiao-neutral-200);
@@ -162,11 +156,6 @@
   --tiao-fg-dim: var(--tiao-neutral-600);
   --tiao-fg-faint: var(--tiao-neutral-700);
   --tiao-titlebar-bg: rgba(7, 54, 66, 0.85);
-  --tiao-folder-caret: color-mix(in srgb, var(--tiao-fg) 32%, var(--tiao-bg-solid));
-  --tiao-folder-caret-hover: color-mix(in srgb, var(--tiao-fg) 55%, var(--tiao-bg-solid));
-  --tiao-depth-line: color-mix(in srgb, var(--tiao-fg) 12%, var(--tiao-bg-solid));
-  --tiao-depth-line-hover: color-mix(in srgb, var(--tiao-fg) 30%, var(--tiao-bg-solid));
-  --tiao-depth-line-active: color-mix(in srgb, var(--tiao-fg) 45%, var(--tiao-bg-solid));
   --tiao-hover: rgba(253, 246, 227, 0.08);
   --tiao-hover-soft: rgba(253, 246, 227, 0.04);
   --tiao-hover-strong: rgba(253, 246, 227, 0.14);
@@ -198,20 +187,14 @@
   --tiao-neutral-800: #434c5e;
   --tiao-neutral-900: #3b4252;
   --tiao-neutral-950: #2e3440;
-  --tiao-bg: rgba(46, 52, 64, 0.96);
   --tiao-bg-solid: var(--tiao-neutral-950);
   --tiao-fg: var(--tiao-neutral-50);
   --tiao-fg-strong: var(--tiao-neutral-200);
   --tiao-fg-muted: var(--tiao-neutral-300);
-  --tiao-fg-soft: var(--tiao-neutral-500);
-  --tiao-fg-dim: var(--tiao-neutral-600);
-  --tiao-fg-faint: var(--tiao-neutral-700);
+  --tiao-fg-soft: var(--tiao-neutral-400);
+  --tiao-fg-dim: color-mix(in srgb, var(--tiao-neutral-400), var(--tiao-neutral-500));
+  --tiao-fg-faint: var(--tiao-neutral-600);
   --tiao-titlebar-bg: rgba(59, 66, 82, 0.85);
-  --tiao-folder-caret: color-mix(in srgb, var(--tiao-fg) 32%, var(--tiao-bg-solid));
-  --tiao-folder-caret-hover: color-mix(in srgb, var(--tiao-fg) 55%, var(--tiao-bg-solid));
-  --tiao-depth-line: color-mix(in srgb, var(--tiao-fg) 12%, var(--tiao-bg-solid));
-  --tiao-depth-line-hover: color-mix(in srgb, var(--tiao-fg) 30%, var(--tiao-bg-solid));
-  --tiao-depth-line-active: color-mix(in srgb, var(--tiao-fg) 45%, var(--tiao-bg-solid));
   --tiao-hover: rgba(236, 239, 244, 0.1);
   --tiao-hover-soft: rgba(236, 239, 244, 0.05);
   --tiao-hover-strong: rgba(236, 239, 244, 0.16);
@@ -243,20 +226,14 @@
   --tiao-neutral-800: #313244;
   --tiao-neutral-900: #1e1e2e;
   --tiao-neutral-950: #11111b;
-  --tiao-bg: rgba(30, 30, 46, 0.96);
   --tiao-bg-solid: var(--tiao-neutral-900);
   --tiao-fg: var(--tiao-neutral-50);
   --tiao-fg-strong: var(--tiao-neutral-200);
   --tiao-fg-muted: var(--tiao-neutral-300);
-  --tiao-fg-soft: var(--tiao-neutral-500);
-  --tiao-fg-dim: var(--tiao-neutral-600);
-  --tiao-fg-faint: var(--tiao-neutral-700);
+  --tiao-fg-soft: var(--tiao-neutral-400);
+  --tiao-fg-dim: color-mix(in srgb, var(--tiao-neutral-400), var(--tiao-neutral-500));
+  --tiao-fg-faint: var(--tiao-neutral-600);
   --tiao-titlebar-bg: rgba(49, 50, 68, 0.85);
-  --tiao-folder-caret: color-mix(in srgb, var(--tiao-fg) 32%, var(--tiao-bg-solid));
-  --tiao-folder-caret-hover: color-mix(in srgb, var(--tiao-fg) 55%, var(--tiao-bg-solid));
-  --tiao-depth-line: color-mix(in srgb, var(--tiao-fg) 12%, var(--tiao-bg-solid));
-  --tiao-depth-line-hover: color-mix(in srgb, var(--tiao-fg) 30%, var(--tiao-bg-solid));
-  --tiao-depth-line-active: color-mix(in srgb, var(--tiao-fg) 45%, var(--tiao-bg-solid));
   --tiao-hover: rgba(205, 214, 244, 0.09);
   --tiao-hover-soft: rgba(205, 214, 244, 0.045);
   --tiao-hover-strong: rgba(205, 214, 244, 0.14);
@@ -326,8 +303,19 @@
   --tiao-shadow: 0 0 0 1px var(--tiao-border);
   --tiao-shadow-popup: 0 0 0 1px var(--tiao-border);
   --tiao-shadow-raised: 0 0 0 1px var(--tiao-border);
-  --tiao-backdrop-filter: none;
   --tiao-overlay-filter: none;
+}
+
+/*
+ * Glass (global setting, off by default): a translucent, frosted surface for
+ * floating panes and the notch. Opaque is the default because the blur re-runs
+ * every frame the canvas underneath changes.
+ */
+.tiao-pane.tiao-glass,
+.tiao-notch.tiao-glass {
+  background: var(--tiao-bg);
+  backdrop-filter: var(--tiao-backdrop-filter);
+  -webkit-backdrop-filter: var(--tiao-backdrop-filter);
 }
 
 .tiao-pane *,
@@ -382,11 +370,13 @@
  * armed to hide: fade + slide the bar up. tiao-notch-near comes from tracking
  * the pointer's distance to the top edge, since a hover strip wide enough to be
  * easy to hit would swallow clicks meant for the panes underneath it.
+ * :focus-visible rather than :focus-within, so keyboard focus reveals the bar
+ * but a clicked button doesn't hold it open after the pointer leaves.
  */
 .tiao-notch.tiao-notch-auto-hide:not(
     .tiao-notch-near,
     :hover,
-    :focus-within,
+    :has(:focus-visible),
     :has(.tiao-pane-menu.tiao-open)
   ) {
   opacity: 0;
@@ -436,10 +426,6 @@
   border-radius: 0;
   border-inline-end: 1px solid var(--tiao-border);
   box-shadow: none;
-  /* the page is padded clear of the sidebar, so there is nothing to blur */
-  background: var(--tiao-bg-solid);
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
 }
 /* the sidebar's own chrome: one search + settings for every pane inside */
 .tiao-dock-header {
@@ -493,7 +479,8 @@
   inset-inline-start: -3px;
 }
 
-/* docked panes read as one continuous list: square, flush, hairline-separated */
+/* docked panes read as one continuous list: square, flush, hairline-separated;
+   the page is padded clear of the sidebar, so glass has nothing to frost */
 .tiao-pane.tiao-docked {
   flex: none;
   width: 100%;
@@ -1302,11 +1289,13 @@
 .tiao-scrub .tiao-num-input:read-write + .tiao-scrub-grip {
   display: none;
 }
-/* page-wide drag cursor (setEwCursor): !important so it also overrides
-   element cursors like the row label's `pointer` during long-press scrubs */
-html.tiao-cursor-ew,
-html.tiao-cursor-ew * {
-  cursor: ew-resize !important;
+/* page-wide drag cursor (setEwCursor): a transparent layer under the pointer,
+   just below the scrub guide so the guide and tooltip still draw on top */
+.tiao-cursor-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483646;
+  cursor: ew-resize;
 }
 /* fixed overlay on <body>: dotted guide from the knob origin to the pointer */
 .tiao-scrub-overlay {
@@ -1371,6 +1360,10 @@ html.tiao-cursor-ew * {
 .tiao-angle-field {
   flex: 1;
   min-width: 0;
+}
+/* the dial knob is this field's drag affordance */
+.tiao-angle-field .tiao-scrub-grip {
+  display: none;
 }
 .tiao-angle-knob {
   display: flex;
@@ -1444,8 +1437,8 @@ html.tiao-cursor-ew * {
   background: color-mix(in srgb, var(--tiao-bg-solid) 42%, transparent);
   border: 1px solid var(--tiao-border);
   box-shadow: var(--tiao-shadow-popup);
-  backdrop-filter: blur(3px) saturate(1.05);
-  -webkit-backdrop-filter: blur(3px) saturate(1.05);
+  backdrop-filter: var(--tiao-overlay-filter);
+  -webkit-backdrop-filter: var(--tiao-overlay-filter);
 }
 .tiao-angle-dragging .tiao-angle-knob {
   /* keep the icon visible under the centered dial */
@@ -1657,8 +1650,6 @@ html.tiao-cursor-ew * {
   width: 100%;
   background: transparent;
   box-shadow: none;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
 }
 .tiao-pane-menu > .tiao-pane > .tiao-titlebar {
   display: none;
@@ -1898,8 +1889,8 @@ html.tiao-cursor-ew * {
   background: color-mix(in srgb, var(--tiao-bg-solid) 42%, transparent);
   border: 1px solid var(--tiao-border);
   box-shadow: var(--tiao-shadow-popup);
-  backdrop-filter: blur(3px) saturate(1.05);
-  -webkit-backdrop-filter: blur(3px) saturate(1.05);
+  backdrop-filter: var(--tiao-overlay-filter);
+  -webkit-backdrop-filter: var(--tiao-overlay-filter);
 }
 .tiao-point-dragging .tiao-point-pad-toggle {
   opacity: 0.35;

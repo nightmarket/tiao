@@ -2,9 +2,9 @@ import { eyeIcon, eyeOffIcon, gearIcon, h, panelLeftIcon, rotateCcwIcon, withDoc
 import {
   createPaneMenu,
   type PaneMenuFontSize,
-  type PaneMenuHiding,
   type PaneMenuHost,
   type PaneMenuSpacing,
+  type PaneMenuToggle,
 } from './pane-menu'
 
 /** the notch menu drives one theme, style, and accent for every pane at once */
@@ -17,13 +17,15 @@ export interface NotchHost
     | 'fontSize'
     | 'spacing'
     | 'hiding'
+    | 'glass'
     | 'menuBelow'
     | 'onDispose'
   > {
-  /** these three are global, so they live here rather than in a pane's menu */
+  /** these are global, so they live here rather than in a pane's menu */
   fontSize: PaneMenuFontSize
   spacing: PaneMenuSpacing
-  hiding: PaneMenuHiding
+  hiding: PaneMenuToggle
+  glass: PaneMenuToggle
   getHidden(): boolean
   toggleHidden(): void
   getDocked(): boolean
@@ -100,6 +102,7 @@ export function createNotch(host: NotchHost): Notch {
     fontSize: host.fontSize,
     spacing: host.spacing,
     hiding: host.hiding,
+    glass: host.glass,
     onDispose: (fn) => disposers.push(fn),
   })
 

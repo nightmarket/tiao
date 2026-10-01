@@ -216,14 +216,34 @@ export function setRowActive(from: Element | null | undefined, on: boolean): voi
   row.classList.toggle('tiao-row-active', on)
 }
 
+const cursorLayers = new WeakMap<Document, HTMLElement>()
+
 /**
- * Hold the ew-resize cursor page-wide while scrubbing/sliding. A root class
- * (+ !important rule) rather than an inline cursor, so it also wins over
+ * Hold the ew-resize cursor page-wide while scrubbing/sliding. A transparent
+ * layer over the page rather than a root class matching every element, so a
+ * drag starting or ending doesn't restyle the whole page. It also wins over
  * elements that set their own cursor — e.g. the row label (`pointer`) that a
- * long-press scrub starts from.
+ * long-press scrub starts from. Drags listen on the document, so they keep
+ * receiving the pointer through it.
  */
 export function setEwCursor(from: Element, on: boolean): void {
-  from.ownerDocument.documentElement.classList.toggle('tiao-cursor-ew', on)
+  const doc = from.ownerDocument
+  let layer = cursorLayers.get(doc)
+  if (!on) {
+    layer?.remove()
+    return
+  }
+  if (!layer) {
+    const created = doc.createElement('div')
+    created.className = 'tiao-cursor-layer'
+    // failsafe: a drag that threw before its own cleanup must not leave the page covered
+    const drop = () => created.remove()
+    created.addEventListener('pointerup', drop)
+    created.addEventListener('pointerdown', drop)
+    cursorLayers.set(doc, created)
+    layer = created
+  }
+  if (!layer.isConnected) doc.body.append(layer)
 }
 
 function ensureDragGuard(doc: Document): void {

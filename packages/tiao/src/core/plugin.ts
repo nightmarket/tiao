@@ -20,7 +20,7 @@ export interface BindingOptions {
   readonly?: boolean
   /** set false to keep this value out of localStorage (default true) */
   persist?: boolean
-  /** monitor poll interval in ms (default 66) */
+  /** monitor poll interval in ms (default 66); Infinity never polls, so call refresh() instead */
   interval?: number
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- callable with the plugin's value type
   format?: (value: any) => string

@@ -442,16 +442,18 @@ export class BindingApi<T> extends Item {
     if (options.readonly) {
       this.element.classList.add('tiao-row-monitor')
       const interval = options.interval ?? DEFAULT_MONITOR_INTERVAL
-      this.disposers.push(
-        onInterval(() => {
-          const next = this.target[this.key] as T
-          const meta =
-            options.view === 'graph' && Object.is(this.value.get(), next)
-              ? GRAPH_MONITOR_META
-              : MONITOR_META
-          this.value.set(next, meta)
-        }, interval),
-      )
+      if (Number.isFinite(interval)) {
+        this.disposers.push(
+          onInterval(() => {
+            const next = this.target[this.key] as T
+            const meta =
+              options.view === 'graph' && Object.is(this.value.get(), next)
+                ? GRAPH_MONITOR_META
+                : MONITOR_META
+            this.value.set(next, meta)
+          }, interval),
+        )
+      }
     }
     // Monitors emit actual changes too; repeated graph samples only advance
     // the internal timeline and never write back or become public events.

@@ -83,8 +83,6 @@ function createAngleRow(ctx: PluginContext<number>): PluginView {
     },
   )
   scrub.element.classList.add('tiao-angle-field')
-  const grip = scrub.element.querySelector('.tiao-scrub-grip') as HTMLElement
-  grip.style.display = 'none'
   ctx.onDispose(scrub.dispose)
 
   const root = h('div', 'tiao-angle', knob, scrub.element)

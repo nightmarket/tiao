@@ -7,11 +7,11 @@ import {
   type InputPlugin,
   injectCss,
   type PluginContext,
+  type PluginView,
   registerPlugin,
+  SVG_NS,
   snap,
 } from '../core'
-
-const SVG_NS = 'http://www.w3.org/2000/svg'
 
 /** how the ring scale maps values to pixels */
 export interface RingUnit {
@@ -194,7 +194,7 @@ function createRing(ctx: PluginContext<number>, config: RingConfig): HTMLElement
 }
 
 /** ring (2/3) + editable number field (1/3), the non-wide layout */
-function createRingWithText(ctx: PluginContext<number>, config: RingConfig): HTMLElement {
+function createRingWithText(ctx: PluginContext<number>, config: RingConfig): PluginView {
   const ring = createRing(ctx, { ...config, tooltipEnabled: false })
   const format = ctx.options.format
   const scrub = createScrubber(
@@ -209,7 +209,18 @@ function createRingWithText(ctx: PluginContext<number>, config: RingConfig): HTM
     },
   )
   ctx.onDispose(scrub.dispose)
-  return h('div', 'tiao-ring-row', ring, scrub.element)
+  // label click edits the field and long-press scrubs it, like any number row
+  return {
+    element: h('div', 'tiao-ring-row', ring, scrub.element),
+    activate: scrub.activate,
+    beginScrub: scrub.beginScrub,
+  }
+}
+
+function createRingView(ctx: PluginContext<number>, config: RingConfig): PluginView {
+  return ctx.options['wide']
+    ? { element: createRing(ctx, config) }
+    : createRingWithText(ctx, config)
 }
 
 function textFormatter(ctx: PluginContext<number>): (v: number) => string {
@@ -244,8 +255,7 @@ export const cameraRingPlugin: InputPlugin<number> = {
       textFormat: textFormatter(ctx),
       tooltipEnabled: true,
     }
-    const element = ctx.options['wide'] ? createRing(ctx, config) : createRingWithText(ctx, config)
-    return { element }
+    return createRingView(ctx, config)
   },
 }
 
@@ -276,8 +286,7 @@ export const cameraWheelPlugin: InputPlugin<number> = {
       textFormat: textFormatter(ctx),
       tooltipEnabled: true,
     }
-    const element = ctx.options['wide'] ? createRing(ctx, config) : createRingWithText(ctx, config)
-    return { element }
+    return createRingView(ctx, config)
   },
 }
 
@@ -459,7 +468,7 @@ const CSS = `
   transform: translate(-50%, -100%);
   padding: 2px 5px;
   border-radius: var(--tiao-radius-sm);
-  background: var(--tiao-bg);
+  background: var(--tiao-bg-solid);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18), 0 0 0 1px var(--tiao-border);
   font-family: var(--tiao-font-mono);
   font-size: var(--tiao-font-size-mono);

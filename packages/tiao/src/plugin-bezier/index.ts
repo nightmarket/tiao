@@ -10,6 +10,7 @@ import {
   mapRange,
   registerPlugin,
   round2,
+  SVG_NS,
 } from '../core'
 
 export type BezierValue = [number, number, number, number]
@@ -17,8 +18,6 @@ export type BezierValue = [number, number, number, number]
 function isBezier(v: unknown): v is BezierValue {
   return Array.isArray(v) && v.length === 4 && v.every((n) => typeof n === 'number')
 }
-
-const SVG_NS = 'http://www.w3.org/2000/svg'
 
 // visible y range: the graph keeps a 25% vertical margin above and below the
 // unit box so overshoot curves stay visible (matches tweakpane-essentials)
@@ -204,7 +203,12 @@ export const bezierPlugin: InputPlugin<BezierValue> = {
     const popup = createPopup(root, editor, ctx.onDispose)
 
     // --- coordinate mapping (pixel space, 25% vertical margins) ---
-    const size = () => ({ w: graph.clientWidth, h: graph.clientHeight })
+    // sizes come from the ResizeObserver below (0 while the popup is closed),
+    // so value changes and drag moves never force a layout read
+    const graphSize = { w: -1, h: -1 }
+    const ticksSize = { w: -1, h: -1 }
+    const size = () =>
+      graphSize.w >= 0 ? graphSize : { w: graph.clientWidth, h: graph.clientHeight }
     const valueToPos = (x: number, y: number) => {
       const { w, h: gh } = size()
       const vm = gh * 0.25
@@ -298,8 +302,8 @@ export const bezierPlugin: InputPlugin<BezierValue> = {
         }
 
         // playback strip ticks, spaced by the eased value
-        const tw = ticksSvg.clientWidth
-        const th = ticksSvg.clientHeight
+        const tw = ticksSize.w >= 0 ? ticksSize.w : ticksSvg.clientWidth
+        const th = ticksSize.h >= 0 ? ticksSize.h : ticksSvg.clientHeight
         const ds: string[] = []
         for (let i = 0; i < PREVIEW_TICKS; i++) {
           const x = curveY(v, i / (PREVIEW_TICKS - 1)) * tw
@@ -323,8 +327,20 @@ export const bezierPlugin: InputPlugin<BezierValue> = {
       presetSelect.value = presetIndex >= 0 ? String(presetIndex) : ''
     }
 
-    const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(refresh) : null
+    const ro =
+      typeof ResizeObserver === 'function'
+        ? new ResizeObserver((entries) => {
+            for (const { target, contentRect } of entries) {
+              const sized = target === graph ? graphSize : ticksSize
+              sized.w = contentRect.width
+              sized.h = contentRect.height
+            }
+            refresh()
+          })
+        : null
     ro?.observe(graph)
+    // the strip's content box is exactly the ticks svg (width/height 100%)
+    ro?.observe(strip)
     ctx.onDispose(() => ro?.disconnect())
 
     refresh()
@@ -366,8 +382,9 @@ export const bezierPlugin: InputPlugin<BezierValue> = {
     })
 
     // --- graph drag: grab whichever handle is closer; shift locks 45deg angles ---
+    // the rect is read once per drag, not per pointermove
+    let rect: DOMRect
     const applyDrag = (clientX: number, clientY: number, shift: boolean, last: boolean) => {
-      const rect = graph.getBoundingClientRect()
       const vp = posToValue(clientX - rect.left, clientY - rect.top)
       // angle-locking pivots on the handle's own endpoint: (0,0) or (1,1)
       const p = shift ? lockAngle(selected, selected, vp.x, vp.y) : vp
@@ -379,7 +396,7 @@ export const bezierPlugin: InputPlugin<BezierValue> = {
     ctx.onDispose(
       draggable(graph, {
         onStart: (e) => {
-          const rect = graph.getBoundingClientRect()
+          rect = graph.getBoundingClientRect()
           const px = e.clientX - rect.left
           const py = e.clientY - rect.top
           const [x1, y1, x2, y2] = ctx.value.get()
@@ -404,9 +421,8 @@ export const bezierPlugin: InputPlugin<BezierValue> = {
       const step = 0.01 * (e.shiftKey ? 10 : 1) * (e.altKey ? 0.1 : 1)
       const next = [...ctx.value.get()] as BezierValue
       next[selected * 2] = round2(clamp((next[selected * 2] as number) + dx * step, 0, 1))
-      next[selected * 2 + 1] = round2(
-        clamp((next[selected * 2 + 1] as number) + dy * step, Y_MIN, Y_MAX),
-      )
+      // y stays unclamped, like text entry: Back presets overshoot the visible range
+      next[selected * 2 + 1] = round2((next[selected * 2 + 1] as number) + dy * step)
       ctx.value.set(next, { source: 'ui', last: true })
     }
     graph.addEventListener('keydown', onGraphKey)

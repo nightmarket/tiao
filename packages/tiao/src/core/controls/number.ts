@@ -1,4 +1,4 @@
-import { h, startDrag } from '../dom'
+import { h } from '../dom'
 import type { InputPlugin, PluginContext, PluginView } from '../plugin'
 import { clamp, mapRange, nudge, snap } from '../util'
 import { createScrubber } from './scrubber'
@@ -39,7 +39,6 @@ function createSliderRow(ctx: PluginContext<number>, min: number, max: number): 
       // fill-edge handlebar is the affordance; track owns dragging on the fill
       guide: false,
       fieldDrag: false,
-      scrubAnchor: 'input',
       ...(options.format ? { format: options.format } : {}),
       ...(typeof step === 'number' ? { step } : {}),
     },
@@ -54,7 +53,7 @@ function createSliderRow(ctx: PluginContext<number>, min: number, max: number): 
   ctx.onDispose(value.subscribe(render))
   ctx.onDispose(scrub.dispose)
 
-  const { setTrackActive } = bindSliderTrack({
+  const { beginRelativeDrag } = bindSliderTrack({
     el,
     track,
     min,
@@ -68,34 +67,16 @@ function createSliderRow(ctx: PluginContext<number>, min: number, max: number): 
     },
     onDispose: ctx.onDispose,
   })
-  // keyboard support on the track (Shift ×10, Alt ÷10)
-  track.tabIndex = 0
-
-  /** row long-press: mouse position = current value; drag left/right from there */
-  const beginRelativeScrub = (e: PointerEvent) => {
-    const base = value.get()
-    const width = track.getBoundingClientRect().width || 1
-    const unitsPerPx = (max - min) / width
-    setTrackActive(true)
-    startDrag(e, {
-      onStart: (ev) => {
-        ev.preventDefault()
-      },
-      onMove: (s) => {
-        value.set(constrain(base + s.dx * unitsPerPx), { source: 'ui', last: false })
-      },
-      onEnd: (s) => {
-        value.set(constrain(base + s.dx * unitsPerPx), { source: 'ui', last: true })
-        setTrackActive(false)
-      },
-    })
-  }
 
   return {
     element: el,
     activate: scrub.activate,
-    // row long-press: relative from current value (track click still jumps)
-    beginScrub: beginRelativeScrub,
+    beginScrub: (e) => {
+      const base = value.get()
+      beginRelativeDrag(e, (delta, last) =>
+        value.set(constrain(base + delta), { source: 'ui', last }),
+      )
+    },
   }
 }
 

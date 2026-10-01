@@ -65,9 +65,20 @@ export function createExportPane(options: ExportPaneOptions): Pane {
   video.addBinding(params, 'format', { options: formats, label: 'format' })
   video.addBinding(params, 'fps', { min: 1, max: 120, step: 1, label: 'fps' })
   video.addBinding(params, 'bitrate', { min: 1, max: 50, step: 1, label: 'Mbps' })
-  video.addBinding(params, 'status', { readonly: true, interval: 100, label: 'status' })
+  // never polled, so an idle export pane adds no per-frame work; setStatus pushes changes
+  const statusRow = video.addBinding(params, 'status', {
+    readonly: true,
+    interval: Infinity,
+    label: 'status',
+  })
+  const setStatus = (status: string) => {
+    params.status = status
+    statusRow.refresh()
+  }
 
   let recorder: Recorder | null = null
+  /** set while mediabunny loads, so a second click can't orphan a recorder */
+  let starting = false
   let startedAt = 0
   let timer: ReturnType<typeof setInterval> | null = null
   const recordButton = video.addButton({ title: 'Start recording' })
@@ -85,15 +96,16 @@ export function createExportPane(options: ExportPaneOptions): Pane {
     if (timer) clearInterval(timer)
     timer = null
     recordButton.title = 'Start recording'
-    params.status = 'idle'
+    setStatus('idle')
   }
 
   recordButton.on('click', () => {
     void (async () => {
+      if (starting) return
       if (recorder) {
         const active = recorder
         recorder = null
-        params.status = 'encoding…'
+        setStatus('encoding…')
         try {
           const blob = await active.stop()
           downloadBlob(blob, `${filename()}.${params.format}`)
@@ -104,21 +116,24 @@ export function createExportPane(options: ExportPaneOptions): Pane {
       }
       const canvas = getCanvas()
       if (!canvas) {
-        params.status = 'no canvas'
+        setStatus('no canvas')
         return
       }
+      starting = true
       try {
         const opts = { fps: params.fps, bitrateMbps: params.bitrate }
         recorder =
           params.format === 'mp4' ? await recordMp4(canvas, opts) : recordWebm(canvas, opts)
       } catch (err) {
-        params.status = 'error'
+        setStatus('error')
         throw err
+      } finally {
+        starting = false
       }
       startedAt = performance.now()
       recordButton.title = 'Stop & save'
       timer = setInterval(() => {
-        params.status = `rec ${((performance.now() - startedAt) / 1000).toFixed(1)}s`
+        setStatus(`rec ${((performance.now() - startedAt) / 1000).toFixed(1)}s`)
       }, 100)
     })()
   })

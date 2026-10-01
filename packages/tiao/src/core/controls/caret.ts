@@ -40,6 +40,7 @@ export function installCaret(root: HTMLElement, doc: Document): () => void {
     caret.remove()
     if (active) active.style.caretColor = ''
     active = null
+    doc.removeEventListener('selectionchange', onSelectionChange)
     deferredSearchbar = null
     if (revealTimer) win.clearTimeout(revealTimer)
     revealTimer = 0
@@ -107,6 +108,9 @@ export function installCaret(root: HTMLElement, doc: Document): () => void {
       update()
     })
   }
+  // selectionchange covers typing, clicks, arrows, and select-all inside inputs;
+  // it is document-wide, so it is only listened to while a pane input has focus
+  const onSelectionChange = () => scheduleUpdate()
 
   const revealDeferredSearchCaret = () => {
     if (!deferredSearchbar) return
@@ -135,6 +139,7 @@ export function installCaret(root: HTMLElement, doc: Document): () => void {
     const t = e.target
     if (t instanceof HTMLInputElement && t.matches(INPUT_SELECTOR)) {
       active = t
+      doc.addEventListener('selectionchange', onSelectionChange)
       t.style.caretColor = 'transparent'
       if (t.matches('.tiao-search-input') && deferSearchCaret(t)) return
       update()
@@ -146,8 +151,6 @@ export function installCaret(root: HTMLElement, doc: Document): () => void {
       hide()
     }
   }
-  // selectionchange covers typing, clicks, arrows, and select-all inside inputs
-  const onSelectionChange = () => scheduleUpdate()
   const onTransitionEnd = (e: TransitionEvent) => {
     if (e.target === deferredSearchbar && e.propertyName === 'height') {
       revealDeferredSearchCaret()
@@ -159,13 +162,11 @@ export function installCaret(root: HTMLElement, doc: Document): () => void {
   root.addEventListener('focusin', onFocusIn)
   root.addEventListener('focusout', onFocusOut)
   root.addEventListener('transitionend', onTransitionEnd)
-  doc.addEventListener('selectionchange', onSelectionChange)
   return () => {
     if (frame) win.cancelAnimationFrame(frame)
     hide()
     root.removeEventListener('focusin', onFocusIn)
     root.removeEventListener('focusout', onFocusOut)
     root.removeEventListener('transitionend', onTransitionEnd)
-    doc.removeEventListener('selectionchange', onSelectionChange)
   }
 }

@@ -1,4 +1,4 @@
-declare const process: { env: Record<string, string | undefined> } | undefined
+declare const process: { env: Record<string, string | undefined> }
 
 let enabledOverride: boolean | null = null
 
@@ -22,20 +22,28 @@ export function setTiaoEnabled(enabled: boolean): void {
  */
 function debugLevel(): 0 | 1 | 2 {
   const value =
-    (typeof process !== 'undefined' && process?.env != null
-      ? (process.env.NEXT_PUBLIC_DEBUG_LEVEL ?? process.env.DEBUG_LEVEL)
-      : undefined) ??
+    readEnv(() => process.env.NEXT_PUBLIC_DEBUG_LEVEL) ??
+    readEnv(() => process.env.DEBUG_LEVEL) ??
     (import.meta as ImportMeta & { env?: { VITE_DEBUG_LEVEL?: string } }).env?.VITE_DEBUG_LEVEL
 
   if (value === '0') return 0
   if (value === '1') return 1
   if (value === '2') return 2
 
+  const nodeEnv = readEnv(() => process.env.NODE_ENV)
+  return nodeEnv && nodeEnv !== 'production' ? 2 : 0
+}
+
+/**
+ * Bundlers inline `process.env.X` textually (Vite does so without defining a
+ * `process` global), so the read must not be gated on `typeof process`. With
+ * no replacement and no global it throws, which reads as unset.
+ */
+function readEnv(read: () => string | undefined): string | undefined {
   try {
-    const nodeEnv = typeof process !== 'undefined' ? process.env.NODE_ENV : undefined
-    return nodeEnv && nodeEnv !== 'production' ? 2 : 0
+    return read()
   } catch {
-    return 0
+    return undefined
   }
 }
 

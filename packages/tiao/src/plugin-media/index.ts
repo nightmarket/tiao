@@ -54,10 +54,24 @@ export const mediaPlugin: InputPlugin<MediaValue> = {
       ? h('div', 'tiao-media', h('div', 'tiao-label', ctx.label), zone)
       : h('div', 'tiao-media', zone)
 
-    // object URL backing the current value; videos need it alive while playing
+    // the element this input loaded and the object URL backing it; videos need
+    // the URL alive while playing. App-provided elements are never touched.
+    let uploaded: MediaValue = null
     let currentUrl: string | null = null
     let hintTimer: ReturnType<typeof setTimeout> | undefined
     let loadGen = 0
+
+    // a replaced looping video keeps decoding until it is paused and emptied
+    const release = () => {
+      if (uploaded instanceof HTMLVideoElement) {
+        uploaded.pause()
+        uploaded.removeAttribute('src')
+        uploaded.load()
+      }
+      uploaded = null
+      if (currentUrl) URL.revokeObjectURL(currentUrl)
+      currentUrl = null
+    }
 
     const setHint = (text: string, transient = false) => {
       hint.textContent = text
@@ -73,13 +87,18 @@ export const mediaPlugin: InputPlugin<MediaValue> = {
       if (v) preview.replaceChildren(v)
       else preview.replaceChildren()
       zone.classList.toggle('tiao-media-loaded', v !== null)
-      if (v === null) name.textContent = ''
+      // the app swapped in its own element (or cleared it): the upload is gone
+      if (v !== uploaded) {
+        release()
+        name.textContent = ''
+      }
     }
     render(ctx.value.get())
     ctx.onDispose(ctx.value.subscribe(render))
 
     const commit = (media: MediaValue, url: string | null, label: string) => {
-      if (currentUrl) URL.revokeObjectURL(currentUrl)
+      release()
+      uploaded = media
       currentUrl = url
       name.textContent = label
       ctx.value.set(media, { source: 'ui', last: true })
