@@ -63,7 +63,7 @@ export interface PaneOptions {
   theme?: Record<string, string>
   /** overall scale: fonts, control heights, spacing, and width (default 'm') */
   size?: PaneSize
-  /** surface style: bouba (rounded glass) or kiki (sharp / flat) */
+  /** surface style: bouba (rounded, soft shadow) or kiki (sharp, hairline) */
   style?: PaneStyle
   width?: number
   document?: Document
@@ -229,6 +229,8 @@ interface NotchState {
   spacing?: PaneSpacing | undefined
   /** the notch vanishes until the pointer comes near the top edge */
   hiding?: boolean | undefined
+  /** floating panes and the notch draw translucent and frosted */
+  glass?: boolean | undefined
   theme?: PaneTheme | undefined
   style?: PaneStyle | undefined
   accent?: string | undefined
@@ -407,6 +409,10 @@ function ensureNotch(doc: Document): void {
           syncNotch(doc)
         },
       },
+      glass: {
+        get: () => Pane.glass,
+        set: (v) => Pane.setGlass(v, doc),
+      },
     }),
   )
 }
@@ -454,6 +460,7 @@ function syncNotch(doc: Document): void {
   if (!notch) return
   // the notch re-declares the theme tokens, so it tracks the look the panes wear
   applyChrome(notch.element, globalChrome(doc))
+  notch.element.classList.toggle('tiao-glass', Pane.glass)
   notch.sync()
 }
 
@@ -635,6 +642,21 @@ export class Pane extends Container {
     syncNotch(doc)
   }
 
+  /** whether floating panes and the notch draw translucent and frosted */
+  static get glass(): boolean {
+    return readNotchState().glass ?? false
+  }
+
+  /**
+   * Frost every floating pane and the notch, or draw them opaque (the default:
+   * the blur re-runs every frame the page underneath changes).
+   */
+  static setGlass(glass: boolean, doc: Document = document): void {
+    notchStore.patch({ glass })
+    for (const p of panesIn(doc)) p.element.classList.toggle('tiao-glass', glass)
+    syncNotch(doc)
+  }
+
   /**
    * Hide or show every floating pane in `doc`.
    * If any are visible → hide all; otherwise show all.
@@ -713,6 +735,8 @@ export class Pane extends Container {
       searchInput.type = 'search'
       searchInput.placeholder = 'Search'
       const searchbar = h('div', 'tiao-searchbar', searchInput)
+      // collapsed to zero height, but still focusable unless inert
+      searchbar.toggleAttribute('inert', true)
       const body = h('div', 'tiao-pane-body', h('div', 'tiao-pane-clip', rack))
       const element = h('div', 'tiao-pane', titlebar, searchbar, body)
       return {
@@ -753,7 +777,10 @@ export class Pane extends Container {
     const notchState = readNotchState()
     if (this.floating) this.applyFontSize(notchState.fontSize ?? 'small')
     else if (options.size) this.size = options.size
-    if (this.floating) this.spacing = notchState.spacing ?? 's'
+    if (this.floating) {
+      this.spacing = notchState.spacing ?? 's'
+      this.element.classList.toggle('tiao-glass', notchState.glass ?? false)
+    }
 
     // restore persisted state before first paint: this pane's own saved chrome
     // wins, then whatever the global settings panel last broadcast
@@ -943,7 +970,8 @@ export class Pane extends Container {
     }
 
     // clicking anywhere outside a focused pane input deselects/commits it,
-    // even when the click target swallows focus changes (e.g. canvases)
+    // even when the click target swallows focus changes (e.g. canvases);
+    // the document listener only exists while one of this pane's inputs has focus
     const onDocPointerDown = (e: PointerEvent) => {
       const active = doc.activeElement
       if (!(active instanceof HTMLInputElement) || !this.element.contains(active)) return
@@ -956,8 +984,23 @@ export class Pane extends Container {
       active.blur()
       collapseSelection(active)
     }
-    doc.addEventListener('pointerdown', onDocPointerDown, true)
-    this.disposers.push(() => doc.removeEventListener('pointerdown', onDocPointerDown, true))
+    const onInputFocus = (e: FocusEvent) => {
+      if (e.target instanceof HTMLInputElement) {
+        doc.addEventListener('pointerdown', onDocPointerDown, true)
+      }
+    }
+    const onInputBlur = (e: FocusEvent) => {
+      if (e.target instanceof HTMLInputElement) {
+        doc.removeEventListener('pointerdown', onDocPointerDown, true)
+      }
+    }
+    this.element.addEventListener('focusin', onInputFocus)
+    this.element.addEventListener('focusout', onInputBlur)
+    this.disposers.push(() => {
+      this.element.removeEventListener('focusin', onInputFocus)
+      this.element.removeEventListener('focusout', onInputBlur)
+      doc.removeEventListener('pointerdown', onDocPointerDown, true)
+    })
 
     // wider custom caret over focused inputs (the native bar is easy to miss)
     this.disposers.push(installCaret(this.element, doc))
@@ -1182,6 +1225,7 @@ export class Pane extends Container {
   set searchOpen(v: boolean) {
     if (this.searchOpen === v) return
     this.searchbar.classList.toggle('tiao-open', v)
+    this.searchbar.toggleAttribute('inert', !v)
     this.element.classList.toggle('tiao-search-on', v)
     if (v) {
       this.expanded = true

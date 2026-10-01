@@ -1,3 +1,4 @@
+import type { BindingApi } from './blade'
 import type { DockSide } from './dock'
 import { h, withDocument } from './dom'
 import type {
@@ -37,8 +38,8 @@ export interface PaneMenuSpacing {
   set(v: PaneSpacing): void
 }
 
-/** whether the notch vanishes until the pointer comes near the top edge */
-export interface PaneMenuHiding {
+/** an on/off setting only the notch offers (hiding, glass) */
+export interface PaneMenuToggle {
   get(): boolean
   set(v: boolean): void
 }
@@ -62,7 +63,10 @@ export interface PaneMenuHost {
   sides?: PaneMenuSides
   fontSize?: PaneMenuFontSize
   spacing?: PaneMenuSpacing
-  hiding?: PaneMenuHiding
+  /** the notch vanishes until the pointer comes near the top edge */
+  hiding?: PaneMenuToggle
+  /** floating panes and the notch draw translucent and frosted */
+  glass?: PaneMenuToggle
   /** drop below the host instead of beside it (the notch bar is too narrow) */
   menuBelow?: boolean
   onDispose(fn: () => void): void
@@ -156,7 +160,7 @@ function buildMenu(host: PaneMenuHost): { shell: HTMLElement; refresh: () => voi
   host.element.append(shell)
 
   const placement = host.placement
-  const { fontSize, spacing, hiding } = host
+  const { fontSize, spacing, hiding, glass } = host
   const settings = {
     draggable: placement?.getDraggable() ?? false,
     hiding: hiding?.get() ?? false,
@@ -179,7 +183,7 @@ function buildMenu(host: PaneMenuHost): { shell: HTMLElement; refresh: () => voi
   const refreshers: (() => void)[] = []
   if (placement) {
     const drag = menuPane.addBinding(settings, 'draggable', { label: 'Draggable' })
-    drag.on('change', (ev) => placement.setDraggable(Boolean(ev.value)))
+    onEdit(drag, (v) => placement.setDraggable(v))
     refreshers.push(() => {
       settings.draggable = placement.getDraggable()
       drag.refresh()
@@ -187,14 +191,14 @@ function buildMenu(host: PaneMenuHost): { shell: HTMLElement; refresh: () => voi
   }
   if (hiding) {
     const binding = menuPane.addBinding(settings, 'hiding', { label: 'Hiding' })
-    binding.on('change', (ev) => hiding.set(Boolean(ev.value)))
+    onEdit(binding, (v) => hiding.set(v))
     refreshers.push(() => {
       settings.hiding = hiding.get()
       binding.refresh()
     })
   }
   const numbersBinding = menuPane.addBinding(settings, 'numbers', { label: 'Numbers' })
-  numbersBinding.on('change', (ev) => host.setNumbers(Boolean(ev.value)))
+  onEdit(numbersBinding, (v) => host.setNumbers(v))
   menuPane.addSeparator()
 
   if (fontSize) {
@@ -243,8 +247,8 @@ function buildMenu(host: PaneMenuHost): { shell: HTMLElement; refresh: () => voi
       Catppuccin: 'catppuccin',
     },
   })
-  themeBinding.on('change', (ev) => {
-    host.setTheme(ev.value)
+  onEdit(themeBinding, (theme) => {
+    host.setTheme(theme)
     syncChrome()
   })
 
@@ -266,14 +270,31 @@ function buildMenu(host: PaneMenuHost): { shell: HTMLElement; refresh: () => voi
   menuPane.rack.append(styleRow.row)
   refreshers.push(styleRow.render)
 
+  if (glass) {
+    const row = segmentedRow(
+      host,
+      'Glass',
+      [
+        { label: 'On', value: 'on' },
+        { label: 'Off', value: 'off' },
+      ],
+      {
+        get: () => (glass.get() ? 'on' : 'off'),
+        set: (v) => glass.set(v === 'on'),
+      },
+    )
+    menuPane.rack.append(row.row)
+    refreshers.push(row.render)
+  }
+
   const accentBinding = menuPane.addBinding(settings, 'accent', { label: 'Accent' })
-  accentBinding.on('change', (ev) => {
+  onEdit(accentBinding, (accent, last) => {
     // the picker fires per frame while dragging; preview those, save the last
     const apply = () => {
-      host.setAccent(String(ev.value))
+      host.setAccent(accent)
       syncChrome()
     }
-    if (ev.last) apply()
+    if (last) apply()
     else withoutPersisting(apply)
   })
 
@@ -329,6 +350,13 @@ function buildMenu(host: PaneMenuHost): { shell: HTMLElement; refresh: () => voi
   }
 
   return { shell, refresh }
+}
+
+/** rows re-read the host on open and those refreshes emit change too; only menu edits write back */
+function onEdit<T>(binding: BindingApi<T>, fn: (value: T, last: boolean) => void): void {
+  binding.on('change', (ev) => {
+    if (ev.source !== 'refresh') fn(ev.value, ev.last)
+  })
 }
 
 /** label + segmented tabs; the selected tab is the current value */

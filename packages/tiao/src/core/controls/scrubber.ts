@@ -19,12 +19,6 @@ export interface ScrubberOptions {
    * Fill sliders turn this off so the track receives pointer events on the fill.
    */
   fieldDrag?: boolean
-  /**
-   * Where an external beginScrub (row long-press) drags from (default 'grip').
-   * Controls that hide the grip (slider value field, interval endpoints)
-   * scrub from the value field instead.
-   */
-  scrubAnchor?: 'grip' | 'input'
 }
 
 export interface ScrubberApi {
@@ -43,7 +37,6 @@ export function applyOverlayTheme(overlay: HTMLElement, from: Element): void {
     '--tiao-fg',
     '--tiao-fg-soft',
     '--tiao-fg-dim',
-    '--tiao-bg',
     '--tiao-bg-solid',
     '--tiao-border',
     '--tiao-accent',
@@ -52,6 +45,7 @@ export function applyOverlayTheme(overlay: HTMLElement, from: Element): void {
     '--tiao-radius',
     '--tiao-radius-sm',
     '--tiao-shadow-popup',
+    '--tiao-overlay-filter',
   ]) {
     const v = cs.getPropertyValue(prop)
     if (v) overlay.style.setProperty(prop, v)
@@ -290,8 +284,7 @@ export function createScrubber(
     element: wrap,
     activate: enterEdit,
     beginScrub: (ev) => {
-      if (!input.readOnly) return
-      runScrub(opts.scrubAnchor === 'input' ? input : knob, ev)
+      if (input.readOnly) runScrub(knob, ev)
     },
     dispose: () => {
       hideOverlay()

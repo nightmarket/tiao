@@ -1,6 +1,6 @@
 import { h } from '../dom'
 import type { InputPlugin, PluginContext, PluginView } from '../plugin'
-import { clamp, isRecord, mapRange, nudge, snap } from '../util'
+import { clamp, isRecord, mapRange, snap } from '../util'
 import { createComponentScrubber } from './scrubber'
 import { bindSliderTrack, createSliderTrack, setSliderFillRange } from './slider'
 
@@ -43,18 +43,21 @@ function createIntervalRow(ctx: PluginContext<IntervalValue>): PluginView {
   const rangeMax =
     typeof options.max === 'number' ? options.max : Math.max(100, initial.min, initial.max)
 
-  // move one endpoint, keeping min <= max
-  const setEndpoint = (side: Endpoint, v: number, last: boolean) => {
+  // unchanged endpoints keep the current object so mid-drag frames don't re-emit
+  const commit = (min: number, max: number, last: boolean) => {
     const cur = value.get()
-    const next =
-      side === 'min'
-        ? { min: clamp(snap(v, step), rangeMin, cur.max), max: cur.max }
-        : { min: cur.min, max: clamp(snap(v, step), cur.min, rangeMax) }
-    if (next.min === cur.min && next.max === cur.max) {
+    if (min === cur.min && max === cur.max) {
       if (last) value.set(cur, { source: 'ui', last })
       return
     }
-    value.set(next, { source: 'ui', last })
+    value.set({ min, max }, { source: 'ui', last })
+  }
+
+  // move one endpoint, keeping min <= max
+  const setEndpoint = (side: Endpoint, v: number, last: boolean) => {
+    const cur = value.get()
+    if (side === 'min') commit(clamp(snap(v, step), rangeMin, cur.max), cur.max, last)
+    else commit(cur.min, clamp(snap(v, step), cur.min, rangeMax), last)
   }
 
   const track = createSliderTrack()
@@ -65,7 +68,6 @@ function createIntervalRow(ctx: PluginContext<IntervalValue>): PluginView {
     // fill-edge handlebars are the affordance; track owns dragging on the fill
     guide: false,
     fieldDrag: false,
-    scrubAnchor: 'input',
     ...(options.format ? { format: options.format } : {}),
     ...(typeof step === 'number' ? { step } : {}),
   } as const
@@ -102,8 +104,8 @@ function createIntervalRow(ctx: PluginContext<IntervalValue>): PluginView {
     if (raw >= cur.max) return 'max'
     return Math.abs(raw - cur.min) <= Math.abs(raw - cur.max) ? 'min' : 'max'
   }
-  // the track stays out of tab order so Tab goes from → to
-  const { beginTrackDrag } = bindSliderTrack({
+  // no onKeyDelta: the track stays out of tab order so Tab goes from → to
+  const { beginRelativeDrag } = bindSliderTrack({
     el,
     track,
     min: rangeMin,
@@ -114,13 +116,6 @@ function createIntervalRow(ctx: PluginContext<IntervalValue>): PluginView {
         active = pickEndpoint(raw, value.get())
       },
       apply: (raw, last) => setEndpoint(active, raw, last),
-      onKeyDelta: (delta, base) => {
-        const cur = value.get()
-        // nudge "to" without re-snapping so Alt fractions survive (matches scrubber)
-        const nextMax = clamp(nudge(cur.max, delta, base), cur.min, rangeMax)
-        if (nextMax === cur.max) value.set(cur, { source: 'ui', last: true })
-        else value.set({ min: cur.min, max: nextMax }, { source: 'ui', last: true })
-      },
     },
     onDispose: ctx.onDispose,
   })
@@ -129,6 +124,14 @@ function createIntervalRow(ctx: PluginContext<IntervalValue>): PluginView {
     element: el,
     // row click focuses "from"; Tab advances to "to"
     activate: () => minScrub.activate(),
-    beginScrub: beginTrackDrag,
+    // row long-press slides the whole band, keeping its width
+    beginScrub: (e) => {
+      const base = value.get()
+      const width = base.max - base.min
+      beginRelativeDrag(e, (delta, last) => {
+        const min = clamp(snap(base.min + delta, step), rangeMin, rangeMax - width)
+        commit(min, snap(min + width, step), last)
+      })
+    },
   }
 }

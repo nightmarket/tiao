@@ -2,7 +2,7 @@ import { type Anchor, type Container, Pane, type PaneOptions } from '../core'
 import { createPerfMonitor, type PerfMonitor, type PerfMonitorOptions } from './monitor'
 
 export interface PerfMonitorUiOptions {
-  /** fps graph ceiling (default 120) */
+  /** fps graph ceiling (default 144) */
   maxFps?: number
 }
 

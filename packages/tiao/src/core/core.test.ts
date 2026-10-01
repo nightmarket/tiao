@@ -7,6 +7,7 @@ import {
   parseColor,
   serializeColor,
 } from './controls/color-model'
+import { setEwCursor } from './dom'
 import { Pane } from './pane'
 import { registerPlugin } from './plugin'
 import { formatNumber, jsonStore, snap, withoutPersisting } from './util'
@@ -170,6 +171,35 @@ describe('Pane bindings', () => {
     pane.dispose()
   })
 
+  it('interval row long-press slides the band from where it is instead of jumping', () => {
+    vi.useFakeTimers()
+    const params = { range: { min: 20, max: 80 } }
+    const pane = new Pane()
+    const binding = pane.addBinding(params, 'range', { min: 0, max: 100, step: 1 })
+    const track = binding.element.querySelector('.tiao-slider') as HTMLElement
+    const label = binding.element.querySelector('.tiao-label') as HTMLElement
+    vi.spyOn(track, 'getBoundingClientRect').mockReturnValue(new DOMRect(100, 0, 100, 20))
+
+    // the press sits on the label, left of the track: holding still changes nothing
+    label.dispatchEvent(
+      new MouseEvent('pointerdown', { button: 0, clientX: 10, clientY: 10, bubbles: true }),
+    )
+    vi.advanceTimersByTime(200)
+    expect(params.range).toEqual({ min: 20, max: 80 })
+
+    document.dispatchEvent(
+      new MouseEvent('pointermove', { clientX: 25, clientY: 10, bubbles: true, buttons: 1 }),
+    )
+    expect(params.range).toEqual({ min: 35, max: 95 })
+    // the band stops at the range edge without shrinking
+    document.dispatchEvent(
+      new MouseEvent('pointerup', { button: 0, clientX: 60, clientY: 10, bubbles: true }),
+    )
+    expect(params.range).toEqual({ min: 40, max: 100 })
+    pane.dispose()
+    vi.useRealTimers()
+  })
+
   it('keeps slider fill range in css variables so the handlebar can clamp', () => {
     const params = { speed: 0 }
     const pane = new Pane()
@@ -227,6 +257,20 @@ describe('Pane bindings', () => {
     expect(bubbled).toEqual([30])
     expect(params.fps).toBe(30)
     pane.dispose()
+  })
+
+  it('monitors with interval: Infinity stay off the ticker and update on refresh()', () => {
+    const raf = vi.spyOn(window, 'requestAnimationFrame')
+    const params = { status: 'idle' }
+    const pane = new Pane()
+    const binding = pane.addBinding(params, 'status', { readonly: true, interval: Infinity })
+    expect(raf).not.toHaveBeenCalled()
+
+    params.status = 'rec 1.0s'
+    binding.refresh()
+    expect(binding.element.querySelector('.tiao-monitor-text')?.textContent).toBe('rec 1.0s')
+    pane.dispose()
+    raf.mockRestore()
   })
 
   it('bubbles changes through nested folders', () => {
@@ -604,6 +648,37 @@ describe('Pane registry and chrome', () => {
     later.dispose()
   })
 
+  it('notch glass frosts every floating pane and the notch, and is off by default', () => {
+    const pane = new Pane()
+    const container = document.createElement('div')
+    document.body.append(container)
+    const inline = new Pane({ container })
+    const notch = document.querySelector('.tiao-notch') as HTMLElement
+    const glassy = (el: HTMLElement) => el.classList.contains('tiao-glass')
+    expect(glassy(pane.element)).toBe(false)
+    expect(notchMenuTab('Glass', 'Off').classList.contains('tiao-selected')).toBe(true)
+
+    notchMenuTab('Glass', 'On').click()
+    expect(Pane.glass).toBe(true)
+    expect(glassy(pane.element)).toBe(true)
+    expect(glassy(notch)).toBe(true)
+    // inline panes sit in the page layout, not over a canvas
+    expect(glassy(inline.element)).toBe(false)
+    expect(JSON.parse(localStorage.getItem('tiao:notch')!).glass).toBe(true)
+
+    const later = new Pane()
+    expect(glassy(later.element)).toBe(true)
+
+    notchMenuTab('Glass', 'Off').click()
+    expect(glassy(pane.element)).toBe(false)
+    expect(glassy(later.element)).toBe(false)
+    expect(glassy(notch)).toBe(false)
+
+    pane.dispose()
+    inline.dispose()
+    later.dispose()
+  })
+
   it('the notch arms itself to hide by default and the toggle disarms it', () => {
     const pane = new Pane()
     const notch = document.querySelector('.tiao-notch') as HTMLElement
@@ -664,6 +739,26 @@ describe('Pane registry and chrome', () => {
     a.dispose()
     b.dispose()
     later.dispose()
+  })
+
+  it('reopening the notch settings re-reads the look without broadcasting it', () => {
+    const a = new Pane({ id: 'reopen-a' })
+    const b = new Pane({ id: 'reopen-b' })
+    const gear = document.querySelector('.tiao-notch-gear') as HTMLButtonElement
+    gear.click()
+    gear.click()
+
+    // a per-pane tweak on the primary pane, which the global panel mirrors
+    a.theme = 'nord'
+    a.accent = '#ff0080'
+    gear.click()
+
+    expect(notchMenuSelect('Theme').selectedOptions[0]?.textContent).toBe('Nord')
+    expect(b.theme).toBe('dark')
+    expect(b.element.style.getPropertyValue('--tiao-accent')).toBe('')
+    expect(localStorage.getItem('tiao:notch')).toBeNull()
+    a.dispose()
+    b.dispose()
   })
 
   it('notch settings survive docking, so panes undock with the global look', () => {
@@ -913,9 +1008,11 @@ describe('Pane registry and chrome', () => {
     // tiao's own chrome is positioned against the sidebar, not inset by it
     expect(pane.element.hasAttribute('data-tiao-inset')).toBe(false)
 
-    // chrome the page mounts later still gets picked up, one microtask behind
+    // chrome the page mounts later still gets picked up in the next frame, before it paints
     const footer = fixed('bottom:0;left:0;right:0;height:32px')
     await Promise.resolve()
+    expect(footer.hasAttribute('data-tiao-inset')).toBe(false)
+    await new Promise((resolve) => requestAnimationFrame(resolve))
     expect(footer.hasAttribute('data-tiao-inset')).toBe(true)
 
     dock.click()
@@ -1402,8 +1499,12 @@ describe('Pane registry and chrome', () => {
     const gravity = folder.addBinding(params, 'gravity')
 
     const searchBtn = pane.element.querySelector('.tiao-pane-search') as HTMLButtonElement
+    const searchbar = pane.element.querySelector('.tiao-searchbar') as HTMLElement
+    // the closed row has zero height; inert keeps Tab from landing in it
+    expect(searchbar.hasAttribute('inert')).toBe(true)
     searchBtn.click()
     expect(pane.searchOpen).toBe(true)
+    expect(searchbar.hasAttribute('inert')).toBe(false)
     const input = pane.element.querySelector('.tiao-search-input') as HTMLInputElement
 
     input.value = 'grav'
@@ -1427,6 +1528,7 @@ describe('Pane registry and chrome', () => {
     expect(speed.element.classList.contains('tiao-search-miss')).toBe(false)
     expect(folder.element.classList.contains('tiao-search-open')).toBe(false)
     expect(input.value).toBe('')
+    expect(searchbar.hasAttribute('inert')).toBe(true)
     pane.dispose()
   })
 
@@ -1611,6 +1713,27 @@ describe('Pane registry and chrome', () => {
     expect(input.selectionStart).toBe(input.value.length)
     expect(input.selectionEnd).toBe(input.value.length)
     pane.dispose()
+  })
+
+  it('listens for outside presses on the document only while one of its inputs has focus', () => {
+    const container = document.createElement('div')
+    document.body.append(container)
+    const add = vi.spyOn(document, 'addEventListener')
+    const remove = vi.spyOn(document, 'removeEventListener')
+    const pointerdowns = (spy: typeof add) =>
+      spy.mock.calls.filter(([type]) => type === 'pointerdown').length
+    const pane = new Pane({ container })
+    const binding = pane.addBinding({ name: 'tiao' }, 'name')
+    expect(pointerdowns(add)).toBe(0)
+
+    const input = binding.element.querySelector('input') as HTMLInputElement
+    input.focus()
+    expect(pointerdowns(add)).toBe(1)
+    input.blur()
+    expect(pointerdowns(remove)).toBe(1)
+    pane.dispose()
+    add.mockRestore()
+    remove.mockRestore()
   })
 
   it('shows a scrubber guide and tooltip while dragging, without selecting the input', () => {
@@ -1843,30 +1966,40 @@ describe('Pane registry and chrome', () => {
     const binding = pane.addBinding(params, 'speed', { min: 0, max: 4, step: 0.01 })
     const track = binding.element.querySelector('.tiao-slider') as HTMLElement
     const label = binding.element.querySelector('.tiao-label') as HTMLElement
-    const root = document.documentElement
+    const layer = () => document.querySelector('.tiao-cursor-layer')
 
     track.dispatchEvent(
       new MouseEvent('pointerdown', { button: 0, clientX: 25, clientY: 10, bubbles: true }),
     )
-    expect(root.classList.contains('tiao-cursor-ew')).toBe(true)
+    expect(layer()).not.toBeNull()
     track.dispatchEvent(
       new MouseEvent('pointerup', { button: 0, clientX: 25, clientY: 10, bubbles: true }),
     )
-    expect(root.classList.contains('tiao-cursor-ew')).toBe(false)
+    expect(layer()).toBeNull()
 
     // long-press on the label: cursor engages when the hold fires, before any move
     label.dispatchEvent(
       new MouseEvent('pointerdown', { button: 0, clientX: 25, clientY: 10, bubbles: true }),
     )
-    expect(root.classList.contains('tiao-cursor-ew')).toBe(false)
+    expect(layer()).toBeNull()
     vi.advanceTimersByTime(200)
-    expect(root.classList.contains('tiao-cursor-ew')).toBe(true)
+    expect(layer()).not.toBeNull()
     label.dispatchEvent(
       new MouseEvent('pointerup', { button: 0, clientX: 25, clientY: 10, bubbles: true }),
     )
-    expect(root.classList.contains('tiao-cursor-ew')).toBe(false)
+    expect(layer()).toBeNull()
     pane.dispose()
     vi.useRealTimers()
+  })
+
+  it('the drag cursor layer clears itself if a drag never cleaned it up', () => {
+    // e.g. an app change handler threw between engaging the cursor and starting the drag
+    setEwCursor(document.body, true)
+    const layer = document.querySelector('.tiao-cursor-layer') as HTMLElement
+    expect(layer).not.toBeNull()
+    // the release lands on the layer itself, since it covers the page
+    layer.dispatchEvent(new MouseEvent('pointerup', { button: 0, bubbles: true }))
+    expect(document.querySelector('.tiao-cursor-layer')).toBeNull()
   })
 
   it('point axis grips scrub without selecting neighboring fields', () => {

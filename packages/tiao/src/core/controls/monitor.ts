@@ -118,6 +118,8 @@ export function createGraph(
 
   let width = 0
   let height = 0
+  /** false while clipped away (collapsed pane/folder, scrolled out, hidden tab) */
+  let visible = true
   let dirty = false
   let observedMin = Infinity
   let observedMax = -Infinity
@@ -188,9 +190,22 @@ export function createGraph(
       : null
   ro?.observe(canvas)
   ctx.onDispose(() => ro?.disconnect())
+  // a collapse clips the canvas without resizing it, so size alone can't tell;
+  // samples keep landing in the buffer and the plot catches up when shown
+  const io =
+    typeof IntersectionObserver === 'function'
+      ? new IntersectionObserver((entries) => {
+          const entry = entries[entries.length - 1]
+          if (!entry) return
+          visible = entry.isIntersecting
+          if (visible && dirty) draw()
+        })
+      : null
+  io?.observe(canvas)
+  ctx.onDispose(() => io?.disconnect())
 
   const draw = () => {
-    if (width === 0 || count === 0) {
+    if (width === 0 || count === 0 || !visible) {
       dirty = true
       return
     }

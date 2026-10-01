@@ -22,8 +22,8 @@ export interface SliderTrackHandlers {
   apply(raw: number, last: boolean): void
   /** called once per drag with the initial mapped value, before the first apply */
   onDragStart?(raw: number): void
-  /** arrow-key nudge (Shift ×10, Alt ÷10) with the resolved base step */
-  onKeyDelta(delta: number, base: number): void
+  /** arrow-key nudge (Shift ×10, Alt ÷10) with the resolved base step; makes the track focusable */
+  onKeyDelta?(delta: number, base: number): void
 }
 
 /**
@@ -40,7 +40,10 @@ export function bindSliderTrack(opts: {
   step: number | undefined
   handlers: SliderTrackHandlers
   onDispose(fn: () => void): void
-}): { beginTrackDrag(e: PointerEvent): void; setTrackActive(on: boolean): void } {
+}): {
+  /** row long-press: drag from the current value, since the pointer is on the label */
+  beginRelativeDrag(e: PointerEvent, apply: (delta: number, last: boolean) => void): void
+} {
   const { el, track, min, max, handlers } = opts
   let rect: DOMRect | null = null
   const fromPointer = (clientX: number) => {
@@ -52,7 +55,8 @@ export function bindSliderTrack(opts: {
     setRowActive(el, on)
     setEwCursor(track, on)
   }
-  const beginTrackDrag = (e: PointerEvent) => {
+  const onPointerDown = (e: PointerEvent) => {
+    if (e.button !== 0) return
     rect = track.getBoundingClientRect()
     setTrackActive(true)
     const raw = fromPointer(e.clientX)
@@ -66,22 +70,33 @@ export function bindSliderTrack(opts: {
       },
     })
   }
-  const onPointerDown = (e: PointerEvent) => {
-    if (e.button !== 0) return
-    beginTrackDrag(e)
-  }
-  const onKeyDown = (e: KeyboardEvent) => {
-    const base = opts.step ?? (max - min) / 100
-    const delta = arrowKeyStep(e, base)
-    if (!delta) return
-    e.preventDefault()
-    handlers.onKeyDelta(delta, base)
+  const beginRelativeDrag = (e: PointerEvent, apply: (delta: number, last: boolean) => void) => {
+    const unitsPerPx = (max - min) / (track.getBoundingClientRect().width || 1)
+    setTrackActive(true)
+    startDrag(e, {
+      onStart: (ev) => ev.preventDefault(),
+      onMove: (s) => apply(s.dx * unitsPerPx, false),
+      onEnd: (s) => {
+        apply(s.dx * unitsPerPx, true)
+        setTrackActive(false)
+      },
+    })
   }
   track.addEventListener('pointerdown', onPointerDown)
-  track.addEventListener('keydown', onKeyDown)
-  opts.onDispose(() => {
-    track.removeEventListener('pointerdown', onPointerDown)
-    track.removeEventListener('keydown', onKeyDown)
-  })
-  return { beginTrackDrag, setTrackActive }
+  opts.onDispose(() => track.removeEventListener('pointerdown', onPointerDown))
+
+  const { onKeyDelta } = handlers
+  if (onKeyDelta) {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const base = opts.step ?? (max - min) / 100
+      const delta = arrowKeyStep(e, base)
+      if (!delta) return
+      e.preventDefault()
+      onKeyDelta(delta, base)
+    }
+    track.tabIndex = 0
+    track.addEventListener('keydown', onKeyDown)
+    opts.onDispose(() => track.removeEventListener('keydown', onKeyDown))
+  }
+  return { beginRelativeDrag }
 }

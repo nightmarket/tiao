@@ -82,6 +82,7 @@ export function ensureDock(host: DockHost): HTMLElement {
     searchInput.type = 'search'
     searchInput.placeholder = 'Search'
     const searchbar = h('div', 'tiao-searchbar tiao-dock-searchbar', searchInput)
+    searchbar.toggleAttribute('inert', true)
     const body = h('div', 'tiao-dock-body')
     const handle = h('div', 'tiao-resize tiao-dock-resize')
     const root = h('div', 'tiao-dock', header, searchbar, body, handle)
@@ -103,6 +104,7 @@ export function ensureDock(host: DockHost): HTMLElement {
   const { searchBtn, searchInput, searchbar, gear, handle } = chrome
   const setSearchOpen = (open: boolean) => {
     searchbar.classList.toggle('tiao-open', open)
+    searchbar.toggleAttribute('inert', !open)
     entry.root.classList.toggle('tiao-search-on', open)
     if (open) {
       searchInput.focus()
@@ -224,7 +226,7 @@ const INSET_ATTR = 'data-tiao-inset'
 /** opt a fixed element out of being inset */
 const SKIP_ATTR = 'data-tiao-no-inset'
 /** tiao's own UI sits beside the sidebar or inside it, never inset by it */
-const OWN_UI = '.tiao-dock, .tiao-notch, .tiao-pane'
+const OWN_UI = '.tiao-dock, .tiao-notch, .tiao-pane, .tiao-scrub-overlay, .tiao-cursor-layer'
 
 /**
  * Inset the page's own fixed chrome. Body padding only moves elements in normal
@@ -232,7 +234,8 @@ const OWN_UI = '.tiao-dock, .tiao-notch, .tiao-pane'
  * would cover one end of it. Marked elements read the inset variables from CSS,
  * which leaves anchor changes, resizes, and `H` with no work to do here.
  *
- * Costs one style pass per dock toggle, then only the nodes the app adds.
+ * Costs one style pass per dock toggle, then at most one per frame over the
+ * nodes the app added.
  */
 function installFixedInsets(doc: Document, entry: DockEntry): void {
   const view = doc.defaultView
@@ -266,10 +269,14 @@ function installFixedInsets(doc: Document, entry: DockEntry): void {
   }
 
   // read every candidate before marking any, so styles settle once
-  const scan = (root: ParentNode) => {
+  const scan = (roots: Iterable<Element>) => {
     const hits: Element[] = []
-    for (const el of root.querySelectorAll('*')) {
-      if (spansViewport(el)) hits.push(el)
+    for (const root of roots) {
+      if (!root.isConnected) continue
+      if (spansViewport(root)) hits.push(root)
+      for (const el of root.querySelectorAll('*')) {
+        if (spansViewport(el)) hits.push(el)
+      }
     }
     for (const el of hits) {
       el.setAttribute(INSET_ATTR, '')
@@ -277,25 +284,31 @@ function installFixedInsets(doc: Document, entry: DockEntry): void {
     }
   }
 
-  scan(doc.body)
+  scan([doc.body])
 
-  // the page may mount its navbar after the sidebar restores itself on load
+  // the page may mount its navbar after the sidebar restores itself on load.
+  // Added nodes are scanned in the next frame, before it paints: a microtask
+  // per mutation batch would force a style pass on every React commit.
+  const added = new Set<Element>()
+  let frame = 0
+  const flush = () => {
+    frame = 0
+    scan(added)
+    added.clear()
+  }
   const observer = new view.MutationObserver((records) => {
     for (const record of records) {
       for (const node of record.addedNodes) {
-        if (!(node instanceof view.HTMLElement) || node.closest(OWN_UI)) continue
-        if (spansViewport(node)) {
-          node.setAttribute(INSET_ATTR, '')
-          marked.add(node)
-        }
-        scan(node)
+        if (node instanceof view.HTMLElement && !node.closest(OWN_UI)) added.add(node)
       }
     }
+    if (added.size > 0 && !frame) frame = view.requestAnimationFrame(flush)
   })
   observer.observe(doc.body, { childList: true, subtree: true })
 
   entry.disposers.push(() => {
     observer.disconnect()
+    if (frame) view.cancelAnimationFrame(frame)
     for (const el of marked) el.removeAttribute(INSET_ATTR)
   })
 }
