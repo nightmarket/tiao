@@ -4,10 +4,11 @@
  * Prereq: pnpm --filter playground dev --host 127.0.0.1 --port 5173
  * Run:    node scripts/perf/bench-graph.mjs [label]
  */
-import { mkdirSync, writeFileSync, rmSync } from 'node:fs'
+
+import { spawn } from 'node:child_process'
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { spawn } from 'node:child_process'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const artifacts = join(__dirname, 'artifacts')

@@ -11,7 +11,14 @@ import {
 export interface NotchHost
   extends Omit<
     PaneMenuHost,
-    'element' | 'placement' | 'sides' | 'fontSize' | 'spacing' | 'hiding' | 'menuBelow' | 'onDispose'
+    | 'element'
+    | 'placement'
+    | 'sides'
+    | 'fontSize'
+    | 'spacing'
+    | 'hiding'
+    | 'menuBelow'
+    | 'onDispose'
   > {
   /** these three are global, so they live here rather than in a pane's menu */
   fontSize: PaneMenuFontSize

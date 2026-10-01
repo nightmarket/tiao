@@ -1,8 +1,8 @@
 import { h, startDrag } from '../dom'
+import type { InputPlugin, PluginContext, PluginView } from '../plugin'
 import { clamp, mapRange, nudge, snap } from '../util'
 import { createScrubber } from './scrubber'
 import { bindSliderTrack, createSliderTrack, setSliderFillRange } from './slider'
-import type { InputPlugin, PluginContext, PluginView } from '../plugin'
 
 /**
  * Number input (tweakpane-style). With min & max it renders a full-width fill

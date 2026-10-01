@@ -23,10 +23,9 @@ export function setTiaoEnabled(enabled: boolean): void {
 function debugLevel(): 0 | 1 | 2 {
   const value =
     (typeof process !== 'undefined' && process?.env != null
-      ? process.env.NEXT_PUBLIC_DEBUG_LEVEL ?? process.env.DEBUG_LEVEL
+      ? (process.env.NEXT_PUBLIC_DEBUG_LEVEL ?? process.env.DEBUG_LEVEL)
       : undefined) ??
-    (import.meta as ImportMeta & { env?: { VITE_DEBUG_LEVEL?: string } }).env
-      ?.VITE_DEBUG_LEVEL
+    (import.meta as ImportMeta & { env?: { VITE_DEBUG_LEVEL?: string } }).env?.VITE_DEBUG_LEVEL
 
   if (value === '0') return 0
   if (value === '1') return 1

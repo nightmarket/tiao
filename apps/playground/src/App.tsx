@@ -1,12 +1,12 @@
-import { useEffect, useRef, useState } from 'react'
+import type { BindingApi, Pane } from '@nightmarket/tiao/core'
 import { registerBezierPlugin } from '@nightmarket/tiao/plugin-bezier'
 import { registerCameraPlugin } from '@nightmarket/tiao/plugin-camera'
 import { registerMediaPlugin } from '@nightmarket/tiao/plugin-media'
 import { registerRadioGridPlugin } from '@nightmarket/tiao/plugin-radio-grid'
-import { registerThumbnailsPlugin } from '@nightmarket/tiao/plugin-thumbnails'
-import { examples } from './examples'
-import type { BindingApi, Pane } from '@nightmarket/tiao/core'
 import type { ThumbEntry } from '@nightmarket/tiao/plugin-thumbnails'
+import { registerThumbnailsPlugin } from '@nightmarket/tiao/plugin-thumbnails'
+import { useEffect, useRef, useState } from 'react'
+import { examples } from './examples'
 
 registerRadioGridPlugin()
 registerBezierPlugin()

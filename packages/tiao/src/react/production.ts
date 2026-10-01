@@ -1,9 +1,9 @@
 import { useRef } from 'react'
-import { initControls, useControlValues, type ControlsInit } from './controls'
+import type { Pane, PaneOptions } from '../core'
+import { type ControlsInit, initControls, useControlValues } from './controls'
+import type { ManagerApi } from './manager'
 import { ControlStore } from './store'
 import type { ControlsResult, Schema, TabsItem, UseControlsOptions } from './types'
-import type { ManagerApi } from './manager'
-import type { Pane, PaneOptions } from '../core'
 
 /**
  * Production build of `@nightmarket/tiao/react`, picked up through the
@@ -15,9 +15,8 @@ import type { Pane, PaneOptions } from '../core'
  */
 
 export { setTiaoEnabled } from './config'
-export { ControlStore } from './store'
 export { DEFAULT_PANE_ID } from './controls'
-export { button, buttonGroup, monitor, tabs } from './types'
+export { ControlStore } from './store'
 export type {
   ButtonGroupItem,
   ButtonItem,
@@ -32,6 +31,7 @@ export type {
   TabsItem,
   UseControlsOptions,
 } from './types'
+export { button, buttonGroup, monitor, tabs } from './types'
 
 /** Values without a pane: the store is real, everything pane-shaped is inert. */
 class ProductionManager implements ManagerApi {
@@ -80,7 +80,10 @@ export function useControls<P extends Record<string, Schema>>(
   schema: TabsItem<P>,
   options?: UseControlsOptions,
 ): ControlsResult<{ $tabs: TabsItem<P> }>
-export function useControls<S extends Schema>(schema: S, options?: UseControlsOptions): ControlsResult<S>
+export function useControls<S extends Schema>(
+  schema: S,
+  options?: UseControlsOptions,
+): ControlsResult<S>
 export function useControls<S extends Schema>(
   folder: string,
   schema: S,

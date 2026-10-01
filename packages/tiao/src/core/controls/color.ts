@@ -1,6 +1,8 @@
 import { draggable, h } from '../dom'
+import type { InputPlugin, PluginContext } from '../plugin'
 import { clamp } from '../util'
 import {
+  type ColorFormat,
   formatHasAlpha,
   formatIsString,
   hsvToRgb,
@@ -9,17 +11,15 @@ import {
   oklabToRgb,
   oklchToRgb,
   parseColor,
+  type Rgba,
   rgbToHsv,
   rgbToOklch,
   serializeColor,
   toCss,
   toHexText,
-  type ColorFormat,
-  type Rgba,
 } from './color-model'
 import { createPopup } from './popup'
 import { createSelectMenu } from './select'
-import type { InputPlugin, PluginContext } from '../plugin'
 
 /**
  * Color input: swatch + format-aware text field, with a floating picker popup
@@ -90,7 +90,9 @@ function displayFormat(family: DisplayFamily, alpha: boolean): ColorFormat {
 function createColorView(ctx: PluginContext<unknown>) {
   const parsed = parseColor(ctx.value.get())
   const format: ColorFormat = parsed?.format ?? 'hex'
-  const alpha = Boolean((ctx.options['color'] as { alpha?: boolean } | undefined)?.alpha) || formatHasAlpha(format)
+  const alpha =
+    Boolean((ctx.options['color'] as { alpha?: boolean } | undefined)?.alpha) ||
+    formatHasAlpha(format)
   const writeFormat: ColorFormat = alpha && format === 'hex' ? 'hex-alpha' : format
   // string bindings follow the selected color space; object/number bindings keep their shape
   const stringWrite = formatIsString(writeFormat)
@@ -217,9 +219,7 @@ function createColorView(ctx: PluginContext<unknown>) {
   // format dropdown + matching text field
   // oklab (renders like oklch) and hsv (not a CSS notation) are only offered
   // to bindings that already use them
-  const families = FAMILIES.filter(
-    (f) => (f.id !== 'oklab' && f.id !== 'hsv') || family === f.id,
-  )
+  const families = FAMILIES.filter((f) => (f.id !== 'oklab' && f.id !== 'hsv') || family === f.id)
   const modeSelect = h('select', 'tiao-select')
   for (const f of families) {
     const opt = ctx.document.createElement('option')
@@ -268,7 +268,7 @@ function createColorView(ctx: PluginContext<unknown>) {
   swatch.addEventListener('click', togglePicker)
   ctx.onDispose(() => swatch.removeEventListener('click', togglePicker))
 
-  let lastCommit = { r: NaN, g: NaN, b: NaN, a: NaN }
+  const lastCommit = { r: NaN, g: NaN, b: NaN, a: NaN }
   const commit = (last: boolean) => {
     if (
       lastCommit.r === rgba.r &&
@@ -338,8 +338,7 @@ function createColorView(ctx: PluginContext<unknown>) {
     } else {
       if (hsv.h !== lastSvHue) {
         lastSvHue = hsv.h
-        svArea.style.background =
-          `linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, transparent), hsl(${hsv.h}, 100%, 50%)`
+        svArea.style.background = `linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, transparent), hsl(${hsv.h}, 100%, 50%)`
       }
       lastSvLeft = setPct(svThumb, 'left', hsv.s * 100, lastSvLeft)
       lastSvTop = setPct(svThumb, 'top', (1 - hsv.v) * 100, lastSvTop)

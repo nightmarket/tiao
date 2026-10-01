@@ -1,12 +1,12 @@
 import { useCallback, useMemo, useRef, useSyncExternalStore } from 'react'
 import type { ControlStore } from './store'
 import {
+  type ControlsResult,
   isButton,
   isButtonGroup,
   isMonitor,
   isTabs,
   itemValue,
-  type ControlsResult,
   type Schema,
   type TabsItem,
   type UseControlsOptions,
@@ -60,7 +60,15 @@ export function initControls<S extends Schema>(
   collectValueKeys(schema, folderPath, valueKeys)
   const initials = new Map(valueKeys.map((v) => [v.name, v.initial]))
 
-  return { paneId, folderPath, schema, options, valueKeys, keys: valueKeys.map((v) => v.key), initials }
+  return {
+    paneId,
+    folderPath,
+    schema,
+    options,
+    valueKeys,
+    keys: valueKeys.map((v) => v.key),
+    initials,
+  }
 }
 
 function collectValueKeys(schema: Schema, folderPath: string[], out: ValueKey[]): void {
@@ -87,13 +95,11 @@ export function useControlValues<S extends Schema>(
   { folderPath, valueKeys, keys, initials }: ControlsInit<S>,
   setValue: (key: string, value: unknown) => void,
 ): ControlsResult<S> {
-  const subscribe = useCallback(
-    (fn: () => void) => store.subscribe(keys, fn),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- stable for the hook's lifetime
-    [],
-  )
+  // biome-ignore lint/correctness/useExhaustiveDependencies: stable for the hook's lifetime
+  const subscribe = useCallback((fn: () => void) => store.subscribe(keys, fn), [])
 
   const cache = useRef<{ version: number; values: Record<string, unknown> } | null>(null)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: stable for the hook's lifetime
   const getSnapshot = useCallback(() => {
     const version = store.version(keys)
     if (!cache.current || cache.current.version !== version) {
@@ -104,23 +110,19 @@ export function useControlValues<S extends Schema>(
       cache.current = { version, values }
     }
     return cache.current.values
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- stable for the hook's lifetime
   }, [])
 
   const values = useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: captured on first render
   const $set = useCallback((patch: Record<string, unknown>) => {
     for (const [name, v] of Object.entries(patch)) setValue(keyFor(folderPath, name), v)
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- captured on first render
   }, [])
+  // biome-ignore lint/correctness/useExhaustiveDependencies: captured on first render
   const $get = useCallback((name: string) => {
     const key = keyFor(folderPath, name)
     return store.has(key) ? store.get(key) : initials.get(name)
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- captured on first render
   }, [])
 
-  return useMemo(
-    () => ({ ...values, $set, $get }) as ControlsResult<S>,
-    [values, $set, $get],
-  )
+  return useMemo(() => ({ ...values, $set, $get }) as ControlsResult<S>, [values, $set, $get])
 }

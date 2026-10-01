@@ -1,3 +1,4 @@
+import type { BindingApi, Container, FolderApi, Pane, PaneOptions } from '../core'
 import { DEFAULT_PANE_ID, keyFor } from './controls'
 import { ControlStore } from './store'
 import {
@@ -12,7 +13,6 @@ import {
   type ShowIfGet,
   type UseControlsOptions,
 } from './types'
-import type { BindingApi, Container, FolderApi, Pane, PaneOptions } from '../core'
 
 type CoreModule = typeof import('../core')
 
@@ -39,7 +39,10 @@ interface Registration {
   /** true once ensureFolder ran, so unregister only releases what it acquired */
   materialized: boolean
   disposers: (() => void)[]
-  bindings: Map<string, { binding: BindingApi<unknown>; target: Record<string, unknown>; name: string }>
+  bindings: Map<
+    string,
+    { binding: BindingApi<unknown>; target: Record<string, unknown>; name: string }
+  >
 }
 
 /**

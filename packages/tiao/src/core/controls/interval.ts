@@ -1,8 +1,8 @@
 import { h } from '../dom'
+import type { InputPlugin, PluginContext, PluginView } from '../plugin'
 import { clamp, isRecord, mapRange, nudge, snap } from '../util'
 import { createComponentScrubber } from './scrubber'
 import { bindSliderTrack, createSliderTrack, setSliderFillRange } from './slider'
-import type { InputPlugin, PluginContext, PluginView } from '../plugin'
 
 export interface IntervalValue {
   min: number

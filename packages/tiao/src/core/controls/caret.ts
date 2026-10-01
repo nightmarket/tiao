@@ -1,8 +1,7 @@
 import { h, withDocument } from '../dom'
 
 /** text-like pane inputs that get the custom caret */
-const INPUT_SELECTOR =
-  '.tiao-num-input, .tiao-text-input, .tiao-color-text, .tiao-search-input'
+const INPUT_SELECTOR = '.tiao-num-input, .tiao-text-input, .tiao-color-text, .tiao-search-input'
 
 function restartBlink(caret: HTMLElement): void {
   caret.style.animation = 'none'
@@ -81,10 +80,7 @@ export function installCaret(root: HTMLElement, doc: Document): () => void {
       x = rect.right - paddingRight - meas.measureText(value.slice(start)).width
     } else {
       x =
-        rect.left +
-        paddingLeft +
-        meas.measureText(value.slice(0, start)).width -
-        active.scrollLeft
+        rect.left + paddingLeft + meas.measureText(value.slice(0, start)).width - active.scrollLeft
     }
     x = Math.min(Math.max(x, rect.left + 1), rect.right - 3)
 

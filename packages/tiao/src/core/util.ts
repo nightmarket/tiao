@@ -60,7 +60,12 @@ export function parseNumberInput(text: string): number | null {
  * plain = ±step, Shift = ±step×10, Alt = ±step/10. Returns 0 for other keys.
  */
 export function arrowKeyStep(e: KeyboardEvent, step: number): number {
-  const dir = e.key === 'ArrowUp' || e.key === 'ArrowRight' ? 1 : e.key === 'ArrowDown' || e.key === 'ArrowLeft' ? -1 : 0
+  const dir =
+    e.key === 'ArrowUp' || e.key === 'ArrowRight'
+      ? 1
+      : e.key === 'ArrowDown' || e.key === 'ArrowLeft'
+        ? -1
+        : 0
   if (!dir) return 0
   return dir * step * (e.shiftKey ? 10 : 1) * (e.altKey ? 0.1 : 1)
 }
@@ -75,7 +80,7 @@ export function nudge(current: number, delta: number, base: number): number {
 }
 
 export function roundN(n: number, decimals: number): number {
-  const f = Math.pow(10, decimals)
+  const f = 10 ** decimals
   return Math.round(n * f) / f
 }
 

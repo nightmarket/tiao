@@ -1,11 +1,11 @@
-import { useEffect, useRef } from 'react'
 import { Pane } from '@nightmarket/tiao/core'
 import { createExportPane } from '@nightmarket/tiao/export-pane'
 import { createPerfPane } from '@nightmarket/tiao/perf-pane'
 import { addFpsGraph } from '@nightmarket/tiao/plugin-fps'
-import { type MediaValue } from '@nightmarket/tiao/plugin-media'
-import { type ThumbEntry } from '@nightmarket/tiao/plugin-thumbnails'
+import type { MediaValue } from '@nightmarket/tiao/plugin-media'
+import type { ThumbEntry } from '@nightmarket/tiao/plugin-thumbnails'
 import { buttonGroup, monitor, tabs, useControls } from '@nightmarket/tiao/react'
+import { useEffect, useRef } from 'react'
 
 /** Decorative looping gradient so export/FPS have frames — not a scene to debug. */
 function startBackdrop(canvas: HTMLCanvasElement): () => void {
@@ -36,15 +36,61 @@ function startBackdrop(canvas: HTMLCanvasElement): () => void {
 }
 
 const CITIES = [
-  'Amsterdam', 'Athens', 'Auckland', 'Bangkok', 'Barcelona', 'Beijing',
-  'Berlin', 'Bogotá', 'Boston', 'Brussels', 'Buenos Aires', 'Cairo',
-  'Cape Town', 'Chicago', 'Copenhagen', 'Dubai', 'Dublin', 'Helsinki',
-  'Hong Kong', 'Istanbul', 'Jakarta', 'Johannesburg', 'Kyoto', 'Lagos',
-  'Lisbon', 'London', 'Los Angeles', 'Madrid', 'Melbourne', 'Mexico City',
-  'Milan', 'Montreal', 'Mumbai', 'Nairobi', 'New York', 'Oslo', 'Paris',
-  'Prague', 'Rio de Janeiro', 'Rome', 'San Francisco', 'Santiago',
-  'São Paulo', 'Seoul', 'Shanghai', 'Singapore', 'Stockholm', 'Sydney',
-  'Taipei', 'Tokyo', 'Toronto', 'Vancouver', 'Vienna', 'Warsaw', 'Zurich',
+  'Amsterdam',
+  'Athens',
+  'Auckland',
+  'Bangkok',
+  'Barcelona',
+  'Beijing',
+  'Berlin',
+  'Bogotá',
+  'Boston',
+  'Brussels',
+  'Buenos Aires',
+  'Cairo',
+  'Cape Town',
+  'Chicago',
+  'Copenhagen',
+  'Dubai',
+  'Dublin',
+  'Helsinki',
+  'Hong Kong',
+  'Istanbul',
+  'Jakarta',
+  'Johannesburg',
+  'Kyoto',
+  'Lagos',
+  'Lisbon',
+  'London',
+  'Los Angeles',
+  'Madrid',
+  'Melbourne',
+  'Mexico City',
+  'Milan',
+  'Montreal',
+  'Mumbai',
+  'Nairobi',
+  'New York',
+  'Oslo',
+  'Paris',
+  'Prague',
+  'Rio de Janeiro',
+  'Rome',
+  'San Francisco',
+  'Santiago',
+  'São Paulo',
+  'Seoul',
+  'Shanghai',
+  'Singapore',
+  'Stockholm',
+  'Sydney',
+  'Taipei',
+  'Tokyo',
+  'Toronto',
+  'Vancouver',
+  'Vienna',
+  'Warsaw',
+  'Zurich',
 ] as const
 
 const DOT_SRC = `data:image/svg+xml,${encodeURIComponent(
@@ -157,7 +203,10 @@ function buildControls(): Pane {
   const deeper = nested.addFolder({ title: 'Deeper (level 3)' })
   deeper.addBinding(params, 'iterations', { min: 1, max: 64, step: 1, label: 'Depth' })
 
-  const collapsed = pane.addFolder({ title: 'Collapsed by Default (expanded: false)', expanded: false })
+  const collapsed = pane.addFolder({
+    title: 'Collapsed by Default (expanded: false)',
+    expanded: false,
+  })
   collapsed.addBinding(params, 'placeholder', { label: 'Placeholder' })
 
   const visibility = pane.addFolder({ title: 'Visibility' })
@@ -221,7 +270,11 @@ function buildCameraPlugins(): Pane {
   addFpsGraph(pane)
 
   pane.addBinding(params, 'fov', { min: 10, max: 120, step: 1, label: 'Camera FOV' })
-  pane.addBinding(params, 'focalLength', { view: 'cameraring', series: 0, label: 'Focal Length (series 0)' })
+  pane.addBinding(params, 'focalLength', {
+    view: 'cameraring',
+    series: 0,
+    label: 'Focal Length (series 0)',
+  })
   pane.addBinding(params, 'focalLength', {
     view: 'cameraring',
     series: 1,
@@ -230,8 +283,16 @@ function buildCameraPlugins(): Pane {
     min: 1,
     step: 0.02,
   })
-  pane.addBinding(params, 'focalLength', { view: 'cameraring', series: 2, label: 'Focal Length (series 2)' })
-  pane.addBinding(params, 'focalLength', { view: 'cameraring', wide: true, label: 'Focal Length (wide)' })
+  pane.addBinding(params, 'focalLength', {
+    view: 'cameraring',
+    series: 2,
+    label: 'Focal Length (series 2)',
+  })
+  pane.addBinding(params, 'focalLength', {
+    view: 'cameraring',
+    wide: true,
+    label: 'Focal Length (wide)',
+  })
   pane.addBinding(params, 'fStop', {
     view: 'camerawheel',
     label: 'F-Stop',
@@ -246,7 +307,12 @@ function buildCameraPlugins(): Pane {
     columns: 3,
     label: 'Quality',
   })
-  pane.addBinding(params, 'gradient', { view: 'thumbnails', options: GRADIENTS, aspect: 1.4, label: 'Gradient' })
+  pane.addBinding(params, 'gradient', {
+    view: 'thumbnails',
+    options: GRADIENTS,
+    aspect: 1.4,
+    label: 'Gradient',
+  })
   pane.addBinding(params, 'swatch', { view: 'thumbnails', options: GRADIENTS, label: '' })
   pane.addBinding(params, 'texture', { view: 'media', label: 'Texture' })
 
@@ -376,10 +442,5 @@ export function ShowcaseExample() {
     }
   }, [])
 
-  return (
-    <canvas
-      ref={canvasRef}
-      style={{ width: '100vw', height: '100vh', display: 'block' }}
-    />
-  )
+  return <canvas ref={canvasRef} style={{ width: '100vw', height: '100vh', display: 'block' }} />
 }

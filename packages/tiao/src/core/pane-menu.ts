@@ -198,26 +198,36 @@ function buildMenu(host: PaneMenuHost): { shell: HTMLElement; refresh: () => voi
   menuPane.addSeparator()
 
   if (fontSize) {
-    const row = segmentedRow(host, 'Font Size', [
-      { label: 'S', value: 'small', title: 'Small' },
-      { label: 'M', value: 'normal', title: 'Normal' },
-      { label: 'L', value: 'large', title: 'Large' },
-    ], {
-      get: () => fontSize.get(),
-      set: (v) => fontSize.set(v),
-    })
+    const row = segmentedRow(
+      host,
+      'Font Size',
+      [
+        { label: 'S', value: 'small', title: 'Small' },
+        { label: 'M', value: 'normal', title: 'Normal' },
+        { label: 'L', value: 'large', title: 'Large' },
+      ],
+      {
+        get: () => fontSize.get(),
+        set: (v) => fontSize.set(v),
+      },
+    )
     menuPane.rack.append(row.row)
     refreshers.push(row.render)
   }
   if (spacing) {
-    const row = segmentedRow(host, 'Spacing', [
-      { label: 'S', value: 's', title: 'Small' },
-      { label: 'M', value: 'm', title: 'Medium' },
-      { label: 'L', value: 'l', title: 'Large' },
-    ], {
-      get: () => spacing.get(),
-      set: (v) => spacing.set(v),
-    })
+    const row = segmentedRow(
+      host,
+      'Spacing',
+      [
+        { label: 'S', value: 's', title: 'Small' },
+        { label: 'M', value: 'm', title: 'Medium' },
+        { label: 'L', value: 'l', title: 'Large' },
+      ],
+      {
+        get: () => spacing.get(),
+        set: (v) => spacing.set(v),
+      },
+    )
     menuPane.rack.append(row.row)
     refreshers.push(row.render)
   }
@@ -238,16 +248,21 @@ function buildMenu(host: PaneMenuHost): { shell: HTMLElement; refresh: () => voi
     syncChrome()
   })
 
-  const styleRow = segmentedRow(host, 'Style', [
-    { label: 'Bouba', value: 'bouba' },
-    { label: 'Kiki', value: 'kiki' },
-  ], {
-    get: () => host.getStyle(),
-    set: (v) => {
-      host.setStyle(v)
-      syncChrome()
+  const styleRow = segmentedRow(
+    host,
+    'Style',
+    [
+      { label: 'Bouba', value: 'bouba' },
+      { label: 'Kiki', value: 'kiki' },
+    ],
+    {
+      get: () => host.getStyle(),
+      set: (v) => {
+        host.setStyle(v)
+        syncChrome()
+      },
     },
-  })
+  )
   menuPane.rack.append(styleRow.row)
   refreshers.push(styleRow.render)
 

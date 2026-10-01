@@ -120,10 +120,7 @@ export function button(onClick: () => void, title?: string): ButtonItem {
 }
 
 /** Schema helper: a row of equally-styled buttons, each with its own callback. */
-export function buttonGroup(
-  buttons: Record<string, () => void>,
-  label?: string,
-): ButtonGroupItem {
+export function buttonGroup(buttons: Record<string, () => void>, label?: string): ButtonGroupItem {
   return { [BUTTON_GROUP]: true, buttons, label }
 }
 

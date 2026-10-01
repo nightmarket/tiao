@@ -217,7 +217,9 @@ export function createPerfMonitor(options: PerfMonitorOptions = {}): PerfMonitor
   const gl = options.gl ?? detectGl(renderer)
   const timer = !options.gpuTime && gl ? createGlTimer(gl) : null
   const resolveTimestamps =
-    !options.gpuTime && !timer && renderer?.trackTimestamp === true &&
+    !options.gpuTime &&
+    !timer &&
+    renderer?.trackTimestamp === true &&
     typeof renderer.resolveTimestampsAsync === 'function'
       ? renderer.resolveTimestampsAsync.bind(renderer)
       : null
@@ -258,9 +260,7 @@ export function createPerfMonitor(options: PerfMonitorOptions = {}): PerfMonitor
   }
 
   const stopInstrumentation =
-    renderer && options.instrument !== false
-      ? instrumentRenderer(renderer, { begin, end })
-      : null
+    renderer && options.instrument !== false ? instrumentRenderer(renderer, { begin, end }) : null
 
   // WebGPU/common Info only auto-resets inside setAnimationLoop. Apps that drive
   // their own rAF (r3f, sanwei RAF, etc.) never hit that path, so per-frame

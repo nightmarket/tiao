@@ -20,8 +20,18 @@ const after = load(b)
 const deltaNs = after.nsPerUpdate - before.nsPerUpdate
 const pct = (deltaNs / before.nsPerUpdate) * 100
 const out = {
-  before: { label: before.label, nsPerUpdate: before.nsPerUpdate, elapsedMs: before.elapsedMs, canvasW: before.canvasW },
-  after: { label: after.label, nsPerUpdate: after.nsPerUpdate, elapsedMs: after.elapsedMs, canvasW: after.canvasW },
+  before: {
+    label: before.label,
+    nsPerUpdate: before.nsPerUpdate,
+    elapsedMs: before.elapsedMs,
+    canvasW: before.canvasW,
+  },
+  after: {
+    label: after.label,
+    nsPerUpdate: after.nsPerUpdate,
+    elapsedMs: after.elapsedMs,
+    canvasW: after.canvasW,
+  },
   deltaNsPerUpdate: deltaNs,
   pctChange: pct,
   faster: deltaNs < 0,

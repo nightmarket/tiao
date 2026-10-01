@@ -5,8 +5,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { Pane } from '../core'
 import { setTiaoEnabled } from './config'
 import { loadCore } from './manager'
-import { button, monitor, tabs } from './types'
 import type { ControlsResult } from './types'
+import { button, monitor, tabs } from './types'
 import { useControls } from './useControls'
 
 declare global {
@@ -65,7 +65,9 @@ describe('useControls', () => {
     await flushCore()
 
     const pane = Pane.get('ui')!
-    const binding = pane.children.find((c) => 'value' in c) as { value: { set: (v: number, m: object) => void } }
+    const binding = pane.children.find((c) => 'value' in c) as {
+      value: { set: (v: number, m: object) => void }
+    }
     await act(async () => {
       binding.value.set(42, { source: 'ui', last: true })
     })
@@ -89,12 +91,15 @@ describe('useControls', () => {
 
   it('adopts persisted values once core restores them', async () => {
     localStorage.setItem('tiao:dot:values', JSON.stringify({ 'Footer/variant': 'wallpaper' }))
-    let api: ControlsResult<{ variant: { value: string; options: Record<string, string> } }> | null =
-      null
+    let api: ControlsResult<{
+      variant: { value: string; options: Record<string, string> }
+    }> | null = null
     function App() {
       api = useControls(
         'Footer',
-        { variant: { value: 'wordmark', options: { Wordmark: 'wordmark', Wallpaper: 'wallpaper' } } },
+        {
+          variant: { value: 'wordmark', options: { Wordmark: 'wordmark', Wallpaper: 'wallpaper' } },
+        },
         { pane: { id: 'dot' } },
       )
       return null
@@ -150,7 +155,7 @@ describe('useControls', () => {
 
   it('supports buttons and monitors in the schema', async () => {
     let clicks = 0
-    let fps = 60
+    const fps = 60
     function App() {
       useControls(
         {
@@ -321,7 +326,11 @@ describe('useControls', () => {
       return null
     }
     function GatedShared() {
-      useControls('Shared', { a: 1 }, { pane: 'owner', showIf: (get) => get('Motion.mode') === 'wave' })
+      useControls(
+        'Shared',
+        { a: 1 },
+        { pane: 'owner', showIf: (get) => get('Motion.mode') === 'wave' },
+      )
       return null
     }
     function PlainShared() {

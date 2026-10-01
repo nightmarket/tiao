@@ -1,8 +1,8 @@
-import { h, startDrag, SVG_NS } from '../dom'
+import { h, SVG_NS, startDrag } from '../dom'
+import type { InputPlugin, PluginContext, PluginView } from '../plugin'
 import { clamp, formatNumber, snap } from '../util'
 import { createStickyOverlay } from './popup'
 import { createOverlayTooltip, createScrubber } from './scrubber'
-import type { InputPlugin, PluginContext, PluginView } from '../plugin'
 
 const TAU = Math.PI * 2
 const DIAL_SIZE = 72
@@ -29,15 +29,13 @@ export const angleInputPlugin: InputPlugin<number> = {
 function createAngleRow(ctx: PluginContext<number>): PluginView {
   const { value, options } = ctx
   const unit = options.unit === 'rad' ? 'rad' : 'deg'
-  const step =
-    typeof options.step === 'number' ? options.step : unit === 'deg' ? 1 : Math.PI / 180
+  const step = typeof options.step === 'number' ? options.step : unit === 'deg' ? 1 : Math.PI / 180
   const min = typeof options.min === 'number' ? options.min : undefined
   const max = typeof options.max === 'number' ? options.max : undefined
   const toRad = (v: number) => (unit === 'deg' ? (v * Math.PI) / 180 : v)
   const fromRad = (rad: number) => (unit === 'deg' ? (rad * 180) / Math.PI : rad)
   const format =
-    options.format ??
-    ((v: number) => `${formatNumber(v, step)}${unit === 'deg' ? '°' : ''}`)
+    options.format ?? ((v: number) => `${formatNumber(v, step)}${unit === 'deg' ? '°' : ''}`)
 
   const constrain = (v: number) => {
     const snapped = snap(v, step)

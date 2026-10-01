@@ -13,20 +13,38 @@ const aliases = [
   { find: /^@nightmarket\/tiao\/core$/, replacement: path.join(tiaoSrc, 'core/index.ts') },
   { find: /^@nightmarket\/tiao\/styles\.css$/, replacement: path.join(tiaoSrc, 'core/styles.css') },
   { find: /^@nightmarket\/tiao\/react$/, replacement: path.join(tiaoSrc, 'react/index.ts') },
-  { find: /^@nightmarket\/tiao\/perf-pane$/, replacement: path.join(tiaoSrc, 'perf-pane/index.ts') },
-  { find: /^@nightmarket\/tiao\/export-pane$/, replacement: path.join(tiaoSrc, 'export-pane/index.ts') },
-  { find: /^@nightmarket\/tiao\/plugin-fps$/, replacement: path.join(tiaoSrc, 'plugin-fps/index.ts') },
-  { find: /^@nightmarket\/tiao\/plugin-bezier$/, replacement: path.join(tiaoSrc, 'plugin-bezier/index.ts') },
+  {
+    find: /^@nightmarket\/tiao\/perf-pane$/,
+    replacement: path.join(tiaoSrc, 'perf-pane/index.ts'),
+  },
+  {
+    find: /^@nightmarket\/tiao\/export-pane$/,
+    replacement: path.join(tiaoSrc, 'export-pane/index.ts'),
+  },
+  {
+    find: /^@nightmarket\/tiao\/plugin-fps$/,
+    replacement: path.join(tiaoSrc, 'plugin-fps/index.ts'),
+  },
+  {
+    find: /^@nightmarket\/tiao\/plugin-bezier$/,
+    replacement: path.join(tiaoSrc, 'plugin-bezier/index.ts'),
+  },
   {
     find: /^@nightmarket\/tiao\/plugin-radio-grid$/,
     replacement: path.join(tiaoSrc, 'plugin-radio-grid/index.ts'),
   },
-  { find: /^@nightmarket\/tiao\/plugin-media$/, replacement: path.join(tiaoSrc, 'plugin-media/index.ts') },
+  {
+    find: /^@nightmarket\/tiao\/plugin-media$/,
+    replacement: path.join(tiaoSrc, 'plugin-media/index.ts'),
+  },
   {
     find: /^@nightmarket\/tiao\/plugin-thumbnails$/,
     replacement: path.join(tiaoSrc, 'plugin-thumbnails/index.ts'),
   },
-  { find: /^@nightmarket\/tiao\/plugin-camera$/, replacement: path.join(tiaoSrc, 'plugin-camera/index.ts') },
+  {
+    find: /^@nightmarket\/tiao\/plugin-camera$/,
+    replacement: path.join(tiaoSrc, 'plugin-camera/index.ts'),
+  },
 ]
 
 /** tsup loads .css as text (`loader: { '.css': 'text' }`); match that for package sources. */

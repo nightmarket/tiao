@@ -4,10 +4,10 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { Pane } from '../core'
 import { setTiaoEnabled } from './config'
-import { button, monitor } from './types'
 import * as devEntry from './index'
 import * as prodEntry from './production'
-import { getManager, useControls, usePane, type ControlsResult } from './production'
+import { type ControlsResult, getManager, useControls, usePane } from './production'
+import { button, monitor } from './types'
 
 declare global {
   // eslint-disable-next-line no-var
@@ -41,8 +41,10 @@ describe('production entry', () => {
   })
 
   it('returns schema defaults and never builds a pane', async () => {
-    let api: ControlsResult<{ speed: { value: number; min: number; max: number }; on: boolean }> | null =
-      null
+    let api: ControlsResult<{
+      speed: { value: number; min: number; max: number }
+      on: boolean
+    }> | null = null
     function App() {
       api = useControls({ speed: { value: 0.5, min: 0, max: 1 }, on: true }, { pane: 'prod-a' })
       return null

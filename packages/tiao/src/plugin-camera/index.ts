@@ -4,11 +4,11 @@ import {
   decimalCount,
   draggable,
   h,
+  type InputPlugin,
   injectCss,
+  type PluginContext,
   registerPlugin,
   snap,
-  type InputPlugin,
-  type PluginContext,
 } from '../core'
 
 const SVG_NS = 'http://www.w3.org/2000/svg'
@@ -122,7 +122,7 @@ function createRing(ctx: PluginContext<number>, config: RingConfig): HTMLElement
     const ov = v - (v % uv) - uv * halfUnitCount
     // labels/ticks fade out as they approach the edges of the visible scale
     const opacity = (tv: number): number =>
-      1 - Math.pow(clamp(Math.abs(v - tv) / ((bw / 2) * (uv / uw)), 0, 1), 10)
+      1 - clamp(Math.abs(v - tv) / ((bw / 2) * (uv / uw)), 0, 1) ** 10
 
     labelEls.forEach((label, i) => {
       const lv = ov + i * uv
@@ -263,8 +263,12 @@ export const cameraWheelPlugin: InputPlugin<number> = {
   create(ctx) {
     injectCss(ctx.document, 'data-tiao-camera', CSS)
     const amount =
-      typeof ctx.options['amount'] === 'number' ? ctx.options['amount'] : ctx.options.step ?? 1
-    const unit: RingUnit = { ticks: WHEEL_TICKS, pixels: WHEEL_PIXELS, value: amount * WHEEL_PIXELS }
+      typeof ctx.options['amount'] === 'number' ? ctx.options['amount'] : (ctx.options.step ?? 1)
+    const unit: RingUnit = {
+      ticks: WHEEL_TICKS,
+      pixels: WHEEL_PIXELS,
+      value: amount * WHEEL_PIXELS,
+    }
     const config: RingConfig = {
       seriesId: 'w',
       unit,
