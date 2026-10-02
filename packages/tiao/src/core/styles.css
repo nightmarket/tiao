@@ -318,6 +318,16 @@
   -webkit-backdrop-filter: var(--tiao-backdrop-filter);
 }
 
+/* the body stays frosted; a solid titlebar keeps the bar a layer above it */
+.tiao-pane.tiao-glass:not(.tiao-docked) > .tiao-titlebar {
+  background:
+    linear-gradient(var(--tiao-titlebar-bg), var(--tiao-titlebar-bg)), var(--tiao-bg-solid);
+}
+.tiao-pane.tiao-glass:not(.tiao-docked) > .tiao-titlebar:hover {
+  background:
+    linear-gradient(var(--tiao-hover-strong), var(--tiao-hover-strong)), var(--tiao-bg-solid);
+}
+
 .tiao-pane *,
 .tiao-pane *::before,
 .tiao-pane *::after {
@@ -1045,6 +1055,9 @@
 .tiao-tab-button {
   flex: 1;
   min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   height: var(--tiao-row-height);
   border-radius: calc(var(--tiao-radius-sm) - 2px);
   color: var(--tiao-fg-dim);

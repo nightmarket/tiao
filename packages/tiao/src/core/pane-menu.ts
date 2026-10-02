@@ -1,6 +1,6 @@
 import type { BindingApi } from './blade'
 import type { DockSide } from './dock'
-import { h, withDocument } from './dom'
+import { h, monitorIcon, moonIcon, sunIcon, withDocument } from './dom'
 import type {
   Anchor,
   Pane,
@@ -69,6 +69,8 @@ export interface PaneMenuHost {
   glass?: PaneMenuToggle
   /** drop below the host instead of beside it (the notch bar is too narrow) */
   menuBelow?: boolean
+  /** global settings: light / dark / system as icons, without the extra themes */
+  iconThemes?: boolean
   onDispose(fn: () => void): void
 }
 
@@ -236,21 +238,46 @@ function buildMenu(host: PaneMenuHost): { shell: HTMLElement; refresh: () => voi
     refreshers.push(row.render)
   }
 
-  const themeBinding = menuPane.addBinding(settings, 'theme', {
-    label: 'Theme',
-    options: {
-      System: 'system',
-      Dark: 'dark',
-      Light: 'light',
-      Solarized: 'solarized',
-      Nord: 'nord',
-      Catppuccin: 'catppuccin',
-    },
-  })
-  onEdit(themeBinding, (theme) => {
-    host.setTheme(theme)
-    syncChrome()
-  })
+  let refreshTheme: () => void
+  if (host.iconThemes) {
+    const row = segmentedRow(
+      host,
+      'Theme',
+      [
+        { label: 'Light', value: 'light', icon: sunIcon() },
+        { label: 'Dark', value: 'dark', icon: moonIcon() },
+        { label: 'System', value: 'system', icon: monitorIcon() },
+      ],
+      {
+        get: () => host.getTheme(),
+        set: (theme) => {
+          host.setTheme(theme)
+          syncChrome()
+        },
+      },
+    )
+    menuPane.rack.append(row.row)
+    refreshTheme = row.render
+  } else {
+    const themeBinding = menuPane.addBinding(settings, 'theme', {
+      label: 'Theme',
+      options: {
+        System: 'system',
+        Dark: 'dark',
+        Light: 'light',
+        Solarized: 'solarized',
+        Nord: 'nord',
+        Catppuccin: 'catppuccin',
+      },
+    })
+    onEdit(themeBinding, (theme) => {
+      host.setTheme(theme)
+      syncChrome()
+    })
+    refreshTheme = () => {
+      themeBinding.refresh()
+    }
+  }
 
   const styleRow = segmentedRow(
     host,
@@ -342,7 +369,7 @@ function buildMenu(host: PaneMenuHost): { shell: HTMLElement; refresh: () => voi
     settings.theme = host.getTheme()
     settings.accent = host.getAccent()
     settings.numbers = host.getNumbers()
-    themeBinding.refresh()
+    refreshTheme()
     accentBinding.refresh()
     numbersBinding.refresh()
     for (const fn of refreshers) fn()
@@ -363,8 +390,8 @@ function onEdit<T>(binding: BindingApi<T>, fn: (value: T, last: boolean) => void
 function segmentedRow<T extends string>(
   host: PaneMenuHost,
   label: string,
-  options: readonly { label: string; value: T; title?: string }[],
-  value: { get(): T; set(v: T): void },
+  options: readonly { label: string; value: T; title?: string; icon?: SVGSVGElement }[],
+  value: { get(): string; set(v: T): void },
 ): { row: HTMLElement; render: () => void } {
   const nav = h('div', 'tiao-tab-nav')
   nav.setAttribute('role', 'tablist')
@@ -378,10 +405,16 @@ function segmentedRow<T extends string>(
     }
   }
   for (const opt of options) {
-    const btn = h('button', 'tiao-tab-button', opt.label)
+    const btn = h('button', 'tiao-tab-button', opt.icon ?? opt.label)
     btn.type = 'button'
     btn.setAttribute('role', 'tab')
-    if (opt.title) btn.title = opt.title
+    const name = opt.title ?? opt.label
+    if (opt.icon) {
+      btn.title = name
+      btn.setAttribute('aria-label', name)
+    } else if (opt.title) {
+      btn.title = opt.title
+    }
     const onClick = () => {
       value.set(opt.value)
       render()
