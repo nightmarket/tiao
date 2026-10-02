@@ -155,6 +155,35 @@ export function rotateCcwIcon(): SVGSVGElement {
   ])
 }
 
+/** Lucide "sun" — light theme. */
+export function sunIcon(): SVGSVGElement {
+  return lucideIcon('sun', [
+    svgCircle(12, 12, 4),
+    svgPath('M12 2v2'),
+    svgPath('M12 20v2'),
+    svgPath('m4.93 4.93 1.41 1.41'),
+    svgPath('m17.66 17.66 1.41 1.41'),
+    svgPath('M2 12h2'),
+    svgPath('M20 12h2'),
+    svgPath('m6.34 17.66-1.41 1.41'),
+    svgPath('m19.07 4.93-1.41 1.41'),
+  ])
+}
+
+/** Lucide "moon" — dark theme. */
+export function moonIcon(): SVGSVGElement {
+  return lucideIcon('moon', [svgPath('M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z')])
+}
+
+/** Lucide "monitor" — follow the system theme. */
+export function monitorIcon(): SVGSVGElement {
+  return lucideIcon('monitor', [
+    svgRect(2, 3, 20, 14, 2),
+    svgPath('M8 21h8'),
+    svgPath('M12 17v4'),
+  ])
+}
+
 /** Collapse a text selection without moving focus. */
 export function collapseSelection(input: HTMLInputElement): void {
   const end = input.selectionEnd ?? input.value.length

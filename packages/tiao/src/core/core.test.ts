@@ -35,13 +35,11 @@ function notchMenuCheck(label: string): HTMLElement {
   return notchMenuRow(label).querySelector('.tiao-check') as HTMLElement
 }
 
-function notchMenuSelect(label: string): HTMLSelectElement {
-  return notchMenuRow(label).querySelector('.tiao-select') as HTMLSelectElement
-}
-
-function notchMenuTab(label: string, tab: string): HTMLButtonElement {
-  const buttons = [...notchMenuRow(label).querySelectorAll('.tiao-tab-button')]
-  return buttons.find((b) => b.textContent === tab) as HTMLButtonElement
+function notchMenuTab(label: string, name: string): HTMLButtonElement {
+  const row = notchMenuRow(label)
+  return [...row.querySelectorAll('.tiao-tab-button')].find(
+    (b) => b.getAttribute('aria-label') === name || b.textContent === name,
+  ) as HTMLButtonElement
 }
 
 /** pick an option by its visible label, the way a user would */
@@ -717,24 +715,29 @@ describe('Pane registry and chrome', () => {
     const b = new Pane({ id: 'globe-b' })
     b.theme = 'nord'
 
-    selectOption(notchMenuSelect('Theme'), 'Catppuccin')
+    const themeRow = notchMenuRow('Theme')
+    expect(themeRow.querySelector('.tiao-select')).toBeNull()
+    expect(
+      [...themeRow.querySelectorAll('.tiao-tab-button')].map((b) => b.getAttribute('aria-label')),
+    ).toEqual(['Light', 'Dark', 'System'])
+    notchMenuTab('Theme', 'Light').click()
 
     // every live pane takes it and saves it as its own
-    expect(a.theme).toBe('catppuccin')
-    expect(b.theme).toBe('catppuccin')
-    expect(JSON.parse(localStorage.getItem('tiao:globe-b')!).theme).toBe('catppuccin')
+    expect(a.theme).toBe('light')
+    expect(b.theme).toBe('light')
+    expect(JSON.parse(localStorage.getItem('tiao:globe-b')!).theme).toBe('light')
     // both views: the sidebar shares the same setting
-    expect(JSON.parse(localStorage.getItem('tiao:dock')!).theme).toBe('catppuccin')
-    expect(JSON.parse(localStorage.getItem('tiao:notch')!).theme).toBe('catppuccin')
+    expect(JSON.parse(localStorage.getItem('tiao:dock')!).theme).toBe('light')
+    expect(JSON.parse(localStorage.getItem('tiao:notch')!).theme).toBe('light')
 
     // a pane with no saved chrome of its own inherits the global one
     const later = new Pane()
-    expect(later.theme).toBe('catppuccin')
+    expect(later.theme).toBe('light')
 
     // and a per-pane tweak afterwards still sticks
     b.theme = 'solarized'
     expect(b.theme).toBe('solarized')
-    expect(a.theme).toBe('catppuccin')
+    expect(a.theme).toBe('light')
 
     a.dispose()
     b.dispose()
@@ -749,11 +752,11 @@ describe('Pane registry and chrome', () => {
     gear.click()
 
     // a per-pane tweak on the primary pane, which the global panel mirrors
-    a.theme = 'nord'
+    a.theme = 'light'
     a.accent = '#ff0080'
     gear.click()
 
-    expect(notchMenuSelect('Theme').selectedOptions[0]?.textContent).toBe('Nord')
+    expect(notchMenuTab('Theme', 'Light').classList.contains('tiao-selected')).toBe(true)
     expect(b.theme).toBe('dark')
     expect(b.element.style.getPropertyValue('--tiao-accent')).toBe('')
     expect(localStorage.getItem('tiao:notch')).toBeNull()
@@ -765,11 +768,11 @@ describe('Pane registry and chrome', () => {
     const pane = new Pane()
     ;(document.querySelector('.tiao-notch-dock') as HTMLButtonElement).click()
 
-    selectOption(notchMenuSelect('Theme'), 'Nord')
-    expect(pane.element.classList.contains('tiao-theme-nord')).toBe(true)
+    notchMenuTab('Theme', 'Light').click()
+    expect(pane.element.classList.contains('tiao-theme-dark')).toBe(false)
 
     ;(document.querySelector('.tiao-notch-dock') as HTMLButtonElement).click()
-    expect(pane.theme).toBe('nord')
+    expect(pane.theme).toBe('light')
     pane.dispose()
   })
 
@@ -2403,6 +2406,25 @@ describe('Pane registry and chrome', () => {
     revived.addFolder({ title: 'Render' }).addBinding(next, 'tint')
     expect(next.speed).toBe(4)
     expect(next.tint).toEqual({ r: 0, g: 0, b: 255 })
+    revived.dispose()
+  })
+
+  it('keys saved values by label so same-key targets stay apart', () => {
+    const strength = { value: 1 }
+    const radius = { value: 2 }
+    const pane = new Pane({ id: 'labelled' })
+    const folder = pane.addFolder({ title: 'Blur' })
+    folder.addBinding(strength, 'value', { label: 'Strength' }).value.set(5)
+    folder.addBinding(radius, 'value', { label: 'Radius' })
+    pane.dispose()
+
+    const next = { strength: { value: 1 }, radius: { value: 2 } }
+    const revived = new Pane({ id: 'labelled' })
+    const revivedFolder = revived.addFolder({ title: 'Blur' })
+    revivedFolder.addBinding(next.strength, 'value', { label: 'Strength' })
+    revivedFolder.addBinding(next.radius, 'value', { label: 'Radius' })
+    expect(next.strength.value).toBe(5)
+    expect(next.radius.value).toBe(2)
     revived.dispose()
   })
 

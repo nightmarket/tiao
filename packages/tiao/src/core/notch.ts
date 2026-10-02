@@ -103,6 +103,7 @@ export function createNotch(host: NotchHost): Notch {
     spacing: host.spacing,
     hiding: host.hiding,
     glass: host.glass,
+    iconThemes: true,
     onDispose: (fn) => disposers.push(fn),
   })
 

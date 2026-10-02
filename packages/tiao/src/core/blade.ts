@@ -168,7 +168,7 @@ export abstract class Container extends Item {
     )
     this.attach(api)
     if (this.host.values && !pluginOpts.readonly && pluginOpts.persist !== false) {
-      persistValue(this.host.values, valuePath(this, key), api)
+      persistValue(this.host.values, valuePath(this, pluginOpts.label ?? key), api)
     }
     applyVisibility(api, { showIf, hidden, disabled })
     return api
