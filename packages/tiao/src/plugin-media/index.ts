@@ -271,6 +271,7 @@ const CSS = `
   bottom: 0;
   padding: 2px 6px;
   font-family: var(--tiao-font-mono);
+  font-variation-settings: var(--tiao-font-mono-settings);
   font-size: var(--tiao-font-size-mono);
   color: #fff;
   background: rgba(0, 0, 0, 0.45);

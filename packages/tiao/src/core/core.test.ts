@@ -17,6 +17,11 @@ beforeEach(() => {
   localStorage.clear()
 })
 
+/** right-clicking here opens the pane settings menu */
+function titlebarOf(pane: Pane): HTMLElement {
+  return pane.element.querySelector('.tiao-titlebar') as HTMLElement
+}
+
 /** open the notch's global settings panel, or return the one already open */
 function openNotchMenu(): HTMLElement {
   if (!document.querySelector('.tiao-notch .tiao-pane-menu.tiao-open')) {
@@ -593,6 +598,54 @@ describe('Pane registry and chrome', () => {
     pane.dispose()
   })
 
+  it('tooltips drop below notch and pane buttons after a hover delay', () => {
+    vi.useFakeTimers()
+    try {
+      const pane = new Pane()
+      const notch = document.querySelector('.tiao-notch') as HTMLElement
+      const hide = notch.querySelector('.tiao-notch-hide') as HTMLButtonElement
+      const reset = notch.querySelector('.tiao-notch-reset') as HTMLButtonElement
+      const bubble = () => document.querySelector('.tiao-tooltip')
+
+      hide.dispatchEvent(new Event('pointerenter'))
+      vi.advanceTimersByTime(140)
+      expect(bubble()).toBeNull()
+      vi.advanceTimersByTime(10)
+      expect(bubble()?.textContent).toBe('Hide panes')
+      // one bubble, rendered on <body> above everything
+      const shared = bubble()!
+      expect(shared.parentElement).toBe(document.body)
+
+      // moving straight to a neighbor skips the delay, and reuses the bubble
+      hide.dispatchEvent(new Event('pointerleave'))
+      expect(bubble()).toBeNull()
+      reset.dispatchEvent(new Event('pointerenter'))
+      expect(bubble()?.textContent).toBe('Reset to defaults')
+      expect(bubble()).toBe(shared)
+      expect(document.querySelectorAll('.tiao-tooltip')).toHaveLength(1)
+
+      // a press dismisses it until the pointer leaves
+      reset.dispatchEvent(new Event('pointerdown'))
+      expect(bubble()).toBeNull()
+      reset.dispatchEvent(new Event('pointerenter'))
+      vi.advanceTimersByTime(500)
+      expect(bubble()).toBeNull()
+      reset.dispatchEvent(new Event('pointerleave'))
+
+      vi.advanceTimersByTime(1000)
+      const search = pane.element.querySelector('.tiao-pane-search') as HTMLButtonElement
+      expect(search.getAttribute('aria-label')).toBe('Search')
+      search.dispatchEvent(new Event('pointerenter'))
+      vi.advanceTimersByTime(500)
+      expect(bubble()?.textContent).toBe('Search')
+      expect(bubble()).toBe(shared)
+      pane.dispose()
+      expect(bubble()).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('notch font size draws every floating pane larger and persists', () => {
     const pane = new Pane({ size: 's' })
     const inline = new Pane({ container: document.body.appendChild(document.createElement('div')) })
@@ -613,10 +666,15 @@ describe('Pane registry and chrome', () => {
     expect(later.size).toBe('l')
     expect(inline.size).toBe('m')
     expect(JSON.parse(localStorage.getItem('tiao:notch')!).fontSize).toBe('large')
+    // the notch's own icons scale with it
+    const notch = document.querySelector('.tiao-notch')!
+    expect(notch.classList.contains('tiao-size-l')).toBe(true)
 
     notchMenuTab('Font Size', 'S').click()
     expect(pane.size).toBe('s')
     expect(later.size).toBe('s')
+    expect(notch.classList.contains('tiao-size-s')).toBe(true)
+    expect(notch.classList.contains('tiao-size-l')).toBe(false)
     expect(JSON.parse(localStorage.getItem('tiao:notch')!).fontSize).toBe('small')
 
     pane.dispose()
@@ -632,6 +690,7 @@ describe('Pane registry and chrome', () => {
     notchMenuTab('Spacing', 'M').click()
     expect(pane.spacing).toBe('m')
     expect(pane.element.classList.contains('tiao-spacing-m')).toBe(true)
+    expect(document.querySelector('.tiao-notch')!.classList.contains('tiao-spacing-m')).toBe(true)
     expect(JSON.parse(localStorage.getItem('tiao:notch')!).spacing).toBe('m')
 
     const later = new Pane()
@@ -841,7 +900,9 @@ describe('Pane registry and chrome', () => {
     expect(pane.element.querySelector('.tiao-pane-search')).not.toBeNull()
     expect(document.querySelectorAll('.tiao-dock-search')).toHaveLength(1)
     expect(document.querySelectorAll('.tiao-dock-gear')).toHaveLength(1)
-    pane.element.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))
+    titlebarOf(pane).dispatchEvent(
+      new MouseEvent('contextmenu', { bubbles: true, cancelable: true }),
+    )
     expect(pane.element.querySelector('.tiao-pane-menu.tiao-open')).toBeNull()
 
     const search = document.querySelector('.tiao-dock-search') as HTMLButtonElement
@@ -2174,16 +2235,20 @@ describe('Pane registry and chrome', () => {
 
   it('right-click opens the menu; anchor buttons re-anchor the pane', () => {
     const pane = new Pane({ id: 'anchored' })
-    pane.element.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))
+    titlebarOf(pane).dispatchEvent(
+      new MouseEvent('contextmenu', { bubbles: true, cancelable: true }),
+    )
     const menu = pane.element.querySelector('.tiao-pane-menu.tiao-open')!
     expect(menu).not.toBeNull()
 
     const bottomCenter = menu.querySelectorAll('.tiao-anchor-cell')[7] as HTMLButtonElement
     expect(bottomCenter.title).toBe('bottom center')
+    // an odd width must still land on a whole pixel: (1024 - 241) / 2 = 391.5
+    Object.defineProperty(pane.element, 'offsetWidth', { value: 241, configurable: true })
     bottomCenter.click()
     expect(pane.anchor).toBe('bottom-center')
-    expect(pane.element.style.left).toBe('50%')
-    expect(pane.element.style.transform).toBe('translateX(-50%)')
+    expect(pane.element.style.left).toBe(`${Math.round((innerWidth - 241) / 2)}px`)
+    expect(pane.element.style.transform).toBe('none')
     pane.dispose()
 
     // anchor persists per pane id
@@ -2194,21 +2259,27 @@ describe('Pane registry and chrome', () => {
 
   it('supports the center anchor from the middle grid cell', () => {
     const pane = new Pane()
-    pane.element.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))
+    titlebarOf(pane).dispatchEvent(
+      new MouseEvent('contextmenu', { bubbles: true, cancelable: true }),
+    )
     const menu = pane.element.querySelector('.tiao-pane-menu.tiao-open')!
     const center = menu.querySelectorAll('.tiao-anchor-cell')[4] as HTMLButtonElement
     expect(center.title).toBe('center')
+    Object.defineProperty(pane.element, 'offsetWidth', { value: 240, configurable: true })
+    Object.defineProperty(pane.element, 'offsetHeight', { value: 101, configurable: true })
     center.click()
     expect(pane.anchor).toBe('center')
-    expect(pane.element.style.left).toBe('50%')
-    expect(pane.element.style.top).toBe('50%')
-    expect(pane.element.style.transform).toBe('translate(-50%, -50%)')
+    expect(pane.element.style.left).toBe(`${(innerWidth - 240) / 2}px`)
+    expect(pane.element.style.top).toBe(`${Math.round((innerHeight - 101) / 2)}px`)
+    expect(pane.element.style.transform).toBe('none')
     pane.dispose()
   })
 
   it('menu theme select switches themes and persists per pane id', () => {
     const pane = new Pane({ id: 'themed' })
-    pane.element.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))
+    titlebarOf(pane).dispatchEvent(
+      new MouseEvent('contextmenu', { bubbles: true, cancelable: true }),
+    )
     const menu = pane.element.querySelector('.tiao-pane-menu.tiao-open')!
     // the settings menu is a real embedded pane, so theme is a select binding
     const select = menu.querySelector('.tiao-select') as HTMLSelectElement
@@ -2296,7 +2367,9 @@ describe('Pane registry and chrome', () => {
 
   it('menu style tabs switch kiki style and persist per pane id', () => {
     const pane = new Pane({ id: 'styled' })
-    pane.element.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))
+    titlebarOf(pane).dispatchEvent(
+      new MouseEvent('contextmenu', { bubbles: true, cancelable: true }),
+    )
     const menu = pane.element.querySelector('.tiao-pane-menu.tiao-open')!
     const kiki = [...menu.querySelectorAll('.tiao-tab-button')].find(
       (b) => b.textContent === 'Kiki',
@@ -2358,7 +2431,9 @@ describe('Pane registry and chrome', () => {
 
   it('menu accent color writes --tiao-accent and persists per pane id', () => {
     const pane = new Pane({ id: 'accented' })
-    pane.element.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))
+    titlebarOf(pane).dispatchEvent(
+      new MouseEvent('contextmenu', { bubbles: true, cancelable: true }),
+    )
     const menu = pane.element.querySelector('.tiao-pane-menu.tiao-open')!
     const text = menu.querySelector('.tiao-color-text') as HTMLInputElement
     text.value = '#ff0080'
@@ -2463,6 +2538,240 @@ describe('Pane registry and chrome', () => {
     pane.dispose()
   })
 
+  it('exports every persisted value per pane and imports them back', () => {
+    const params = { speed: 1, tint: { r: 255, g: 0, b: 0 }, fps: 60, seed: 3 }
+    const pane = new Pane({ id: 'exported' })
+    const speed = pane.addBinding(params, 'speed')
+    const tint = pane.addFolder({ title: 'Render' }).addBinding(params, 'tint')
+    pane.addBinding(params, 'fps', { readonly: true })
+    pane.addBinding(params, 'seed', { persist: false })
+    speed.value.set(4)
+
+    const exported = Pane.exportValues()
+    expect(exported).toEqual({
+      exported: { speed: 4, 'Render/tint': { r: 255, g: 0, b: 0 } },
+    })
+
+    const data = JSON.parse(JSON.stringify(exported))
+    data.exported['Render/tint'] = { r: 0, g: 0, b: 255 }
+    data.exported.speed = 'fast'
+    data.missing = { speed: 9 }
+    expect(Pane.importValues(data)).toBe(1)
+    expect(params.tint).toEqual({ r: 0, g: 0, b: 255 })
+    expect(tint.value.get()).toEqual({ r: 0, g: 0, b: 255 })
+    expect(params.speed).toBe(4)
+    expect(JSON.parse(localStorage.getItem('tiao:exported:values')!)['Render/tint']).toEqual({
+      r: 0,
+      g: 0,
+      b: 255,
+    })
+    expect(Pane.importValues('nope')).toBe(0)
+    pane.dispose()
+  })
+
+  it('notch import box applies pasted JSON and reports bad input', () => {
+    const params = { speed: 1 }
+    const pane = new Pane({ id: 'pasted' })
+    pane.addBinding(params, 'speed')
+    const importBtn = document.querySelector('.tiao-notch-import') as HTMLButtonElement
+    const panel = document.querySelector('.tiao-import') as HTMLElement
+    const input = panel.querySelector('textarea') as HTMLTextAreaElement
+    const apply = panel.querySelector('.tiao-import-apply') as HTMLButtonElement
+    const status = panel.querySelector('.tiao-import-status') as HTMLElement
+
+    importBtn.click()
+    expect(panel.classList.contains('tiao-open')).toBe(true)
+    expect(importBtn.getAttribute('aria-expanded')).toBe('true')
+
+    input.value = '{ not json'
+    apply.click()
+    expect(status.textContent).toBe('Not valid JSON')
+    input.value = JSON.stringify({ other: { speed: 5 } })
+    apply.click()
+    expect(status.textContent).toBe('No matching settings found')
+    expect(panel.classList.contains('tiao-open')).toBe(true)
+
+    input.value = JSON.stringify({ pasted: { speed: 5 } })
+    apply.click()
+    expect(params.speed).toBe(5)
+    expect(panel.classList.contains('tiao-open')).toBe(false)
+    expect(importBtn.getAttribute('aria-expanded')).toBe('false')
+    pane.dispose()
+  })
+
+  it('notch copy writes the exported values to the clipboard', async () => {
+    const writeText = vi.fn((_text: string) => Promise.resolve())
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    const params = { speed: 2 }
+    const pane = new Pane({ id: 'copied' })
+    pane.addBinding(params, 'speed')
+    const copyBtn = document.querySelector('.tiao-notch-copy') as HTMLButtonElement
+
+    copyBtn.click()
+    expect(JSON.parse(writeText.mock.calls[0]![0])).toEqual({ copied: { speed: 2 } })
+    await Promise.resolve()
+    expect(copyBtn.getAttribute('aria-label')).toBe('Copied settings')
+    pane.dispose()
+    Reflect.deleteProperty(navigator, 'clipboard')
+  })
+
+  it('notch counts changed rows and flashes them open on reveal', async () => {
+    vi.useFakeTimers()
+    try {
+      const params = { speed: 1, tint: { r: 1, g: 2, b: 3 }, mode: 'a', fps: 60 }
+      const pane = new Pane({ id: 'changed', expanded: false })
+      const speed = pane.addBinding(params, 'speed')
+      const folder = pane.addFolder({ title: 'Look', expanded: false })
+      const tint = folder.addBinding(params, 'tint')
+      const tab = pane.addTab({ pages: [{ title: 'One' }, { title: 'Two' }] })
+      const mode = tab.pages[1]!.addBinding(params, 'mode')
+      pane.addBinding(params, 'fps', { readonly: true })
+      const count = document.querySelector('.tiao-notch-count') as HTMLElement
+      const reveal = document.querySelector('.tiao-notch-reveal') as HTMLButtonElement
+      expect(count.textContent).toBe('0 set')
+      expect(reveal.disabled).toBe(true)
+
+      speed.value.set(2)
+      tint.value.set({ r: 9, g: 2, b: 3 })
+      mode.value.set('b')
+      params.fps = 30
+      await Promise.resolve()
+      expect(count.textContent).toBe('3 set')
+      expect(reveal.disabled).toBe(false)
+
+      // back to the default (a fresh but equal object) no longer counts
+      tint.value.set({ r: 1, g: 2, b: 3 })
+      await Promise.resolve()
+      expect(count.textContent).toBe('2 set')
+
+      tint.value.set({ r: 9, g: 2, b: 3 })
+      pane.hidden = true
+      reveal.click()
+      expect(pane.hidden).toBe(false)
+      expect(pane.expanded).toBe(true)
+      expect(folder.expanded).toBe(true)
+      expect(tab.selectedIndex).toBe(1)
+      for (const b of [speed, tint, mode]) {
+        expect(b.element.classList.contains('tiao-row-flash')).toBe(true)
+      }
+      vi.advanceTimersByTime(2000)
+      expect(speed.element.classList.contains('tiao-row-flash')).toBe(false)
+
+      ;(document.querySelector('.tiao-notch-reset') as HTMLButtonElement).click()
+      await Promise.resolve()
+      expect(count.textContent).toBe('0 set')
+      pane.dispose()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('notch font picks ABC Areal for every pane and persists', () => {
+    const pane = new Pane()
+    const root = document.documentElement
+    expect(Pane.font).toBe('system')
+    expect(root.dataset['tiaoFont']).toBeUndefined()
+
+    ;(document.querySelector('.tiao-notch-gear') as HTMLButtonElement).click()
+    const row = [...document.querySelectorAll('.tiao-notch .tiao-pane-menu .tiao-row')].find(
+      (r) => r.querySelector('.tiao-label')?.textContent === 'Font',
+    )
+    expect(row).toBeDefined()
+
+    Pane.setFont('areal')
+    expect(root.dataset['tiaoFont']).toBe('areal')
+    expect(JSON.parse(localStorage.getItem('tiao:notch')!).font).toBe('areal')
+    pane.dispose()
+
+    // a later page load applies the saved face before anything paints
+    delete root.dataset['tiaoFont']
+    const later = new Pane()
+    expect(root.dataset['tiaoFont']).toBe('areal')
+    Pane.setFont('system')
+    expect(root.dataset['tiaoFont']).toBeUndefined()
+    later.dispose()
+  })
+
+  it('right-click: title bar opens settings, a row opens the one shared toolbar', () => {
+    const params = { speed: 1, gain: 2, fps: 60 }
+    const pane = new Pane({ id: 'context' })
+    const speed = pane.addBinding(params, 'speed')
+    const gain = pane.addBinding(params, 'gain')
+    const fps = pane.addBinding(params, 'fps', { readonly: true })
+    const rightClick = (el: Element) =>
+      el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))
+    const toolbars = () => document.querySelectorAll('.tiao-row-toolbar')
+
+    rightClick(speed.element.querySelector('.tiao-label')!)
+    expect(pane.element.querySelector('.tiao-pane-menu.tiao-open')).toBeNull()
+    expect(toolbars()).toHaveLength(1)
+    const toolbar = toolbars()[0]!
+    expect(toolbar.parentElement).toBe(document.body)
+    const reset = toolbar.querySelector('.tiao-row-toolbar-reset') as HTMLButtonElement
+    expect(reset.getAttribute('aria-label')).toBe('Reset to default')
+    // already at its default: nothing to reset
+    expect(reset.disabled).toBe(true)
+
+    gain.value.set(5)
+    rightClick(gain.element)
+    expect(toolbars()).toHaveLength(1)
+    expect(toolbars()[0]).toBe(toolbar)
+    expect(gain.element.classList.contains('tiao-row-context')).toBe(true)
+    expect(speed.element.classList.contains('tiao-row-context')).toBe(false)
+    expect(reset.disabled).toBe(false)
+    reset.click()
+    expect(params.gain).toBe(2)
+    expect(toolbar.isConnected).toBe(false)
+
+    // monitors have nothing to reset; the title bar opens pane settings
+    rightClick(fps.element)
+    expect(toolbar.isConnected).toBe(false)
+    rightClick(titlebarOf(pane))
+    expect(pane.element.querySelector('.tiao-pane-menu.tiao-open')).not.toBeNull()
+    pane.dispose()
+  })
+
+  it('notch undo/redo walk value edits, up to 10 steps, with reset as one', async () => {
+    const params = { speed: 0, gain: 1 }
+    const pane = new Pane({ id: 'history' })
+    const speed = pane.addBinding(params, 'speed')
+    const gain = pane.addBinding(params, 'gain')
+    const undo = document.querySelector('.tiao-notch-undo') as HTMLButtonElement
+    const redo = document.querySelector('.tiao-notch-redo') as HTMLButtonElement
+
+    // a drag reports once, from where it began
+    speed.value.set(1, { last: false })
+    speed.value.set(2, { last: false })
+    speed.value.set(3, { last: true })
+    Pane.undo()
+    expect(params.speed).toBe(0)
+    Pane.redo()
+    expect(params.speed).toBe(3)
+
+    for (let i = 4; i <= 15; i++) speed.value.set(i)
+    for (let i = 0; i < 12; i++) undo.click()
+    // only the last 10 edits are kept
+    expect(params.speed).toBe(5)
+    await Promise.resolve()
+    expect(undo.disabled).toBe(true)
+    expect(redo.disabled).toBe(false)
+
+    // a new edit drops what could be redone
+    gain.value.set(4)
+    await Promise.resolve()
+    expect(redo.disabled).toBe(true)
+
+    Pane.resetValues()
+    expect([params.speed, params.gain]).toEqual([0, 1])
+    undo.click()
+    expect([params.speed, params.gain]).toEqual([5, 4])
+    // the buttons' enabled state catches up a microtask after each change
+    await Promise.resolve()
+    redo.click()
+    expect([params.speed, params.gain]).toEqual([0, 1])
+    pane.dispose()
+  })
+
   it('notch reset snaps panes back to their declared position', () => {
     localStorage.setItem('tiao:placed', JSON.stringify({ x: 40, y: 60 }))
     const pane = new Pane({ id: 'placed', anchor: 'bottom-left' })
@@ -2491,7 +2800,7 @@ describe('Pane registry and chrome', () => {
   it('notch reset restores a re-anchored pane to its declared anchor', () => {
     const pane = new Pane({ id: 'reanchored', anchor: 'top-right' })
     pane.anchor = 'bottom-center'
-    expect(pane.element.style.left).toBe('50%')
+    expect(pane.element.style.left).toBe(`${innerWidth / 2}px`)
 
     Pane.resetValues()
     expect(pane.anchor).toBe('top-right')

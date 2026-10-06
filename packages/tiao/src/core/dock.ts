@@ -1,6 +1,7 @@
 import { draggable, gearIcon, h, searchIcon, withDocument } from './dom'
 import type { PaneStyle, PaneTheme } from './pane'
 import { createPaneMenu, type PaneMenuHost } from './pane-menu'
+import { tooltip } from './tooltip'
 import { clamp, jsonStore } from './util'
 
 /** page edge the sidebar sits against */
@@ -72,10 +73,10 @@ export function ensureDock(host: DockHost): HTMLElement {
   const chrome = withDocument(doc, () => {
     const searchBtn = h('button', 'tiao-titlebar-btn tiao-dock-search', searchIcon())
     searchBtn.type = 'button'
-    searchBtn.title = 'Search'
+    searchBtn.setAttribute('aria-label', 'Search')
     const gear = h('button', 'tiao-titlebar-btn tiao-dock-gear', gearIcon())
     gear.type = 'button'
-    gear.title = 'Sidebar settings'
+    gear.setAttribute('aria-label', 'Sidebar settings')
     gear.setAttribute('data-tiao-menu-trigger', '')
     const header = h('div', 'tiao-dock-header', h('div', 'tiao-titlebar-actions', searchBtn, gear))
     const searchInput = h('input', 'tiao-search-input')
@@ -125,11 +126,15 @@ export function ensureDock(host: DockHost): HTMLElement {
   searchBtn.addEventListener('click', onSearchToggle)
   searchInput.addEventListener('input', onSearchInput)
   searchInput.addEventListener('keydown', onSearchKey)
-  entry.disposers.push(() => {
-    searchBtn.removeEventListener('click', onSearchToggle)
-    searchInput.removeEventListener('input', onSearchInput)
-    searchInput.removeEventListener('keydown', onSearchKey)
-  })
+  entry.disposers.push(
+    () => {
+      searchBtn.removeEventListener('click', onSearchToggle)
+      searchInput.removeEventListener('input', onSearchInput)
+      searchInput.removeEventListener('keydown', onSearchKey)
+    },
+    tooltip(searchBtn, () => 'Search'),
+    tooltip(gear, () => 'Settings'),
+  )
 
   // one settings menu for the whole sidebar, standing in for every pane's own
   const menu = createPaneMenu({
