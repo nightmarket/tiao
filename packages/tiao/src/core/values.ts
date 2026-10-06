@@ -20,6 +20,19 @@ export function createValueStore(paneKey: string): ValueStore {
   }
 }
 
+/** Structural equality for bound values: primitives, arrays, and plain objects. */
+export function sameValue(a: unknown, b: unknown): boolean {
+  if (Object.is(a, b)) return true
+  if (Array.isArray(a)) {
+    return Array.isArray(b) && a.length === b.length && a.every((v, i) => sameValue(v, b[i]))
+  }
+  if (isRecord(a) && isRecord(b)) {
+    const keys = Object.keys(a)
+    return keys.length === Object.keys(b).length && keys.every((k) => sameValue(a[k], b[k]))
+  }
+  return false
+}
+
 /**
  * Whether a saved value still fits the shape the code declares. Guards against
  * a binding changing type between sessions — a stale `{ r, g, b }` must not

@@ -35,6 +35,22 @@ export function installCaret(root: HTMLElement, doc: Document): () => void {
   let paddingLeft = 0
   let paddingRight = 0
   let textAlign = ''
+  let variation = 'normal'
+  /** canvas ignores font-variation-settings (the Areal mono is an axis), so
+      those fields are measured by a hidden span in the same style instead */
+  let axisMeas: HTMLSpanElement | null = null
+
+  const measure = (text: string): number => {
+    if (variation === 'normal') return meas.measureText(text).width
+    if (!axisMeas) {
+      axisMeas = withDocument(doc, () => h('span', 'tiao-caret-measure'))
+      root.append(axisMeas)
+    }
+    axisMeas.style.font = meas.font
+    axisMeas.style.fontVariationSettings = variation
+    axisMeas.textContent = text
+    return axisMeas.getBoundingClientRect().width
+  }
 
   const hide = () => {
     caret.remove()
@@ -65,9 +81,11 @@ export function installCaret(root: HTMLElement, doc: Document): () => void {
     }
     const cs = win.getComputedStyle(active)
     const nextFont = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`
-    if (nextFont !== fontKey) {
-      fontKey = nextFont
+    const nextKey = `${nextFont} ${cs.fontVariationSettings}`
+    if (nextKey !== fontKey) {
+      fontKey = nextKey
       meas.font = nextFont
+      variation = cs.fontVariationSettings || 'normal'
       fontSize = parseFloat(cs.fontSize)
       paddingLeft = parseFloat(cs.paddingLeft)
       paddingRight = parseFloat(cs.paddingRight)
@@ -78,10 +96,9 @@ export function installCaret(root: HTMLElement, doc: Document): () => void {
     let x: number
     if (textAlign === 'right') {
       // right-aligned fields rarely overflow; measure back from the right edge
-      x = rect.right - paddingRight - meas.measureText(value.slice(start)).width
+      x = rect.right - paddingRight - measure(value.slice(start))
     } else {
-      x =
-        rect.left + paddingLeft + meas.measureText(value.slice(0, start)).width - active.scrollLeft
+      x = rect.left + paddingLeft + measure(value.slice(0, start)) - active.scrollLeft
     }
     x = Math.min(Math.max(x, rect.left + 1), rect.right - 3)
 
@@ -165,6 +182,7 @@ export function installCaret(root: HTMLElement, doc: Document): () => void {
   return () => {
     if (frame) win.cancelAnimationFrame(frame)
     hide()
+    axisMeas?.remove()
     root.removeEventListener('focusin', onFocusIn)
     root.removeEventListener('focusout', onFocusOut)
     root.removeEventListener('transitionend', onTransitionEnd)

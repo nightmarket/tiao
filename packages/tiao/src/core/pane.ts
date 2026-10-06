@@ -1,8 +1,11 @@
 import {
+  type BindingApi,
   type BladeHost,
+  bindingAt,
   Container,
   FolderApi,
   markPointerBlur,
+  revealOverridden,
   TabApi,
   walkBindings,
 } from './blade'
@@ -20,12 +23,15 @@ import {
   writeDockState,
 } from './dock'
 import { collapseSelection, draggable, gearIcon, h, icon, searchIcon, withDocument } from './dom'
+import { ValueHistory } from './history'
 import { createNotch, type Notch } from './notch'
 import { createPaneMenu } from './pane-menu'
 import { globalRegistry, PluginRegistry, type TiaoPlugin } from './plugin'
+import { openRowToolbar } from './row-toolbar'
 import { injectStyles } from './styles'
-import { clamp, type JSONStore, jsonStore } from './util'
-import { createValueStore, type ValueStore } from './values'
+import { tooltip } from './tooltip'
+import { clamp, isRecord, type JSONStore, jsonStore } from './util'
+import { createValueStore, sameShape, type ValueStore } from './values'
 
 export type Anchor =
   | 'top-left'
@@ -166,6 +172,14 @@ export type PaneSpacing = 's' | 'm' | 'l'
  */
 export type PaneFontSize = 'small' | 'normal' | 'large'
 
+/**
+ * Typeface for every pane, set from the notch. `areal` asks for ABC Areal
+ * Superfamily Variable, which tiao cannot ship (it is licensed): the page
+ * declares the @font-face, or the system has it installed. Without either,
+ * text falls back to the system stack.
+ */
+export type PaneFont = 'system' | 'areal'
+
 /** default --tiao-accent, used when the computed style is unavailable (e.g. jsdom) */
 const DEFAULT_ACCENT = '#facc15'
 
@@ -180,6 +194,9 @@ const MAX_HEIGHT = 2000
 
 /** gap between co-anchored floating panes; matches the default window inset */
 const PACK_GAP = 8
+
+/** .tiao-folder-body's grid-template-rows transition */
+const FOLDER_EXPAND_MS = 180
 
 const panes = new Map<string, Pane>()
 
@@ -225,6 +242,7 @@ const notches = new WeakMap<Document, Notch>()
  * mounted later inherit them unless they carry saved chrome of their own.
  */
 interface NotchState {
+  font?: PaneFont | undefined
   fontSize?: PaneFontSize | undefined
   spacing?: PaneSpacing | undefined
   /** the notch vanishes until the pointer comes near the top edge */
@@ -241,6 +259,50 @@ const notchStore = jsonStore<NotchState>('tiao:notch')
 
 function readNotchState(): NotchState {
   return notchStore.get()
+}
+
+/**
+ * The face lands on the root element as an attribute the stylesheet keys off:
+ * a token set on each pane would be re-declared by panes nested inside it
+ * (the settings menus), and the attribute reaches every one of them.
+ */
+function applyFont(doc: Document, font: PaneFont): void {
+  const root = doc.documentElement
+  if (font === 'system') delete root.dataset['tiaoFont']
+  else root.dataset['tiaoFont'] = font
+}
+
+/** the panes the notch counts, reveals, and resets: floating plus every id'd one */
+function trackedPanes(doc: Document): Pane[] {
+  // inline panes without an id (the settings menu's own pane) drive the
+  // chrome rather than the app, so their rows don't count
+  return [...new Set([...floatingPanes, ...panes.values()])].filter(
+    (p) => p.element.ownerDocument === doc,
+  )
+}
+
+/** value changes arrive per drag frame; refresh the notch once per burst */
+const valuesPending = new WeakSet<Document>()
+
+function scheduleValueSync(doc: Document): void {
+  if (valuesPending.has(doc)) return
+  valuesPending.add(doc)
+  queueMicrotask(() => {
+    valuesPending.delete(doc)
+    notches.get(doc)?.syncValues()
+  })
+}
+
+/** undo/redo across every tracked pane in a document */
+const histories = new WeakMap<Document, ValueHistory>()
+
+function historyFor(doc: Document): ValueHistory {
+  let history = histories.get(doc)
+  if (!history) {
+    history = new ValueHistory(() => scheduleValueSync(doc))
+    histories.set(doc, history)
+  }
+  return history
 }
 
 function panesIn(doc: Document): Pane[] {
@@ -382,6 +444,22 @@ function ensureNotch(doc: Document): void {
       reset: () => {
         Pane.resetValues(doc)
       },
+      exportValues: () => Pane.exportValues(doc),
+      importValues: (data) => Pane.importValues(data, doc),
+      countOverrides: () => Pane.countOverrides(doc),
+      history: {
+        canUndo: () => Pane.canUndo(doc),
+        canRedo: () => Pane.canRedo(doc),
+        undo: () => Pane.undo(doc),
+        redo: () => Pane.redo(doc),
+      },
+      revealOverrides: () => {
+        Pane.revealOverrides(doc)
+      },
+      font: {
+        get: () => Pane.font,
+        set: (v) => Pane.setFont(v, doc),
+      },
       createPane: (options) => new Pane(options),
       getTheme: () => globalChrome(doc).theme,
       setTheme: (theme) => setGlobalChrome(doc, { theme }),
@@ -458,10 +536,32 @@ function setGlobalChrome(doc: Document, patch: Partial<PaneChrome>): void {
 function syncNotch(doc: Document): void {
   const notch = notches.get(doc)
   if (!notch) return
-  // the notch re-declares the theme tokens, so it tracks the look the panes wear
-  applyChrome(notch.element, globalChrome(doc))
-  notch.element.classList.toggle('tiao-glass', Pane.glass)
+  // the notch re-declares the theme and size tokens, so it tracks the look
+  // and scale the floating panes wear
+  const el = notch.element
+  applyChrome(el, globalChrome(doc))
+  el.classList.toggle('tiao-glass', Pane.glass)
+  const size = paneSizeFor(Pane.fontSize)
+  el.classList.toggle('tiao-size-s', size === 's')
+  el.classList.toggle('tiao-size-l', size === 'l')
+  el.classList.toggle('tiao-spacing-m', Pane.spacing === 'm')
+  el.classList.toggle('tiao-spacing-l', Pane.spacing === 'l')
   notch.sync()
+}
+
+function paneSizeFor(fontSize: PaneFontSize): PaneSize {
+  switch (fontSize) {
+    case 'large':
+      return 'l'
+    case 'normal':
+      return 'm'
+    case 'small':
+      return 's'
+    default: {
+      const _exhaustive: never = fontSize
+      return _exhaustive
+    }
+  }
 }
 
 /** tear the notch and dock down once the last floating pane is gone */
@@ -678,15 +778,124 @@ export class Pane extends Container {
    * position their code declared. Theme and dock state stay as they are.
    */
   static resetValues(doc: Document = document): void {
-    // floating panes plus every id'd pane: inline panes without an id (the
-    // settings menu's own pane) drive the chrome and must keep their values
-    for (const p of new Set([...floatingPanes, ...panes.values()])) {
-      if (p.element.ownerDocument !== doc) continue
-      walkBindings(p, (b) => b.reset())
-      p.values?.clear()
-      p.resetPosition()
-    }
+    // one undo step brings every value back
+    historyFor(doc).batch(() => {
+      for (const p of trackedPanes(doc)) {
+        walkBindings(p, (b) => b.reset())
+        p.values?.clear()
+        p.resetPosition()
+      }
+    })
     packAnchored(doc)
+  }
+
+  /** whether there is a value edit to step back over in `doc` */
+  static canUndo(doc: Document = document): boolean {
+    return historyFor(doc).canUndo
+  }
+
+  static canRedo(doc: Document = document): boolean {
+    return historyFor(doc).canRedo
+  }
+
+  /**
+   * Step back over the last value edit in `doc` (a global reset or an import
+   * counts as one). The last HISTORY_LIMIT (10) edits are kept.
+   */
+  static undo(doc: Document = document): void {
+    historyFor(doc).undo()
+  }
+
+  static redo(doc: Document = document): void {
+    historyFor(doc).redo()
+  }
+
+  /** how many editable rows in `doc` differ from the default their code declared */
+  static countOverrides(doc: Document = document): number {
+    let count = 0
+    for (const p of trackedPanes(doc)) {
+      walkBindings(p, (b) => {
+        if (b.overridden) count++
+      })
+    }
+    return count
+  }
+
+  /**
+   * Outline every overridden row in the accent for a moment, first opening
+   * whatever hides it: hidden or collapsed panes, folders, and tab pages.
+   * Returns how many rows flashed.
+   */
+  static revealOverrides(doc: Document = document): number {
+    let total = 0
+    let shown = false
+    for (const p of trackedPanes(doc)) {
+      const found: BindingApi<unknown>[] = []
+      for (const child of p.children) revealOverridden(child, found)
+      const first = found[0]
+      if (!first) continue
+      total += found.length
+      if (p.hidden) {
+        p.hidden = false
+        shown = true
+      }
+      p.expanded = true
+      for (const b of found) b.flash()
+      // after the folders finish opening, so the row is where it will stay
+      setTimeout(() => first.element.scrollIntoView?.({ block: 'nearest' }), FOLDER_EXPAND_MS)
+    }
+    if (shown) setDockVisible(doc, true)
+    return total
+  }
+
+  /** typeface every pane draws with */
+  static get font(): PaneFont {
+    return readNotchState().font ?? 'system'
+  }
+
+  static setFont(font: PaneFont, doc: Document = document): void {
+    notchStore.patch({ font })
+    applyFont(doc, font)
+  }
+
+  /**
+   * Every value the id'd panes in `doc` persist, as `pane id -> row path ->
+   * value` (the shape storage holds), ready for JSON and importValues.
+   */
+  static exportValues(doc: Document = document): Record<string, Record<string, unknown>> {
+    const out: Record<string, Record<string, unknown>> = {}
+    for (const [id, p] of panes) {
+      if (p.element.ownerDocument !== doc) continue
+      const values: Record<string, unknown> = {}
+      walkBindings(p, (b) => {
+        if (b.persistPath !== null) values[b.persistPath] = b.value.get()
+      })
+      if (Object.keys(values).length > 0) out[id] = values
+    }
+    return out
+  }
+
+  /**
+   * Apply exportValues output to the live panes in `doc`; rows whose value no
+   * longer fits the shape the code declares are skipped. Returns how many landed.
+   */
+  static importValues(data: unknown, doc: Document = document): number {
+    if (!isRecord(data)) return 0
+    let applied = 0
+    // one undo step takes the whole import back
+    historyFor(doc).batch(() => {
+      for (const [id, values] of Object.entries(data)) {
+        const p = panes.get(id)
+        if (!p || p.element.ownerDocument !== doc || !isRecord(values)) continue
+        walkBindings(p, (b) => {
+          const path = b.persistPath
+          if (path === null || !sameShape(values[path], b.defaultValue)) return
+          b.value.set(values[path])
+          applied++
+        })
+      }
+    })
+    return applied
   }
 
   constructor(options: PaneOptions = {}) {
@@ -696,6 +905,10 @@ export class Pane extends Container {
     const host: BladeHost = { document: doc, registry }
     const storageKey = paneStorageKey(options)
     if (storageKey) host.values = createValueStore(storageKey)
+    // the same panes trackedPanes() counts: floating or id'd, never a menu's own
+    if (!options.container || options.id !== undefined) {
+      host.onSettle = (binding, from, to) => historyFor(doc).record(binding, from, to)
+    }
     super(host)
     this.values = host.values ?? null
     this.store = storageKey ? jsonStore<PersistedState>(storageKey) : null
@@ -717,11 +930,11 @@ export class Pane extends Container {
       const rack = h('div', 'tiao-rack')
       const gear = h('button', 'tiao-titlebar-btn tiao-pane-gear', gearIcon())
       gear.type = 'button'
-      gear.title = 'Pane settings'
+      gear.setAttribute('aria-label', 'Pane settings')
       gear.setAttribute('data-tiao-menu-trigger', '')
       const searchBtn = h('button', 'tiao-titlebar-btn tiao-pane-search', searchIcon())
       searchBtn.type = 'button'
-      searchBtn.title = 'Search'
+      searchBtn.setAttribute('aria-label', 'Search')
       const titleEl = h('span', 'tiao-pane-title', options.title ?? '')
       const collapseButton = h('button', 'tiao-titlebar-main', icon('chevron'), titleEl)
       collapseButton.type = 'button'
@@ -753,6 +966,10 @@ export class Pane extends Container {
       }
     })
     const { gear, searchBtn } = chrome
+    this.disposers.push(
+      tooltip(searchBtn, () => 'Search'),
+      tooltip(gear, () => 'Settings'),
+    )
     this.rack = chrome.rack
     this.titlebar = chrome.titlebar
     this.titleMain = chrome.titleMain
@@ -775,6 +992,7 @@ export class Pane extends Container {
     if (options.theme) this.applyTheme(options.theme)
     // the global font size covers floating panes; inline ones keep their own
     const notchState = readNotchState()
+    applyFont(doc, notchState.font ?? 'system')
     if (this.floating) this.applyFontSize(notchState.fontSize ?? 'small')
     else if (options.size) this.size = options.size
     if (this.floating) {
@@ -954,13 +1172,20 @@ export class Pane extends Container {
       })
       const onGearClick = () => menu.toggle()
       gear.addEventListener('click', onGearClick)
+      // right-click: the title bar opens pane settings, an editable row opens
+      // its actions beside the pane
       const onContextMenu = (e: MouseEvent) => {
         e.preventDefault()
-        // docked panes are themed and searched from the sidebar header instead
-        if (this.docked) return
+        const target = e.target as Element | null
         // right-clicking the open menu itself shouldn't toggle it closed
-        if ((e.target as Element | null)?.closest?.('.tiao-pane-menu')) return
-        menu.toggle()
+        if (target?.closest?.('.tiao-pane-menu')) return
+        if (target && this.titlebar.contains(target)) {
+          // docked panes are themed and searched from the sidebar header instead
+          if (!this.docked) menu.toggle()
+          return
+        }
+        const binding = bindingAt(target)
+        if (binding && !binding.monitor) openRowToolbar(binding)
       }
       this.element.addEventListener('contextmenu', onContextMenu)
       this.disposers.push(() => {
@@ -1004,6 +1229,14 @@ export class Pane extends Container {
 
     // wider custom caret over focused inputs (the native bar is easy to miss)
     this.disposers.push(installCaret(this.element, doc))
+
+    // keep the notch's override count current; monitors only read the app
+    this.disposers.push(
+      this.on('change', (ev) => {
+        if (ev.source !== 'monitor') scheduleValueSync(doc)
+      }),
+      () => scheduleValueSync(doc),
+    )
 
     if (options.toggleKey) {
       const onKey = (e: KeyboardEvent) => {
@@ -1365,6 +1598,16 @@ export class Pane extends Container {
     const inset = this.margin
     const stack = this._stack
     const col = this._column
+    // centered axes are solved in whole pixels: translate(-50%) puts an odd
+    // size on a half pixel, which blurs every icon on 1x displays
+    const win = this.doc.defaultView
+    const centerX = () => `${Math.round(((win?.innerWidth ?? 0) - this.element.offsetWidth) / 2)}px`
+    // a lone pane centers itself; a packed one sits `stack` from the middle
+    const centerY = () => {
+      const viewH = win?.innerHeight ?? 0
+      const top = stack === 0 ? (viewH - this.element.offsetHeight) / 2 : viewH / 2 + stack
+      return `${Math.round(top)}px`
+    }
     s.left = 'auto'
     s.right = 'auto'
     s.top = 'auto'
@@ -1377,8 +1620,7 @@ export class Pane extends Container {
         break
       case 'top-center':
         s.top = `${inset + stack}px`
-        s.left = '50%'
-        s.transform = 'translateX(-50%)'
+        s.left = centerX()
         break
       case 'top-right':
         s.top = `${inset + stack}px`
@@ -1386,31 +1628,15 @@ export class Pane extends Container {
         break
       case 'left-center':
         s.left = `${inset + col}px`
-        if (stack === 0) {
-          s.top = '50%'
-          s.transform = 'translateY(-50%)'
-        } else {
-          s.top = `calc(50% + ${stack}px)`
-        }
+        s.top = centerY()
         break
       case 'center':
-        s.left = '50%'
-        if (stack === 0) {
-          s.top = '50%'
-          s.transform = 'translate(-50%, -50%)'
-        } else {
-          s.top = `calc(50% + ${stack}px)`
-          s.transform = 'translateX(-50%)'
-        }
+        s.left = centerX()
+        s.top = centerY()
         break
       case 'right-center':
         s.right = `${inset + col}px`
-        if (stack === 0) {
-          s.top = '50%'
-          s.transform = 'translateY(-50%)'
-        } else {
-          s.top = `calc(50% + ${stack}px)`
-        }
+        s.top = centerY()
         break
       case 'bottom-left':
         s.bottom = `${inset + stack}px`
@@ -1418,8 +1644,7 @@ export class Pane extends Container {
         break
       case 'bottom-center':
         s.bottom = `${inset + stack}px`
-        s.left = '50%'
-        s.transform = 'translateX(-50%)'
+        s.left = centerX()
         break
       case 'bottom-right':
         s.bottom = `${inset + stack}px`
@@ -1526,21 +1751,7 @@ export class Pane extends Container {
 
   /** internal: follow the global font size */
   private applyFontSize(size: PaneFontSize): void {
-    switch (size) {
-      case 'large':
-        this.size = 'l'
-        return
-      case 'normal':
-        this.size = 'm'
-        return
-      case 'small':
-        this.size = 's'
-        return
-      default: {
-        const _exhaustive: never = size
-        return
-      }
-    }
+    this.size = paneSizeFor(size)
   }
 
   private applyExpanded(): void {

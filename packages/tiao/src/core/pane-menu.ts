@@ -4,6 +4,7 @@ import { h, monitorIcon, moonIcon, sunIcon, withDocument } from './dom'
 import type {
   Anchor,
   Pane,
+  PaneFont,
   PaneFontSize,
   PaneOptions,
   PaneSpacing,
@@ -24,6 +25,12 @@ export interface PaneMenuPlacement {
 export interface PaneMenuSides {
   getSide(): DockSide
   setSide(side: DockSide): void
+}
+
+/** the typeface every pane draws with; only the notch offers it */
+export interface PaneMenuFont {
+  get(): PaneFont
+  set(v: PaneFont): void
 }
 
 /** how big every pane draws; only the notch offers it */
@@ -61,6 +68,7 @@ export interface PaneMenuHost {
   placement?: PaneMenuPlacement
   /** the dock's stand-in for the pane anchor grid */
   sides?: PaneMenuSides
+  font?: PaneMenuFont
   fontSize?: PaneMenuFontSize
   spacing?: PaneMenuSpacing
   /** the notch vanishes until the pointer comes near the top edge */
@@ -89,6 +97,12 @@ const ANCHOR_GRID: Anchor[] = [
 
 /** the sidebar only has two homes: the start or the end edge of the page */
 const DOCK_SIDES: DockSide[] = ['left', 'right']
+
+/** Font dropdown entries, by the name each face goes by */
+const FONT_OPTIONS: Record<string, PaneFont> = {
+  System: 'system',
+  'ABC Areal': 'areal',
+}
 
 /** quick accent swatches, loosely based on syntax-highlighting palettes */
 const ACCENT_PALETTE = [
@@ -162,10 +176,11 @@ function buildMenu(host: PaneMenuHost): { shell: HTMLElement; refresh: () => voi
   host.element.append(shell)
 
   const placement = host.placement
-  const { fontSize, spacing, hiding, glass } = host
+  const { font, fontSize, spacing, hiding, glass } = host
   const settings = {
     draggable: placement?.getDraggable() ?? false,
     hiding: hiding?.get() ?? false,
+    font: font?.get() ?? 'system',
     theme: host.getTheme(),
     accent: host.getAccent(),
     numbers: host.getNumbers(),
@@ -203,6 +218,17 @@ function buildMenu(host: PaneMenuHost): { shell: HTMLElement; refresh: () => voi
   onEdit(numbersBinding, (v) => host.setNumbers(v))
   menuPane.addSeparator()
 
+  if (font) {
+    const binding = menuPane.addBinding(settings, 'font', {
+      label: 'Font',
+      options: FONT_OPTIONS,
+    })
+    onEdit(binding, (v) => font.set(v))
+    refreshers.push(() => {
+      settings.font = font.get()
+      binding.refresh()
+    })
+  }
   if (fontSize) {
     const row = segmentedRow(
       host,

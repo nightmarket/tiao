@@ -347,6 +347,7 @@ const CSS = `
   transform: translateX(-50%);
   color: var(--tiao-fg-dim);
   font-family: var(--tiao-font-mono);
+  font-variation-settings: var(--tiao-font-mono-settings);
   font-size: 9px;
   pointer-events: none;
   white-space: pre;
@@ -471,6 +472,7 @@ const CSS = `
   background: var(--tiao-bg-solid);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18), 0 0 0 1px var(--tiao-border);
   font-family: var(--tiao-font-mono);
+  font-variation-settings: var(--tiao-font-mono-settings);
   font-size: var(--tiao-font-size-mono);
   font-variant-numeric: tabular-nums;
   pointer-events: none;

@@ -155,6 +155,61 @@ export function rotateCcwIcon(): SVGSVGElement {
   ])
 }
 
+/*
+ * copy and import keep their straight edges on odd grid lines: at the 12px
+ * notch size each unit is half a pixel, so a 1px stroke centered on an even
+ * line straddles two pixels and reads blurry on 1x displays.
+ */
+
+/** Lucide "copy", nudged onto odd grid lines. */
+export function copyIcon(): SVGSVGElement {
+  return lucideIcon('copy', [
+    svgRect(9, 9, 12, 12, 2),
+    svgPath('M5 17c-1.1 0-2-.9-2-2V5c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2'),
+  ])
+}
+
+/** Lucide "import", nudged onto odd grid lines. */
+export function importIcon(): SVGSVGElement {
+  return lucideIcon('import', [
+    svgPath('M12 3v12'),
+    svgPath('m8 11 4 4 4-4'),
+    svgPath('M8 5H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-3'),
+  ])
+}
+
+/** Lucide "focus": corner brackets around a dot (its edges sit on odd lines). */
+export function focusIcon(): SVGSVGElement {
+  return lucideIcon('focus', [
+    svgCircle(12, 12, 3),
+    svgPath('M3 7V5a2 2 0 0 1 2-2h2'),
+    svgPath('M17 3h2a2 2 0 0 1 2 2v2'),
+    svgPath('M21 17v2a2 2 0 0 1-2 2h-2'),
+    svgPath('M7 21H5a2 2 0 0 1-2-2v-2'),
+  ])
+}
+
+/** Lucide "undo-2". */
+export function undoIcon(): SVGSVGElement {
+  return lucideIcon('undo', [
+    svgPath('M9 14 4 9l5-5'),
+    svgPath('M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11'),
+  ])
+}
+
+/** Lucide "redo-2". */
+export function redoIcon(): SVGSVGElement {
+  return lucideIcon('redo', [
+    svgPath('m15 14 5-5-5-5'),
+    svgPath('M20 9H9.5A5.5 5.5 0 0 0 4 14.5A5.5 5.5 0 0 0 9.5 20H13'),
+  ])
+}
+
+/** Lucide "check". */
+export function checkIcon(): SVGSVGElement {
+  return lucideIcon('check', [svgPath('M20 6 9 17l-5-5')])
+}
+
 /** Lucide "sun" — light theme. */
 export function sunIcon(): SVGSVGElement {
   return lucideIcon('sun', [
@@ -177,11 +232,20 @@ export function moonIcon(): SVGSVGElement {
 
 /** Lucide "monitor" — follow the system theme. */
 export function monitorIcon(): SVGSVGElement {
-  return lucideIcon('monitor', [
-    svgRect(2, 3, 20, 14, 2),
-    svgPath('M8 21h8'),
-    svgPath('M12 17v4'),
-  ])
+  return lucideIcon('monitor', [svgRect(2, 3, 20, 14, 2), svgPath('M8 21h8'), svgPath('M12 17v4')])
+}
+
+/**
+ * Copy theme tokens as `from` resolves them onto `el`, for chrome rendered on
+ * <body> (outside every pane) that still has to wear the pane's theme.
+ */
+export function adoptTokens(el: HTMLElement, from: Element, tokens: readonly string[]): void {
+  const cs = from.ownerDocument.defaultView?.getComputedStyle(from)
+  for (const prop of tokens) {
+    const v = cs?.getPropertyValue(prop)
+    if (v) el.style.setProperty(prop, v)
+    else el.style.removeProperty(prop)
+  }
 }
 
 /** Collapse a text selection without moving focus. */

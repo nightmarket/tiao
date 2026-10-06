@@ -6,3 +6,5 @@ dist/
 *.log
 scripts/perf/artifacts/.chrome-profile-*/
 scripts/perf/artifacts/*.cpuprofile
+# licensed fonts (ABC Areal): local use only, never committed or published
+apps/playground/public/fonts/

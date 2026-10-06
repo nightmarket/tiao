@@ -3,7 +3,11 @@ import { Emitter } from './emitter'
 import type { AddBindingOptions, BindingOptions, PluginRegistry, VisibilityOptions } from './plugin'
 import { onInterval } from './ticker'
 import { Value } from './value'
-import { sameShape, type ValueStore } from './values'
+import { sameShape, sameValue, type ValueStore } from './values'
+
+/** how long BindingApi.flash outlines a row; matches the tiao-row-flash animation */
+const FLASH_MS = 2000
+const flashTimers = new WeakMap<HTMLElement, ReturnType<typeof setTimeout>>()
 
 /** Provided by the root Pane to every descendant. */
 export interface BladeHost {
@@ -11,6 +15,22 @@ export interface BladeHost {
   registry: PluginRegistry
   /** where bound values persist; absent for panes without an id or storage */
   values?: ValueStore
+  /** told of every settled edit and the value it replaced (feeds undo/redo) */
+  onSettle?: SettleListener
+}
+
+export type SettleListener = (binding: BindingApi<unknown>, from: unknown, to: unknown) => void
+
+/** row element -> its binding, for right-click lookups */
+const rowBindings = new WeakMap<Element, BindingApi<unknown>>()
+
+/** the binding whose row holds `target`, if any */
+export function bindingAt(target: Element | null): BindingApi<unknown> | undefined {
+  for (let row = target?.closest('.tiao-row'); row; row = row.parentElement?.closest('.tiao-row')) {
+    const binding = rowBindings.get(row)
+    if (binding) return binding
+  }
+  return undefined
 }
 
 /**
@@ -168,8 +188,11 @@ export abstract class Container extends Item {
     )
     this.attach(api)
     if (this.host.values && !pluginOpts.readonly && pluginOpts.persist !== false) {
-      persistValue(this.host.values, valuePath(this, pluginOpts.label ?? key), api)
+      api.persistPath = valuePath(this, pluginOpts.label ?? key)
+      persistValue(this.host.values, api.persistPath, api)
     }
+    // after the saved value lands, so restoring it isn't an edit
+    if (this.host.onSettle && !pluginOpts.readonly) api.trackSettled(this.host.onSettle)
     applyVisibility(api, { showIf, hidden, disabled })
     return api
   }
@@ -326,6 +349,35 @@ export function walkBindings(item: Item, fn: (binding: BindingApi<unknown>) => v
   else if (item instanceof TabApi) for (const page of item.pages) walkBindings(page, fn)
 }
 
+/**
+ * Collect the visible overridden rows under `item`, opening whatever hides
+ * them: collapsed folders expand, and a tab whose current page holds none
+ * switches to the first page that does. Returns whether any were found.
+ */
+export function revealOverridden(item: Item, found: BindingApi<unknown>[]): boolean {
+  if (item.hidden) return false
+  if (item instanceof BindingApi) {
+    if (!item.overridden) return false
+    found.push(item)
+    return true
+  }
+  if (item instanceof TabApi) {
+    const hits = item.pages.map((page) => revealOverridden(page, found))
+    if (!hits[item.selectedIndex]) {
+      const first = hits.indexOf(true)
+      if (first >= 0) item.selectedIndex = first
+    }
+    return hits.includes(true)
+  }
+  if (item instanceof Container) {
+    let any = false
+    for (const child of item.children) if (revealOverridden(child, found)) any = true
+    if (any && item instanceof FolderApi) item.expanded = true
+    return any
+  }
+  return false
+}
+
 /** visit every item under `root`, including tab pages that are not in `children` */
 function walkItems(item: Item, fn: (item: Item) => void): void {
   fn(item)
@@ -357,6 +409,10 @@ export class BindingApi<T> extends Item {
   readonly value: Value<T>
   /** the value the code declared, restored by reset() */
   readonly defaultValue: T
+  /** internal: where this row's value persists; null when it doesn't */
+  persistPath: string | null = null
+  /** reads the app instead of editing it (readonly) */
+  readonly monitor: boolean
   private bindingEmitter = new Emitter<BindingEvents<T>>()
   private labelEl: HTMLElement | null = null
   private labelText: string
@@ -369,6 +425,7 @@ export class BindingApi<T> extends Item {
   ) {
     super()
     this.key = key
+    this.monitor = options.readonly === true
     const initial = target[key] as T
     this.defaultValue = initial
     const label = options.label ?? key
@@ -398,6 +455,7 @@ export class BindingApi<T> extends Item {
       this.labelEl = h('div', 'tiao-label', label)
       this.element = h('div', 'tiao-row', this.labelEl, h('div', 'tiao-control', view.element))
     }
+    rowBindings.set(this.element, this as BindingApi<unknown>)
 
     // clicking the row outside the concrete control activates it (focus input, open picker, ...);
     // long-pressing the label starts a scrub/drag when the plugin supports it
@@ -499,6 +557,43 @@ export class BindingApi<T> extends Item {
   /** restore the value the code declared (and write it back to the target) */
   reset(): void {
     this.value.set(this.defaultValue)
+  }
+
+  /**
+   * internal: report each settled change with the value it replaced. Drag
+   * previews don't count, so a whole drag reports once, from where it began.
+   */
+  trackSettled(fn: SettleListener): void {
+    let committed = this.value.get()
+    this.disposers.push(
+      this.value.subscribe((v, meta) => {
+        if (meta.sample || meta.last === false) return
+        const from = committed
+        committed = v
+        // the app changed the bound object itself; nothing to undo
+        if (meta.source === 'refresh' || sameValue(from, v)) return
+        fn(this as BindingApi<unknown>, from, v)
+      }),
+    )
+  }
+
+  /** an editable row whose value differs from the default the code declared */
+  get overridden(): boolean {
+    return !this.monitor && !sameValue(this.value.get(), this.defaultValue)
+  }
+
+  /** internal: outline the row in the accent for a moment */
+  flash(): void {
+    const el = this.element
+    clearTimeout(flashTimers.get(el))
+    el.classList.remove('tiao-row-flash')
+    // restart the animation when a flash is already running
+    void el.offsetWidth
+    el.classList.add('tiao-row-flash')
+    flashTimers.set(
+      el,
+      setTimeout(() => el.classList.remove('tiao-row-flash'), FLASH_MS),
+    )
   }
 
   override dispose(): void {

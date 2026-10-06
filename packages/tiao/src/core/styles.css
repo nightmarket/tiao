@@ -1,3 +1,19 @@
+/*
+ * Global Font setting. ABC Areal is licensed, so tiao never ships the file:
+ * the page declares an @font-face for "ABC Areal Superfamily Variable" (or
+ * the system has it installed), else these fall through to the system stack.
+ * One variable file carries both faces: its MONO axis selects the mono one
+ * for the slots System draws in mono (labels, values).
+ */
+:root[data-tiao-font="areal"] {
+  --tiao-face-ui:
+    "ABC Areal Superfamily Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    sans-serif;
+  --tiao-face-mono:
+    "ABC Areal Superfamily Variable", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --tiao-face-mono-settings: "MONO" 100;
+}
+
 :root {
   --tiao-styles-loaded: 1;
   /* the docked sidebar's footprint, for fixed page chrome body padding can't reach */
@@ -33,7 +49,7 @@
   --tiao-titlebar-bg: rgba(15, 23, 42, 0.055);
   --tiao-folder-caret: color-mix(in srgb, var(--tiao-fg) 32%, var(--tiao-bg-solid));
   --tiao-folder-caret-hover: color-mix(in srgb, var(--tiao-fg) 55%, var(--tiao-bg-solid));
-  --tiao-depth-line: color-mix(in srgb, var(--tiao-fg) 12%, var(--tiao-bg-solid));
+  --tiao-depth-line: color-mix(in srgb, var(--tiao-fg) 6%, var(--tiao-bg-solid));
   --tiao-depth-line-hover: color-mix(in srgb, var(--tiao-fg) 30%, var(--tiao-bg-solid));
   --tiao-depth-line-active: color-mix(in srgb, var(--tiao-fg) 45%, var(--tiao-bg-solid));
   --tiao-focus: color-mix(in srgb, var(--tiao-fg) 32%, var(--tiao-bg-solid));
@@ -60,10 +76,30 @@
   --tiao-shadow-raised: 0 1px 2px rgba(15, 23, 42, 0.12), 0 0 0 1px rgba(15, 23, 42, 0.05);
   --tiao-backdrop-filter: blur(16px) saturate(1.2);
   --tiao-overlay-filter: blur(3px) saturate(1.05);
-  --tiao-font:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --tiao-font-mono:
-    ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  /* the --tiao-face-* fallbacks are the System font; the global Font setting
+     fills them in (see :root[data-tiao-font] below) */
+  --tiao-font: var(
+    --tiao-face-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    "Helvetica Neue",
+    Arial,
+    sans-serif
+  );
+  --tiao-font-mono: var(
+    --tiao-face-mono,
+    ui-monospace,
+    "SF Mono",
+    SFMono-Regular,
+    Menlo,
+    Consolas,
+    "Liberation Mono",
+    monospace
+  );
+  /* paired with every --tiao-font-mono use, for faces whose mono is an axis */
+  --tiao-font-mono-settings: var(--tiao-face-mono-settings, normal);
   --tiao-line-height: 1.35;
   --tiao-font-size: 11px;
   --tiao-font-size-mono: 10px;
@@ -251,7 +287,8 @@
   --tiao-shadow-raised: 0 1px 3px rgba(17, 17, 27, 0.4);
 }
 
-.tiao-pane.tiao-size-s {
+/* the notch follows the global font size and spacing too */
+:is(.tiao-pane, .tiao-notch).tiao-size-s {
   --tiao-font-size: 10px;
   --tiao-font-size-mono: 9px;
   --tiao-row-height: 15px;
@@ -264,7 +301,7 @@
   --tiao-radius: 6px;
 }
 
-.tiao-pane.tiao-size-l {
+:is(.tiao-pane, .tiao-notch).tiao-size-l {
   --tiao-font-size: 12px;
   --tiao-font-size-mono: 11px;
   --tiao-row-height: 22px;
@@ -277,7 +314,7 @@
   --tiao-radius: 8px;
 }
 
-.tiao-pane.tiao-spacing-m {
+:is(.tiao-pane, .tiao-notch).tiao-spacing-m {
   --tiao-row-pad-y: 3px;
   --tiao-rack-pad-y: 4px;
   --tiao-folder-pad-y: 5px;
@@ -286,7 +323,7 @@
   --tiao-tree-pad: 8px;
 }
 
-.tiao-pane.tiao-spacing-l {
+:is(.tiao-pane, .tiao-notch).tiao-spacing-l {
   --tiao-row-pad-y: 5px;
   --tiao-rack-pad-y: 6px;
   --tiao-folder-pad-y: 7px;
@@ -356,19 +393,23 @@
 
 /* ---- notch: global pane controls, flush against the top edge ---- */
 .tiao-notch {
-  --tiao-notch-height: 22px;
+  /* icons track the global font size: 12 / 14 / 16px at S / M / L */
+  --tiao-notch-icon: calc(var(--tiao-icon-size) + 2px);
 
   position: fixed;
   top: 0;
-  left: 50%;
+  /* centered by layout, which snaps to whole pixels; translate(-50%) would
+     put an odd width on a half pixel and blur every icon on 1x displays */
+  left: 0;
+  right: 0;
+  margin-inline: auto;
   z-index: 20000;
-  /* translate(-50%, 0) so hide/show can interpolate Y without fighting centering */
-  transform: translate(-50%, 0);
+  transform: translateY(0);
   display: flex;
   align-items: center;
   gap: 2px;
-  width: auto;
-  height: var(--tiao-notch-height);
+  width: max-content;
+  height: calc(var(--tiao-notch-icon) + 10px);
   padding: 0 4px;
   border-radius: 0 0 var(--tiao-radius) var(--tiao-radius);
   box-shadow: var(--tiao-shadow-raised);
@@ -387,24 +428,28 @@
     .tiao-notch-near,
     :hover,
     :has(:focus-visible),
-    :has(.tiao-pane-menu.tiao-open)
+    :has(.tiao-pane-menu.tiao-open, .tiao-import.tiao-open)
   ) {
   opacity: 0;
   box-shadow: none;
-  transform: translate(-50%, -100%);
+  transform: translateY(-100%);
   pointer-events: none;
 }
 .tiao-notch-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
+  width: calc(var(--tiao-notch-icon) + 6px);
+  height: calc(var(--tiao-notch-icon) + 6px);
   color: var(--tiao-fg-dim);
   border-radius: var(--tiao-radius-sm);
   transition:
     color 0.12s ease,
     background 0.12s ease;
+}
+.tiao-notch-btn .tiao-icon {
+  width: var(--tiao-notch-icon);
+  height: var(--tiao-notch-icon);
 }
 .tiao-notch-btn:hover {
   color: var(--tiao-fg);
@@ -418,9 +463,32 @@
 }
 .tiao-notch-sep {
   width: 1px;
-  height: 11px;
+  height: calc(var(--tiao-notch-icon) - 1px);
   margin: 0 2px;
   background: var(--tiao-border);
+}
+/* "3 set": rows changed from their code defaults */
+.tiao-notch-count {
+  /* button height, so its tooltip drops to the same line as theirs */
+  display: flex;
+  align-items: center;
+  height: calc(var(--tiao-notch-icon) + 6px);
+  padding: 0 3px 0 2px;
+  color: var(--tiao-fg-soft);
+  font-family: var(--tiao-font-mono);
+  font-variation-settings: var(--tiao-font-mono-settings);
+  font-size: var(--tiao-font-size-mono);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  white-space: nowrap;
+}
+.tiao-notch-count-zero {
+  color: var(--tiao-fg-faint);
+}
+.tiao-notch-btn:disabled {
+  color: var(--tiao-fg-faint);
+  background: none;
+  cursor: default;
 }
 
 /* ---- dock: panes collected in a sidebar the page lays out beside ---- */
@@ -464,10 +532,6 @@
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: none;
-  scrollbar-width: none;
-}
-.tiao-dock-body::-webkit-scrollbar {
-  display: none;
 }
 /* invisible strip along the sidebar's page-facing edge; dragging it resizes */
 .tiao-dock-resize {
@@ -533,6 +597,17 @@
   pointer-events: none;
 }
 
+/* every scroller in tiao scrolls without a visible bar, so overflow never
+   changes a content width either */
+:where(.tiao-pane, .tiao-notch, .tiao-dock),
+:where(.tiao-pane, .tiao-notch, .tiao-dock) * {
+  scrollbar-width: none;
+}
+:where(.tiao-pane, .tiao-notch, .tiao-dock)::-webkit-scrollbar,
+:where(.tiao-pane, .tiao-notch, .tiao-dock) *::-webkit-scrollbar {
+  display: none;
+}
+
 /* ---- reset (:where keeps specificity at zero so component classes win) ---- */
 :where(.tiao-pane, .tiao-notch, .tiao-dock) :where(button, input, select) {
   font: inherit;
@@ -552,6 +627,15 @@
 :where(.tiao-pane, .tiao-dock) input {
   outline: none;
   caret-color: var(--tiao-accent);
+}
+/* hidden twin of an axis-styled input, measured to place the custom caret */
+.tiao-caret-measure {
+  position: absolute;
+  top: 0;
+  left: 0;
+  visibility: hidden;
+  white-space: pre;
+  pointer-events: none;
 }
 /* custom 2px caret drawn over focused pane inputs (the native bar is too
    thin to notice); the native caret is hidden while this one is active */
@@ -597,6 +681,7 @@
   .tiao-graph-label
 ) {
   font-family: var(--tiao-font-mono);
+  font-variation-settings: var(--tiao-font-mono-settings);
   font-size: var(--tiao-font-size-mono);
 }
 .tiao-pane .tiao-pane-title,
@@ -669,9 +754,11 @@
    it left); clicks pass through to the collapse button / icons underneath */
 .tiao-pane-title {
   position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
+  /* inset + auto margins center it on whole pixels, unlike translate(-50%) */
+  inset: 0;
+  margin: auto;
+  width: fit-content;
+  height: fit-content;
   max-width: calc(100% - 104px);
   pointer-events: none;
   text-align: center;
@@ -748,6 +835,7 @@
   border-radius: var(--tiao-radius-sm);
   background: var(--tiao-surface);
   font-family: var(--tiao-font-mono);
+  font-variation-settings: var(--tiao-font-mono-settings);
   font-size: var(--tiao-font-size-mono);
 }
 .tiao-search-input::placeholder {
@@ -772,15 +860,10 @@
   overflow: hidden;
   min-height: 0;
 }
-/* scrollbar is hidden so overflow never changes the content width */
 .tiao-pane > .tiao-pane-body > .tiao-pane-clip {
   max-height: calc(var(--tiao-max-height) - var(--tiao-titlebar-height));
   overflow-y: auto;
   overscroll-behavior: none;
-  scrollbar-width: none;
-}
-.tiao-pane > .tiao-pane-body > .tiao-pane-clip::-webkit-scrollbar {
-  display: none;
 }
 /* floating panes never grow past the window height either */
 .tiao-pane.tiao-floating > .tiao-pane-body > .tiao-pane-clip {
@@ -822,6 +905,27 @@
 .tiao-row:hover::before,
 .tiao-row.tiao-row-active::before {
   background: var(--tiao-hover);
+}
+/* the row a right-click opened the row toolbar for */
+.tiao-row.tiao-row-context::before {
+  background: var(--tiao-hover);
+}
+/* the notch's "show changed" pass: an accent outline that holds, then fades
+   (2s, matching FLASH_MS in blade.ts) */
+.tiao-row.tiao-row-flash::before {
+  /* full-width rows hide their hover pill; the outline still shows */
+  display: block;
+  box-shadow: inset 0 0 0 1px var(--tiao-accent);
+  animation: tiao-row-flash 2s ease-in forwards;
+}
+@keyframes tiao-row-flash {
+  0%,
+  70% {
+    box-shadow: inset 0 0 0 1px var(--tiao-accent);
+  }
+  100% {
+    box-shadow: inset 0 0 0 1px transparent;
+  }
 }
 /* while a row is interacting, freeze hover on that row and mute others */
 .tiao-pane:has(.tiao-row-active) .tiao-row:not(.tiao-row-active):hover::before {
@@ -934,6 +1038,7 @@
   color: var(--tiao-fg-dim);
   font-weight: 400;
   font-family: var(--tiao-font-mono);
+  font-variation-settings: var(--tiao-font-mono-settings);
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum" 1;
   line-height: 1;
@@ -972,8 +1077,11 @@
 .tiao-folder-line::after {
   content: "";
   position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
+  /* layout-centered so the 1px bar snaps to a whole pixel instead of
+     straddling two (translate(-50%) would leave it half a pixel off) */
+  left: 0;
+  right: 0;
+  margin-inline: auto;
   background: currentColor;
 }
 .tiao-folder-line::before {
@@ -1024,7 +1132,7 @@
 /* opaque mixes toward the pane background (no alpha, so the cap dots and the
    line overlap without stacking artifacts) */
 .tiao-folder-colored > .tiao-folder-body > .tiao-folder-line {
-  color: color-mix(in srgb, var(--tiao-folder-color) 12%, var(--tiao-bg-solid));
+  color: color-mix(in srgb, var(--tiao-folder-color) 6%, var(--tiao-bg-solid));
 }
 .tiao-folder-colored:hover > .tiao-folder-body > .tiao-folder-line {
   color: color-mix(in srgb, var(--tiao-folder-color) 30%, var(--tiao-bg-solid));
@@ -1347,6 +1455,7 @@
   background: var(--tiao-fg);
   color: var(--tiao-bg-solid);
   font-family: var(--tiao-font-mono);
+  font-variation-settings: var(--tiao-font-mono-settings);
   font-size: var(--tiao-font-size-mono);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -1360,6 +1469,94 @@
   margin-left: -3px;
   border: 3px solid transparent;
   border-top-color: var(--tiao-fg);
+}
+
+/* ---- row toolbar: actions for a right-clicked row (see row-toolbar.ts).
+   One shared element on <body>, moved beside whichever pane was clicked;
+   row-toolbar.ts copies that pane's theme tokens onto it ---- */
+.tiao-row-toolbar {
+  position: fixed;
+  /* tooltips sit one above */
+  z-index: 2147483646;
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  background: var(--tiao-bg-solid);
+  border-radius: var(--tiao-radius);
+  box-shadow: var(--tiao-shadow-popup);
+}
+.tiao-row-toolbar-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(var(--tiao-icon-size) + 8px);
+  height: calc(var(--tiao-icon-size) + 8px);
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: var(--tiao-radius-sm);
+  background: none;
+  color: var(--tiao-fg-dim);
+  cursor: pointer;
+  transition:
+    color 0.12s ease,
+    background 0.12s ease;
+}
+.tiao-row-toolbar-btn .tiao-icon {
+  width: calc(var(--tiao-icon-size) + 2px);
+  height: calc(var(--tiao-icon-size) + 2px);
+}
+.tiao-row-toolbar-btn:hover {
+  color: var(--tiao-fg);
+  background: var(--tiao-hover);
+}
+.tiao-row-toolbar-btn:focus-visible {
+  outline: 1.5px solid var(--tiao-focus);
+  outline-offset: 1px;
+}
+.tiao-row-toolbar-btn:disabled {
+  color: var(--tiao-fg-faint);
+  background: none;
+  cursor: default;
+}
+
+/* ---- tooltip: short label dropped below an icon button (see tooltip.ts).
+   One shared element on <body>, above everything; tooltip.ts copies the
+   trigger's theme tokens onto it ---- */
+.tiao-tooltip {
+  position: fixed;
+  z-index: 2147483647;
+  padding: 3px 6px;
+  border-radius: var(--tiao-radius-sm);
+  background: var(--tiao-fg);
+  color: var(--tiao-bg-solid);
+  font-family: var(--tiao-font);
+  font-size: var(--tiao-font-size);
+  line-height: 1.2;
+  white-space: nowrap;
+  pointer-events: none;
+  animation: tiao-tooltip-in 0.12s ease-out;
+}
+/* caret under the trigger's center, even when the bubble is clamped aside */
+.tiao-tooltip::before {
+  content: "";
+  position: absolute;
+  bottom: 100%;
+  left: var(--tiao-tooltip-arrow, 50%);
+  margin-left: -3px;
+  border: 3px solid transparent;
+  border-bottom-color: var(--tiao-fg);
+}
+@keyframes tiao-tooltip-in {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tiao-tooltip {
+    animation: none;
+  }
 }
 
 /* ---- angle: mini dial + circular picker (0° at 12 o'clock, clockwise) ---- */
@@ -1585,20 +1782,6 @@
   max-height: 240px;
   overflow-y: auto;
   overscroll-behavior: contain;
-  /* thumb only, no track — matches .tiao-monitor-log */
-  scrollbar-width: thin;
-  scrollbar-color: var(--tiao-fg-faint) transparent;
-}
-.tiao-select-menu::-webkit-scrollbar {
-  width: 6px;
-  background: transparent;
-}
-.tiao-select-menu::-webkit-scrollbar-track {
-  background: transparent;
-}
-.tiao-select-menu::-webkit-scrollbar-thumb {
-  background: var(--tiao-fg-faint);
-  border-radius: var(--tiao-radius-sm);
 }
 .tiao-select-option {
   display: flex;
@@ -1650,12 +1833,79 @@
   left: auto;
   right: calc(100% + 6px);
 }
-/* the notch bar is too narrow to open beside: drop centered underneath it */
+/* the notch bar is too narrow to open beside: drop centered underneath it.
+   Centered by a fixed half-width margin, not translate(-50%), which would
+   land an odd width on a half pixel and blur it on 1x displays */
 .tiao-pane-menu.tiao-menu-below {
   top: calc(100% + 6px);
   left: 50%;
   right: auto;
-  transform: translateX(-50%);
+  box-sizing: border-box;
+  width: 176px;
+  margin-left: -88px;
+}
+/* the notch's paste box for imported settings, dropped like the settings
+   menu; content insets match a pane's rack + row padding at this spacing */
+.tiao-import {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  z-index: 100;
+  display: none;
+  flex-direction: column;
+  gap: calc(2 * var(--tiao-row-pad-y));
+  box-sizing: border-box;
+  width: 280px;
+  margin-left: -140px;
+  padding: calc(4px + var(--tiao-rack-pad-y) + var(--tiao-row-pad-y))
+    calc(4px + var(--tiao-rack-pad-x) + var(--tiao-row-pad-x));
+  background: var(--tiao-bg-solid);
+  border-radius: var(--tiao-radius);
+  box-shadow: var(--tiao-shadow-popup);
+}
+.tiao-import.tiao-open {
+  display: flex;
+}
+.tiao-import-input {
+  display: block;
+  width: 100%;
+  height: 140px;
+  padding: 4px 6px;
+  font: inherit;
+  font-family: var(--tiao-font-mono);
+  font-variation-settings: var(--tiao-font-mono-settings);
+  font-size: var(--tiao-font-size-mono);
+  line-height: var(--tiao-line-height);
+  color: var(--tiao-fg);
+  background: var(--tiao-surface);
+  border: none;
+  border-radius: var(--tiao-radius-sm);
+  outline: none;
+  resize: vertical;
+  box-sizing: border-box;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.tiao-import-input::placeholder {
+  color: var(--tiao-fg-dim);
+}
+.tiao-import-input:focus-visible {
+  outline: 1.5px solid var(--tiao-focus);
+  outline-offset: 1px;
+}
+.tiao-import-status {
+  padding: 0 2px;
+  color: var(--tiao-fg-soft);
+}
+.tiao-import-status:empty {
+  display: none;
+}
+.tiao-button.tiao-import-apply {
+  color: var(--tiao-accent-fg);
+  background: var(--tiao-accent);
+}
+.tiao-button.tiao-import-apply:hover {
+  filter: brightness(1.08);
 }
 /* the embedded settings pane inherits the shell's chrome; it is created at
    size s so it reads as a subpane of the host */
@@ -1960,6 +2210,7 @@
 .tiao-pad-axis-label {
   position: absolute;
   font-family: var(--tiao-font-mono);
+  font-variation-settings: var(--tiao-font-mono-settings);
   font-size: 8px;
   line-height: 1;
   color: var(--tiao-fg-dim);
@@ -2034,24 +2285,10 @@
   overflow-y: auto;
   overscroll-behavior: contain;
   font-family: var(--tiao-font-mono);
+  font-variation-settings: var(--tiao-font-mono-settings);
   font-size: var(--tiao-font-size-mono);
   color: var(--tiao-fg-soft);
   font-variant-numeric: tabular-nums;
-  /* thumb only, no track/gutter; the faint tier follows the theme */
-  scrollbar-width: thin;
-  scrollbar-color: var(--tiao-fg-faint) transparent;
-}
-/* WebKit fallback (Safari ignores scrollbar-color): same thumb-only look */
-.tiao-monitor-log::-webkit-scrollbar {
-  width: 6px;
-  background: transparent;
-}
-.tiao-monitor-log::-webkit-scrollbar-track {
-  background: transparent;
-}
-.tiao-monitor-log::-webkit-scrollbar-thumb {
-  background: var(--tiao-fg-faint);
-  border-radius: var(--tiao-radius-sm);
 }
 
 /* ---- edge resize: invisible strips straddling the pane edges ---- */

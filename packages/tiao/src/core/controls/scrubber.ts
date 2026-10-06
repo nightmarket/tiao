@@ -41,6 +41,7 @@ export function applyOverlayTheme(overlay: HTMLElement, from: Element): void {
     '--tiao-border',
     '--tiao-accent',
     '--tiao-font-mono',
+    '--tiao-font-mono-settings',
     '--tiao-font-size-mono',
     '--tiao-radius',
     '--tiao-radius-sm',

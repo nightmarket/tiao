@@ -92,12 +92,23 @@ Storage stays out of the way of the frame budget: each key is parsed once rather
 ### Pane chrome
 
 - `anchor`: any corner, side center, or `'center'` (`'top-left'`, `'top-center'`, `'right-center'`, ...), or `container: element` for inline panes
-- Hover the title bar for a gear icon (or right-click the pane) to open the Pane Settings panel: toggle dragging, switch themes (system, light, dark, solarized, nord, catppuccin), pick the accent color, and jump between the 9 anchor positions on a mini window that mirrors your viewport's aspect ratio. System follows `prefers-color-scheme` and updates when the OS theme changes.
+- Right-click an editable row for a small toolbar beside the pane; its one action so far resets that row to its code default.
+- Hover the title bar for a gear icon (or right-click the title bar) to open the Pane Settings panel: toggle dragging, switch themes (system, light, dark, solarized, nord, catppuccin), pick the accent color, and jump between the 9 anchor positions on a mini window that mirrors your viewport's aspect ratio. System follows `prefers-color-scheme` and updates when the OS theme changes.
 - The search icon in the title bar opens a filter row: rows are matched by label/title, folders holding a match are forced open, and a folder-title match keeps its whole subtree visible. `pane.filter(query)` / `pane.searchOpen` do the same programmatically
 - `draggable: true` (default for floating panes); drag position, anchor, and the draggable toggle persist to `localStorage` when the pane has an `id`
 - `toggleKey: '\`'` toggles that pane's visibility; `pane.hidden`, `pane.expanded` are settable
 - Press `H` to hide/show all floating panes (skipped while typing); `Pane.toggleAll()` does the same programmatically.
-- A small notch at the top edge of the window holds the global controls: hide/show every floating pane (same as `H`), dock/undock them into an inline sidebar the page lays out beside (`Pane.toggleDock()` / `Pane.docked`), a settings gear, and reset every bound value and pane position to its code default (`Pane.resetValues()`). `notch: false` keeps a pane from mounting it.
+- A small notch at the top edge of the window holds the global controls: hide/show every floating pane (same as `H`), dock/undock them into an inline sidebar the page lays out beside (`Pane.toggleDock()` / `Pane.docked`), a settings gear, undo/redo over the last 10 value edits (`Pane.undo()` / `Pane.redo()`; a drag, a global reset, or an import is one step), a count of the rows changed from their code defaults (`Pane.countOverrides()`) with a button that outlines each of them in the accent for two seconds, opening any hidden pane, collapsed folder, or tab page in the way (`Pane.revealOverrides()`), copy and import of every persisted value as JSON (`Pane.exportValues()` / `Pane.importValues()`), and reset every bound value and pane position to its code default (`Pane.resetValues()`). `notch: false` keeps a pane from mounting it.
+- The notch gear's Font dropdown picks the typeface for every pane (`Pane.setFont()` / `Pane.font`): `System` (the default stack) or `ABC Areal`, whose one variable file supplies both faces: regular for titles and headings, and its mono (the `MONO` axis) for the labels and values System draws in mono. ABC Areal is a licensed Dinamo font, so tiao does not ship it; declare it on your page and the panes pick it up, otherwise they fall back to the system stack:
+
+  ```css
+  @font-face {
+    font-family: 'ABC Areal Superfamily Variable';
+    src: url('/fonts/ABCArealSuperfamilyVariable.woff2') format('woff2');
+    font-weight: 400 700;
+    font-style: oblique 0deg 12deg;
+  }
+  ```
 - The notch gear opens the global settings panel: font size, either `Small` (each pane's own declared size, the default) or `Normal` (every floating pane at size `l`) via `Pane.setFontSize()` / `Pane.fontSize`; hiding, on by default, which makes the notch fully invisible until the pointer comes near the top edge anywhere across the window; glass, off by default, which turns floating panes and the notch translucent and frosted (`Pane.setGlass()` / `Pane.glass`) at the cost of a GPU blur every frame the page underneath changes; plus theme (light, dark, or system), style, accent, and numbering for every pane in both views. Each change is broadcast — floating panes, docked panes, and the sidebar all take it and save it as their own, so a later per-pane tweak still sticks, and panes mounted afterwards inherit it unless they have saved chrome of their own. All of it persists under `tiao:notch`.
 - Docked panes stack flush and square in the sidebar and hand their chrome over to it: one header search filters every pane at once, one settings menu sets theme, style, accent, and numbering for all of them, and anchors the sidebar left or right. Its outer edge drags to resize (width in `--tiao-dock-width`, default `300px`). All of it is separate state under `tiao:dock` — each pane keeps its floating theme and numbering and gets them back on undock.
 - `order: 99` sets where a pane sits in the sidebar (and in a shared-anchor pack), z-index style: lower sorts first, the default is `0`, and panes sharing a value keep their creation order. Panes created while the sidebar is open slot into place rather than landing at the end, and `pane.order` re-sorts a live pane. The export pane defaults to `99` so it stays out of the way at the bottom.
@@ -128,7 +139,7 @@ mountPane({ theme: { accent: '#f0f', '--tiao-width': '320px' } }, (pane) => {
 
 Graph monitors use the theme's neutral gray independently of `pane.accent`, with a light fill (`--tiao-graph-fill-opacity`, default `0.28`) over a barely tinted plot background so overlay labels stay readable. Override `--tiao-graph-accent` or `--tiao-graph-fill-opacity` only when you want a custom look.
 
-Theme, accent, and style are also editable from the Pane Settings panel (gear icon or right-click), and persist to `localStorage` when the pane has an `id`. Style is orthogonal to theme: **Bouba** = rounded corners / soft shadow; **Kiki** = sharp corners / hairline elevation. Either can be frosted with the global Glass setting.
+Theme, accent, and style are also editable from the Pane Settings panel (gear icon or right-click the title bar), and persist to `localStorage` when the pane has an `id`. Style is orthogonal to theme: **Bouba** = rounded corners / soft shadow; **Kiki** = sharp corners / hairline elevation. Either can be frosted with the global Glass setting.
 
 ## React
 
