@@ -7,6 +7,7 @@ import {
   parseColor,
   serializeColor,
 } from './controls/color-model'
+import { readoutOffset } from './controls/slider'
 import { setEwCursor } from './dom'
 import { Pane } from './pane'
 import { registerPlugin } from './plugin'
@@ -3036,6 +3037,35 @@ describe('showIf and construction-time visibility', () => {
     gain.value.set(0.9, { source: 'ui', last: true })
     expect(row.hidden).toBe(false)
     pane.dispose()
+  })
+})
+
+describe('slider readout dodging', () => {
+  const geo = { trackWidth: 200, handleInset: 5, handleSize: 2, padding: 6 }
+  // 4 digits of a 6px-wide mono face; at rest they span x 170..194
+  const text = 24
+
+  it('stays home until the handle reaches the digits, then rides on its far side', () => {
+    expect(readoutOffset(geo, 50, text, 'end', false)).toEqual({ dodged: false, shift: 0 })
+    // bar 163..165: 5px clear, still home
+    expect(readoutOffset(geo, 85, text, 'end', false)).toEqual({ dodged: false, shift: 0 })
+    // bar 165..167: 3px clear, so the digits hop left and end 4px before it
+    expect(readoutOffset(geo, 86, text, 'end', false)).toEqual({ dodged: true, shift: -33 })
+    // at max the bar stops at its inset; the digits sit just inside it
+    expect(readoutOffset(geo, 100, text, 'end', true)).toEqual({ dodged: true, shift: -5 })
+  })
+
+  it('needs extra clearance to hop home, so it never flickers at the edge', () => {
+    expect(readoutOffset(geo, 84, text, 'end', false).dodged).toBe(false)
+    expect(readoutOffset(geo, 84, text, 'end', true).dodged).toBe(true)
+    expect(readoutOffset(geo, 83, text, 'end', true).dodged).toBe(false)
+  })
+
+  it('mirrors for a start readout and gives up when the far side has no room', () => {
+    expect(readoutOffset(geo, 0, text, 'start', false)).toEqual({ dodged: true, shift: 5 })
+    expect(readoutOffset(geo, 40, text, 'start', false)).toEqual({ dodged: false, shift: 0 })
+    const narrow = { ...geo, trackWidth: 30 }
+    expect(readoutOffset(narrow, 100, text, 'end', false)).toEqual({ dodged: false, shift: 0 })
   })
 })
 
