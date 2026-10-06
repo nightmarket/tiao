@@ -2,7 +2,7 @@ import { h } from '../dom'
 import type { InputPlugin, PluginContext, PluginView } from '../plugin'
 import { clamp, mapRange, nudge, snap } from '../util'
 import { createScrubber } from './scrubber'
-import { bindSliderTrack, createSliderTrack, setSliderFillRange } from './slider'
+import { bindSliderTrack, createSliderTrack, dodgeReadout, setSliderFillRange } from './slider'
 
 /**
  * Number input (tweakpane-style). With min & max it renders a full-width fill
@@ -46,8 +46,18 @@ function createSliderRow(ctx: PluginContext<number>, min: number, max: number): 
   scrub.element.classList.add('tiao-slider-num')
   const el = h('div', 'tiao-number', track, scrub.element)
 
+  const dodge = dodgeReadout({
+    el,
+    track,
+    readout: scrub.element,
+    input: scrub.input,
+    side: 'end',
+    onDispose: ctx.onDispose,
+  })
   const render = (v: number) => {
-    setSliderFillRange(track, 0, clamp(mapRange(v, min, max, 0, 100), 0, 100))
+    const pct = clamp(mapRange(v, min, max, 0, 100), 0, 100)
+    setSliderFillRange(track, 0, pct)
+    dodge(pct)
   }
   render(value.get())
   ctx.onDispose(value.subscribe(render))

@@ -23,6 +23,8 @@ export interface ScrubberOptions {
 
 export interface ScrubberApi {
   element: HTMLElement
+  /** the value field inside `element` */
+  input: HTMLInputElement
   activate: () => void
   /** start a scrub drag from an external pointer event (e.g. row long-press) */
   beginScrub: (ev: PointerEvent) => void
@@ -283,6 +285,7 @@ export function createScrubber(
 
   return {
     element: wrap,
+    input,
     activate: enterEdit,
     beginScrub: (ev) => {
       if (input.readOnly) runScrub(knob, ev)

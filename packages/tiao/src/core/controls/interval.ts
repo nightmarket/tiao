@@ -2,7 +2,7 @@ import { h } from '../dom'
 import type { InputPlugin, PluginContext, PluginView } from '../plugin'
 import { clamp, isRecord, mapRange, snap } from '../util'
 import { createComponentScrubber } from './scrubber'
-import { bindSliderTrack, createSliderTrack, setSliderFillRange } from './slider'
+import { bindSliderTrack, createSliderTrack, dodgeReadout, setSliderFillRange } from './slider'
 
 export interface IntervalValue {
   min: number
@@ -88,10 +88,23 @@ function createIntervalRow(ctx: PluginContext<IntervalValue>): PluginView {
 
   const el = h('div', 'tiao-number tiao-interval', track, minScrub.element, maxScrub.element)
 
+  const dodgeFor = (scrub: typeof minScrub, side: 'start' | 'end') =>
+    dodgeReadout({
+      el,
+      track,
+      readout: scrub.element,
+      input: scrub.input,
+      side,
+      onDispose: ctx.onDispose,
+    })
+  const dodgeMin = dodgeFor(minScrub, 'start')
+  const dodgeMax = dodgeFor(maxScrub, 'end')
   const render = (v: IntervalValue) => {
     const left = clamp(mapRange(v.min, rangeMin, rangeMax, 0, 100), 0, 100)
     const right = clamp(mapRange(v.max, rangeMin, rangeMax, 0, 100), 0, 100)
     setSliderFillRange(track, left, right)
+    dodgeMin(left)
+    dodgeMax(right)
   }
   render(value.get())
   ctx.onDispose(value.subscribe(render))
