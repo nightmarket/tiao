@@ -208,8 +208,10 @@ export function createNotch(host: NotchHost): Notch {
 
   let overrides = -1
   const syncValues = () => {
-    undoBtn.disabled = !host.history.canUndo()
-    redoBtn.disabled = !host.history.canRedo()
+    const canUndo = host.history.canUndo()
+    const canRedo = host.history.canRedo()
+    if (undoBtn.disabled === canUndo) undoBtn.disabled = !canUndo
+    if (redoBtn.disabled === canRedo) redoBtn.disabled = !canRedo
     const n = host.countOverrides()
     if (n === overrides) return
     overrides = n
@@ -218,11 +220,12 @@ export function createNotch(host: NotchHost): Notch {
     revealBtn.disabled = n === 0
   }
 
-  // sync runs per pane on a global toggle, so state changes gate the DOM work
+  // sync runs per pane mount and global toggle, so state changes gate the DOM
+  // work; the override count follows values instead (syncValues)
   let lastHidden: boolean | null = null
+  let lastDocked: boolean | null = null
   let lastHiding: boolean | null = null
   const sync = () => {
-    syncValues()
     const hidden = host.getHidden()
     if (hidden !== lastHidden) {
       lastHidden = hidden
@@ -233,9 +236,12 @@ export function createNotch(host: NotchHost): Notch {
     }
 
     const docked = host.getDocked()
-    dockBtn.setAttribute('aria-label', docked ? 'Undock panes' : 'Dock panes to sidebar')
-    dockBtn.setAttribute('aria-pressed', String(docked))
-    dockBtn.classList.toggle('tiao-notch-on', docked)
+    if (docked !== lastDocked) {
+      lastDocked = docked
+      dockBtn.setAttribute('aria-label', docked ? 'Undock panes' : 'Dock panes to sidebar')
+      dockBtn.setAttribute('aria-pressed', String(docked))
+      dockBtn.classList.toggle('tiao-notch-on', docked)
+    }
 
     // the retreat itself is CSS; this arms it and only then watches the pointer
     const hiding = host.hiding.get()
@@ -304,6 +310,7 @@ export function createNotch(host: NotchHost): Notch {
   )
 
   sync()
+  syncValues()
   doc.body.append(element)
 
   return {

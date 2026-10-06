@@ -69,11 +69,68 @@ export function readoutOffset(
 const NO_DODGE = { dodged: false, shift: 0 }
 
 /**
+ * One digit's width per readout type, keyed by the resolved font. Every
+ * slider in a pane shares a type, so the layout-forcing probe runs once per
+ * font rather than once per slider.
+ */
+const digitWidths = new Map<string, number>()
+
+function digitWidth(doc: Document, cs: CSSStyleDeclaration): number {
+  const key = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily} ${cs.fontVariationSettings} ${cs.letterSpacing}`
+  const cached = digitWidths.get(key)
+  if (cached !== undefined) return cached
+  // a DOM probe rather than canvas, which can't apply the variation axes a
+  // face like ABC Areal Mono relies on
+  const probe = doc.createElement('span')
+  probe.textContent = '0000000000'
+  const ps = probe.style
+  ps.position = 'absolute'
+  ps.visibility = 'hidden'
+  ps.whiteSpace = 'pre'
+  ps.fontStyle = cs.fontStyle
+  ps.fontWeight = cs.fontWeight
+  ps.fontSize = cs.fontSize
+  ps.fontFamily = cs.fontFamily
+  ps.fontVariationSettings = cs.fontVariationSettings
+  ps.fontVariantNumeric = cs.fontVariantNumeric
+  ps.letterSpacing = cs.letterSpacing
+  doc.body.append(probe)
+  const width = probe.getBoundingClientRect().width / 10
+  probe.remove()
+  if (width > 0) digitWidths.set(key, width)
+  return width
+}
+
+/** one observer for every slider track; entries carry the width, so no layout reads */
+const trackWidthListeners = new WeakMap<Element, (width: number) => void>()
+let trackObserver: ResizeObserver | null | undefined
+
+function observeTrackWidth(track: HTMLElement, onWidth: (width: number) => void): () => void {
+  if (trackObserver === undefined) {
+    trackObserver =
+      typeof ResizeObserver === 'undefined'
+        ? null
+        : new ResizeObserver((entries) => {
+            for (const e of entries) trackWidthListeners.get(e.target)?.(e.contentRect.width)
+          })
+  }
+  const observer = trackObserver
+  if (!observer) return () => {}
+  trackWidthListeners.set(track, onWidth)
+  observer.observe(track)
+  return () => {
+    observer.unobserve(track)
+    trackWidthListeners.delete(track)
+  }
+}
+
+/**
  * Keep a fill slider's value readout clear of its handlebar (see
- * readoutOffset). Geometry and the digit width are measured once and again
- * only on resize or when the pointer comes over the control (a theme or font
- * may have changed), so each value change costs a multiply and a transform.
- * Returns the per-render update, fed the handle's fill percentage.
+ * readoutOffset). The track width comes from a shared ResizeObserver and the
+ * rest of the geometry from computed style, re-read when the pointer comes
+ * over the control (a theme or font may have changed), so each value change
+ * costs a multiply and a transform. Returns the per-render update, fed the
+ * handle's fill percentage.
  */
 export function dodgeReadout(opts: {
   /** control root; hovering it refreshes the cached measurements */
@@ -86,6 +143,7 @@ export function dodgeReadout(opts: {
   onDispose(fn: () => void): void
 }): (handlePct: number) => void {
   const { el, track, readout, input, side } = opts
+  let trackWidth = 0
   let geo: ReadoutGeometry | null = null
   /** width of one digit: readouts are monospace, so text width is length × this */
   let advance = 0
@@ -93,30 +151,14 @@ export function dodgeReadout(opts: {
   let shift = 0
   let lastPct = -1
 
-  const measure = () => {
+  const readStyle = (): ReadoutGeometry | null => {
     const win = track.ownerDocument.defaultView
-    if (!win) return
+    if (!win) return null
     const trackCs = win.getComputedStyle(track)
     const inputCs = win.getComputedStyle(input)
-    // a DOM probe in the field's own type, since canvas can't apply the
-    // variation axes a face like ABC Areal Mono relies on
-    const probe = track.ownerDocument.createElement('span')
-    probe.textContent = '0000000000'
-    const ps = probe.style
-    ps.position = 'absolute'
-    ps.visibility = 'hidden'
-    ps.whiteSpace = 'pre'
-    ps.fontFamily = inputCs.fontFamily
-    ps.fontSize = inputCs.fontSize
-    ps.fontWeight = inputCs.fontWeight
-    ps.fontVariationSettings = inputCs.fontVariationSettings
-    ps.fontVariantNumeric = inputCs.fontVariantNumeric
-    ps.letterSpacing = inputCs.letterSpacing
-    readout.append(probe)
-    advance = probe.getBoundingClientRect().width / 10
-    probe.remove()
-    geo = {
-      trackWidth: track.clientWidth,
+    advance = digitWidth(track.ownerDocument, inputCs)
+    return {
+      trackWidth,
       handleInset: Number.parseFloat(trackCs.getPropertyValue('--tiao-handle-inset')) || 0,
       handleSize: Number.parseFloat(trackCs.getPropertyValue('--tiao-handle-size')) || 0,
       padding: Number.parseFloat(side === 'end' ? inputCs.paddingRight : inputCs.paddingLeft) || 0,
@@ -125,8 +167,10 @@ export function dodgeReadout(opts: {
 
   const update = (pct: number) => {
     lastPct = pct
-    if (!geo) measure()
-    if (!geo?.trackWidth || !advance) return
+    if (!trackWidth) return
+    geo ??= readStyle()
+    if (!geo || !advance) return
+    geo.trackWidth = trackWidth
     const next = readoutOffset(geo, pct, input.value.length * advance, side, dodged)
     if (next.shift !== shift) {
       shift = next.shift
@@ -139,17 +183,18 @@ export function dodgeReadout(opts: {
     }
   }
 
-  const remeasure = () => {
+  const restyle = () => {
     geo = null
     if (lastPct >= 0) update(lastPct)
   }
-  el.addEventListener('pointerenter', remeasure)
-  opts.onDispose(() => el.removeEventListener('pointerenter', remeasure))
-  if (typeof ResizeObserver !== 'undefined') {
-    const ro = new ResizeObserver(remeasure)
-    ro.observe(track)
-    opts.onDispose(() => ro.disconnect())
-  }
+  el.addEventListener('pointerenter', restyle)
+  opts.onDispose(() => el.removeEventListener('pointerenter', restyle))
+  opts.onDispose(
+    observeTrackWidth(track, (width) => {
+      trackWidth = width
+      if (lastPct >= 0) update(lastPct)
+    }),
+  )
   return update
 }
 

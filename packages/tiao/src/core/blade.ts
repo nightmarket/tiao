@@ -59,6 +59,9 @@ export interface TiaoChangeEvent<T = unknown> {
   source?: 'api' | 'ui' | 'refresh' | 'monitor' | undefined
 }
 
+/** items with a showIf predicate on the page; while none exist, edits skip the visibility walk */
+let showIfItems = 0
+
 export abstract class Item {
   abstract readonly element: HTMLElement
   private _parent: Container | null = null
@@ -97,6 +100,8 @@ export abstract class Item {
   /** when set, the predicate drives its own hidden flag (re-run after settled changes);
       it never overwrites a manual `hidden = true` */
   setShowIf(fn?: (() => boolean) | undefined): void {
+    if (fn && !this._showIf) showIfItems++
+    else if (!fn && this._showIf) showIfItems--
     this._showIf = fn
     if (fn) {
       this.syncShowIf()
@@ -137,6 +142,7 @@ export abstract class Item {
   dispose(): void {
     if (this.disposed) return
     this.disposed = true
+    if (this._showIf) showIfItems--
     for (const fn of this.disposers) fn()
     this.disposers = []
     this.element.remove()
@@ -169,7 +175,7 @@ export abstract class Container extends Item {
     this.emitter.emit('change', ev)
     if (this.parent) {
       this.parent.bubble(ev)
-    } else if (ev.last !== false && ev.source !== 'monitor') {
+    } else if (showIfItems > 0 && ev.last !== false && ev.source !== 'monitor') {
       walkItems(this, (item) => item.syncShowIf())
     }
   }
@@ -413,6 +419,9 @@ export class BindingApi<T> extends Item {
   persistPath: string | null = null
   /** reads the app instead of editing it (readonly) */
   readonly monitor: boolean
+  /** internal: `overridden` as of the notch's last count, so a drag frame that
+      doesn't cross the default can skip the recount */
+  counted = false
   private bindingEmitter = new Emitter<BindingEvents<T>>()
   private labelEl: HTMLElement | null = null
   private labelText: string

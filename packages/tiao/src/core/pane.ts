@@ -359,10 +359,51 @@ function packWrap(anchor: Anchor): 'left' | 'right' | null {
 let packing = false
 
 /**
+ * Global actions (H, dock, reveal, a viewport resize) touch every pane, and
+ * each pane on its own would re-pack its anchor and re-sync the notch, each a
+ * forced layout. Inside a batch those queue up and run once at the end.
+ */
+let batchDepth = 0
+/** anchors to re-pack per document; null re-packs all of them */
+const queuedPacks = new Map<Document, Set<Anchor> | null>()
+const queuedNotchSyncs = new Set<Document>()
+
+function batchPanes(fn: () => void): void {
+  batchDepth++
+  try {
+    fn()
+  } finally {
+    batchDepth--
+    if (batchDepth === 0) flushPaneBatch()
+  }
+}
+
+function flushPaneBatch(): void {
+  const packs = [...queuedPacks]
+  const syncs = [...queuedNotchSyncs]
+  queuedPacks.clear()
+  queuedNotchSyncs.clear()
+  for (const [doc, anchors] of packs) packAnchored(doc, anchors ?? undefined)
+  for (const doc of syncs) syncNotch(doc)
+}
+
+/**
  * Lay out every movable, visible, still-anchored pane in `doc` so siblings
  * that share an anchor sit along that edge instead of occupying one spot.
  */
-function packAnchored(doc: Document, only?: Anchor): void {
+function packAnchored(doc: Document, only?: Anchor | ReadonlySet<Anchor>): void {
+  if (batchDepth > 0) {
+    const queued = queuedPacks.get(doc)
+    if (queued === null) return
+    if (only === undefined) queuedPacks.set(doc, null)
+    else {
+      const set = queued ?? new Set<Anchor>()
+      if (typeof only === 'string') set.add(only)
+      else for (const a of only) set.add(a)
+      queuedPacks.set(doc, set)
+    }
+    return
+  }
   if (packing) return
   packing = true
   try {
@@ -371,30 +412,45 @@ function packAnchored(doc: Document, only?: Anchor): void {
       if (p.docked || p.hidden) continue
       const anchor = p.anchor
       if (!anchor) continue
-      if (only && anchor !== only) continue
+      if (only !== undefined && (typeof only === 'string' ? anchor !== only : !only.has(anchor))) {
+        continue
+      }
       const list = groups.get(anchor)
       if (list) list.push(p)
       else groups.set(anchor, [p])
     }
     const viewH = doc.defaultView?.innerHeight ?? 0
+    // every size is read before any pane moves, so layout is computed once
+    // rather than once per pane
+    const sized: { anchor: Anchor; list: Pane[]; sizes: PaneBox[] }[] = []
     for (const [anchor, list] of groups) {
       // order, then creation (panesIn walks the insertion-ordered floating set)
       list.sort((a, b) => a.order - b.order)
-      layoutAnchorGroup(anchor, list, viewH)
+      sized.push({ anchor, list, sizes: list.map(measurePane) })
     }
+    for (const { anchor, list, sizes } of sized) layoutAnchorGroup(anchor, list, sizes, viewH)
   } finally {
     packing = false
   }
 }
 
-function layoutAnchorGroup(anchor: Anchor, list: Pane[], viewH: number): void {
+interface PaneBox {
+  width: number
+  height: number
+}
+
+function measurePane(p: Pane): PaneBox {
+  return { width: p.element.offsetWidth, height: p.element.offsetHeight }
+}
+
+function layoutAnchorGroup(anchor: Anchor, list: Pane[], sizes: PaneBox[], viewH: number): void {
   if (packStack(anchor) === 'mid') {
-    const heights = list.map((p) => p.element.offsetHeight)
-    const total = heights.reduce((sum, h) => sum + h, 0) + PACK_GAP * Math.max(0, list.length - 1)
+    const total =
+      sizes.reduce((sum, s) => sum + s.height, 0) + PACK_GAP * Math.max(0, list.length - 1)
     let y = -total / 2
     for (let i = 0; i < list.length; i++) {
-      list[i]!.placePacked(y, 0)
-      y += heights[i]! + PACK_GAP
+      list[i]!.placePacked(y, 0, sizes[i]!)
+      y += sizes[i]!.height + PACK_GAP
     }
     return
   }
@@ -403,18 +459,70 @@ function layoutAnchorGroup(anchor: Anchor, list: Pane[], viewH: number): void {
   let stack = 0
   let column = 0
   let colWidth = 0
-  for (const p of list) {
-    const h = p.element.offsetHeight
-    const w = p.element.offsetWidth
-    if (wrap && stack > 0 && limit > 0 && stack + h > limit) {
+  for (let i = 0; i < list.length; i++) {
+    const size = sizes[i]!
+    if (wrap && stack > 0 && limit > 0 && stack + size.height > limit) {
       column += colWidth + PACK_GAP
       stack = 0
       colWidth = 0
     }
-    p.placePacked(stack, column)
-    stack += h + PACK_GAP
-    colWidth = Math.max(colWidth, w)
+    list[i]!.placePacked(stack, column, size)
+    stack += size.height + PACK_GAP
+    colWidth = Math.max(colWidth, size.width)
   }
+}
+
+/** one observer for every floating pane, so a resize burst re-packs each anchor once */
+let paneObserver: ResizeObserver | null | undefined
+const observedPanes = new WeakMap<Element, Pane>()
+
+function observePaneSize(pane: Pane): () => void {
+  if (paneObserver === undefined) {
+    paneObserver =
+      typeof ResizeObserver === 'undefined'
+        ? null
+        : new ResizeObserver((entries) => {
+            batchPanes(() => {
+              for (const e of entries) observedPanes.get(e.target)?.onSizeChange()
+            })
+          })
+  }
+  const observer = paneObserver
+  if (!observer) return () => {}
+  observedPanes.set(pane.element, pane)
+  observer.observe(pane.element)
+  return () => {
+    observer.unobserve(pane.element)
+    observedPanes.delete(pane.element)
+  }
+}
+
+/** one window-resize listener per document, coalesced to a frame */
+const viewportWatch = new WeakMap<Document, () => void>()
+
+function watchViewport(doc: Document): void {
+  const win = doc.defaultView
+  if (!win || viewportWatch.has(doc)) return
+  let raf = 0
+  const onResize = () => {
+    if (raf) return
+    raf = win.requestAnimationFrame(() => {
+      raf = 0
+      batchPanes(() => {
+        for (const p of panesIn(doc)) p.onViewportResize()
+      })
+    })
+  }
+  win.addEventListener('resize', onResize)
+  viewportWatch.set(doc, () => {
+    if (raf) win.cancelAnimationFrame(raf)
+    win.removeEventListener('resize', onResize)
+  })
+}
+
+function releaseViewport(doc: Document): void {
+  viewportWatch.get(doc)?.()
+  viewportWatch.delete(doc)
 }
 
 /** persistence is opt-out, but needs a stable id to key on */
@@ -528,24 +636,32 @@ function globalChrome(doc: Document): PaneChrome {
 function setGlobalChrome(doc: Document, patch: Partial<PaneChrome>): void {
   notchStore.patch(patch)
   writeDockState(patch)
-  for (const p of panesIn(doc)) p.adoptGlobalChrome(patch)
-  applyDockChrome(doc)
-  syncNotch(doc)
+  batchPanes(() => {
+    for (const p of panesIn(doc)) p.adoptGlobalChrome(patch)
+    applyDockChrome(doc)
+    syncNotch(doc)
+  })
 }
 
 function syncNotch(doc: Document): void {
+  if (batchDepth > 0) {
+    queuedNotchSyncs.add(doc)
+    return
+  }
   const notch = notches.get(doc)
   if (!notch) return
   // the notch re-declares the theme and size tokens, so it tracks the look
   // and scale the floating panes wear
   const el = notch.element
-  applyChrome(el, globalChrome(doc))
-  el.classList.toggle('tiao-glass', Pane.glass)
-  const size = paneSizeFor(Pane.fontSize)
+  const state = readNotchState()
+  applyChrome(el, resolveChrome(state, panesIn(doc)[0]))
+  el.classList.toggle('tiao-glass', state.glass ?? false)
+  const size = paneSizeFor(state.fontSize ?? 'small')
+  const spacing = state.spacing ?? 's'
   el.classList.toggle('tiao-size-s', size === 's')
   el.classList.toggle('tiao-size-l', size === 'l')
-  el.classList.toggle('tiao-spacing-m', Pane.spacing === 'm')
-  el.classList.toggle('tiao-spacing-l', Pane.spacing === 'l')
+  el.classList.toggle('tiao-spacing-m', spacing === 'm')
+  el.classList.toggle('tiao-spacing-l', spacing === 'l')
   notch.sync()
 }
 
@@ -572,6 +688,7 @@ function releaseNotch(doc: Document): void {
   closeDock(doc)
   releaseGlobalToggle(doc)
   releaseColorScheme(doc)
+  releaseViewport(doc)
 }
 
 /** the look of a pane, applied as a unit so the dock can swap it wholesale */
@@ -582,27 +699,30 @@ export interface PaneChrome {
   numbers: boolean
 }
 
-/** theme tokens only; `numbers` needs a Pane and is applied by setChrome */
+/**
+ * Theme tokens only; `numbers` needs a Pane and is applied by setChrome.
+ * These run on every pane and the notch for each global change, so they only
+ * write what differs: a no-op attribute or class write still invalidates style.
+ */
 function applyChrome(el: HTMLElement, chrome: PaneChrome): void {
   applyThemeClass(el, chrome.theme)
   applyStyleClass(el, chrome.style)
+  if (el.style.getPropertyValue('--tiao-accent') === chrome.accent) return
   if (chrome.accent) el.style.setProperty('--tiao-accent', chrome.accent)
   else el.style.removeProperty('--tiao-accent')
 }
 
 function applyThemeClass(el: HTMLElement, theme: PaneTheme): void {
   // preference stays on the element so a system change can find who to repaint
-  el.dataset.tiaoTheme = theme
-  const resolved = resolveTheme(theme, el.ownerDocument)
-  for (const cls of THEME_CLASSES) el.classList.remove(cls)
-  const next = THEME_CLASS[resolved]
-  if (next) el.classList.add(next)
+  if (el.dataset.tiaoTheme !== theme) el.dataset.tiaoTheme = theme
+  const next = THEME_CLASS[resolveTheme(theme, el.ownerDocument)]
+  // toggle(cls, force) leaves a class that is already right untouched
+  for (const cls of THEME_CLASSES) el.classList.toggle(cls, cls === next)
 }
 
 function applyStyleClass(el: HTMLElement, style: PaneStyle): void {
-  for (const cls of STYLE_CLASSES) el.classList.remove(cls)
   const next = STYLE_CLASS[style]
-  if (next) el.classList.add(next)
+  for (const cls of STYLE_CLASSES) el.classList.toggle(cls, cls === next)
 }
 
 /** inline --tiao-accent if set, else the value the current theme resolves to */
@@ -704,18 +824,19 @@ export class Pane extends Container {
    * beside it) or back out to their free positions. Returns the new state.
    */
   static toggleDock(doc: Document = document): boolean {
-    if (dockBody(doc)) {
-      for (const p of panesIn(doc)) p.undock()
-      closeDock(doc)
-    } else {
-      const body = ensureDock(createDockHost(doc))
-      for (const p of panesIn(doc)) p.dockInto(body)
-      applyDockChrome(doc)
-    }
-    const docked = dockBody(doc) !== null
-    writeDockState({ docked })
-    syncNotch(doc)
-    return docked
+    batchPanes(() => {
+      if (dockBody(doc)) {
+        for (const p of panesIn(doc)) p.undock()
+        closeDock(doc)
+      } else {
+        const body = ensureDock(createDockHost(doc))
+        for (const p of panesIn(doc)) p.dockInto(body)
+        applyDockChrome(doc)
+      }
+      writeDockState({ docked: dockBody(doc) !== null })
+      syncNotch(doc)
+    })
+    return dockBody(doc) !== null
   }
 
   /** how big floating panes currently draw */
@@ -766,9 +887,11 @@ export class Pane extends Container {
     const list = panesIn(doc)
     if (list.length === 0) return false
     const hide = list.some((p) => !p.hidden)
-    for (const p of list) p.hidden = hide
-    setDockVisible(doc, !hide)
-    syncNotch(doc)
+    batchPanes(() => {
+      for (const p of list) p.hidden = hide
+      setDockVisible(doc, !hide)
+      syncNotch(doc)
+    })
     return hide
   }
 
@@ -815,7 +938,8 @@ export class Pane extends Container {
     let count = 0
     for (const p of trackedPanes(doc)) {
       walkBindings(p, (b) => {
-        if (b.overridden) count++
+        b.counted = b.overridden
+        if (b.counted) count++
       })
     }
     return count
@@ -829,22 +953,24 @@ export class Pane extends Container {
   static revealOverrides(doc: Document = document): number {
     let total = 0
     let shown = false
-    for (const p of trackedPanes(doc)) {
-      const found: BindingApi<unknown>[] = []
-      for (const child of p.children) revealOverridden(child, found)
-      const first = found[0]
-      if (!first) continue
-      total += found.length
-      if (p.hidden) {
-        p.hidden = false
-        shown = true
+    batchPanes(() => {
+      for (const p of trackedPanes(doc)) {
+        const found: BindingApi<unknown>[] = []
+        for (const child of p.children) revealOverridden(child, found)
+        const first = found[0]
+        if (!first) continue
+        total += found.length
+        if (p.hidden) {
+          p.hidden = false
+          shown = true
+        }
+        p.expanded = true
+        for (const b of found) b.flash()
+        // after the folders finish opening, so the row is where it will stay
+        setTimeout(() => first.element.scrollIntoView?.({ block: 'nearest' }), FOLDER_EXPAND_MS)
       }
-      p.expanded = true
-      for (const b of found) b.flash()
-      // after the folders finish opening, so the row is where it will stay
-      setTimeout(() => first.element.scrollIntoView?.({ block: 'nearest' }), FOLDER_EXPAND_MS)
-    }
-    if (shown) setDockVisible(doc, true)
+      if (shown) setDockVisible(doc, true)
+    })
     return total
   }
 
@@ -1115,25 +1241,8 @@ export class Pane extends Container {
       )
 
       this.installResizeHandles()
-
       // free-positioned panes must stay inside the window when it shrinks
-      const win = doc.defaultView
-      if (win) {
-        let resizeRaf = 0
-        const onResize = () => {
-          if (resizeRaf) return
-          resizeRaf = win.requestAnimationFrame(() => {
-            resizeRaf = 0
-            if (this._anchor) packAnchored(this.doc, this._anchor)
-            else this.clampToViewport()
-          })
-        }
-        win.addEventListener('resize', onResize)
-        this.disposers.push(() => {
-          if (resizeRaf) win.cancelAnimationFrame(resizeRaf)
-          win.removeEventListener('resize', onResize)
-        })
-      }
+      watchViewport(doc)
     }
 
     // settings menu: gear click or right-click anywhere on the pane
@@ -1233,7 +1342,10 @@ export class Pane extends Container {
     // keep the notch's override count current; monitors only read the app
     this.disposers.push(
       this.on('change', (ev) => {
-        if (ev.source !== 'monitor') scheduleValueSync(doc)
+        if (ev.source === 'monitor') return
+        // a drag frame only moves the count when it carries the row across its default
+        if (ev.last === false && ev.target.overridden === ev.target.counted) return
+        scheduleValueSync(doc)
       }),
       () => scheduleValueSync(doc),
     )
@@ -1276,13 +1388,7 @@ export class Pane extends Container {
     // a persisted free position may be off-screen on a smaller window
     this.clampToViewport()
     if (this.floating && this._anchor && !this.docked) packAnchored(doc, this._anchor)
-    if (this.floating && typeof ResizeObserver !== 'undefined') {
-      const ro = new ResizeObserver(() => {
-        if (this._anchor && this.movable && !this.hidden) packAnchored(this.doc, this._anchor)
-      })
-      ro.observe(this.element)
-      this.disposers.push(() => ro.disconnect())
-    }
+    if (this.floating) this.disposers.push(observePaneSize(this))
     syncNotch(doc)
 
     const id = options.id
@@ -1560,6 +1666,17 @@ export class Pane extends Container {
     }
   }
 
+  /** internal: the shared ResizeObserver saw this pane change size */
+  onSizeChange(): void {
+    if (this._anchor && this.movable && !this.hidden) packAnchored(this.doc, this._anchor)
+  }
+
+  /** internal: the window resized (coalesced to one frame for every pane) */
+  onViewportResize(): void {
+    if (this._anchor) packAnchored(this.doc, this._anchor)
+    else this.clampToViewport()
+  }
+
   /** re-clamp a free-positioned pane into the viewport (anchored panes track their edges) */
   private clampToViewport(): void {
     if (!this.movable || this._anchor) return
@@ -1583,15 +1700,16 @@ export class Pane extends Container {
 
   /**
    * internal: pin this pane to its anchor using the current pack offsets.
-   * Co-anchored siblings share a column; `_stack` / `_column` come from packAnchored.
+   * Co-anchored siblings share a column; `_stack` / `_column` come from packAnchored,
+   * which also hands over the size it already read so placing doesn't read layout.
    */
-  placePacked(stack: number, column: number): void {
+  placePacked(stack: number, column: number, size?: PaneBox): void {
     this._stack = stack
     this._column = column
-    this.applyAnchor()
+    this.applyAnchor(size)
   }
 
-  private applyAnchor(): void {
+  private applyAnchor(size?: PaneBox): void {
     const anchor = this._anchor
     if (!anchor) return
     const s = this.element.style
@@ -1601,11 +1719,15 @@ export class Pane extends Container {
     // centered axes are solved in whole pixels: translate(-50%) puts an odd
     // size on a half pixel, which blurs every icon on 1x displays
     const win = this.doc.defaultView
-    const centerX = () => `${Math.round(((win?.innerWidth ?? 0) - this.element.offsetWidth) / 2)}px`
+    const centerX = () => {
+      const width = size?.width ?? this.element.offsetWidth
+      return `${Math.round(((win?.innerWidth ?? 0) - width) / 2)}px`
+    }
     // a lone pane centers itself; a packed one sits `stack` from the middle
     const centerY = () => {
       const viewH = win?.innerHeight ?? 0
-      const top = stack === 0 ? (viewH - this.element.offsetHeight) / 2 : viewH / 2 + stack
+      const height = size?.height ?? this.element.offsetHeight
+      const top = stack === 0 ? (viewH - height) / 2 : viewH / 2 + stack
       return `${Math.round(top)}px`
     }
     s.left = 'auto'
