@@ -247,6 +247,8 @@ interface NotchState {
   spacing?: PaneSpacing | undefined
   /** the notch vanishes until the pointer comes near the top edge */
   hiding?: boolean | undefined
+  /** every floating pane is hidden (H / the notch eye); restored on remount */
+  hidden?: boolean | undefined
   /** floating panes and the notch draw translucent and frosted */
   glass?: boolean | undefined
   theme?: PaneTheme | undefined
@@ -890,6 +892,7 @@ export class Pane extends Container {
     batchPanes(() => {
       for (const p of list) p.hidden = hide
       setDockVisible(doc, !hide)
+      notchStore.patch({ hidden: hide })
       syncNotch(doc)
     })
     return hide
@@ -969,7 +972,10 @@ export class Pane extends Container {
         // after the folders finish opening, so the row is where it will stay
         setTimeout(() => first.element.scrollIntoView?.({ block: 'nearest' }), FOLDER_EXPAND_MS)
       }
-      if (shown) setDockVisible(doc, true)
+      if (shown) {
+        setDockVisible(doc, true)
+        notchStore.patch({ hidden: false })
+      }
     })
     return total
   }
@@ -1153,7 +1159,7 @@ export class Pane extends Container {
     }
     this.applyExpanded()
     this.applyDraggable()
-    this.hidden = options.hidden ?? false
+    this.hidden = options.hidden ?? (this.floating && (notchState.hidden ?? false))
 
     // collapse on any titlebar click except the action buttons (and not right after a drag)
     let suppressClick = false
@@ -1385,6 +1391,8 @@ export class Pane extends Container {
     } else {
       ;(options.container ?? doc.body).append(this.element)
     }
+    // a hidden session folds the sidebar the same way toggleAll does
+    if (this.floating && this.hidden) setDockVisible(doc, false)
     // a persisted free position may be off-screen on a smaller window
     this.clampToViewport()
     if (this.floating && this._anchor && !this.docked) packAnchored(doc, this._anchor)
