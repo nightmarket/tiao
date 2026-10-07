@@ -517,6 +517,38 @@ describe('Pane registry and chrome', () => {
     expect(Pane.get('main')).toBeUndefined()
   })
 
+  it('persists hidden panes across remount', () => {
+    const pane = new Pane()
+    expect(Pane.toggleAll()).toBe(true)
+    expect(JSON.parse(localStorage.getItem('tiao:notch')!).hidden).toBe(true)
+    pane.dispose()
+
+    const revived = new Pane()
+    expect(revived.hidden).toBe(true)
+    expect(document.querySelector('.tiao-notch-hide')?.getAttribute('aria-pressed')).toBe('true')
+
+    expect(Pane.toggleAll()).toBe(false)
+    expect(JSON.parse(localStorage.getItem('tiao:notch')!).hidden).toBe(false)
+    revived.dispose()
+
+    const shown = new Pane()
+    expect(shown.hidden).toBe(false)
+    shown.dispose()
+  })
+
+  it('restores a hidden docked session as hidden', () => {
+    const pane = new Pane()
+    Pane.toggleDock()
+    Pane.toggleAll()
+    pane.dispose()
+
+    const revived = new Pane()
+    expect(revived.hidden).toBe(true)
+    expect(revived.docked).toBe(true)
+    expect(document.querySelector('.tiao-dock')?.classList.contains('tiao-hidden')).toBe(true)
+    revived.dispose()
+  })
+
   it('H toggles all floating panes but leaves inline ones alone', () => {
     const a = new Pane({ title: 'A' })
     const b = new Pane({ title: 'B' })
