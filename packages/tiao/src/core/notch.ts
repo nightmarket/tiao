@@ -306,7 +306,7 @@ export function createNotch(host: NotchHost): Notch {
     tooltip(revealBtn, () => 'Show changed'),
     tooltip(copyBtn, () => 'Copy settings'),
     tooltip(importBtn, () => 'Import settings'),
-    tooltip(resetBtn, () => 'Reset to defaults'),
+    tooltip(resetBtn, () => `Reset ${overrides} parameters to defaults`),
   )
 
   sync()

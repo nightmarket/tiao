@@ -653,7 +653,7 @@ describe('Pane registry and chrome', () => {
       hide.dispatchEvent(new Event('pointerleave'))
       expect(bubble()).toBeNull()
       reset.dispatchEvent(new Event('pointerenter'))
-      expect(bubble()?.textContent).toBe('Reset to defaults')
+      expect(bubble()?.textContent).toBe('Reset 0 parameters to defaults')
       expect(bubble()).toBe(shared)
       expect(document.querySelectorAll('.tiao-tooltip')).toHaveLength(1)
 
@@ -2671,6 +2671,13 @@ describe('Pane registry and chrome', () => {
       await Promise.resolve()
       expect(count.textContent).toBe('3 set')
       expect(reveal.disabled).toBe(false)
+      const reset = document.querySelector('.tiao-notch-reset') as HTMLButtonElement
+      reset.dispatchEvent(new Event('pointerenter'))
+      vi.advanceTimersByTime(150)
+      expect(document.querySelector('.tiao-tooltip')?.textContent).toBe(
+        'Reset 3 parameters to defaults',
+      )
+      reset.dispatchEvent(new Event('pointerleave'))
 
       // back to the default (a fresh but equal object) no longer counts
       tint.value.set({ r: 1, g: 2, b: 3 })
