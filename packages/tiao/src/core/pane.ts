@@ -19,12 +19,15 @@ import {
   dockRoot,
   ensureDock,
   readDockState,
+  setDockDrawer,
   setDockVisible,
+  setDrawerOpen,
   writeDockState,
 } from './dock'
 import { collapseSelection, draggable, gearIcon, h, icon, searchIcon, withDocument } from './dom'
+import { createDrawerControls, type DrawerControls } from './drawer-controls'
 import { ValueHistory } from './history'
-import { createNotch, type Notch } from './notch'
+import { createNotch, type Notch, type NotchHost } from './notch'
 import { createPaneMenu } from './pane-menu'
 import { globalRegistry, PluginRegistry, type TiaoPlugin } from './plugin'
 import { openRowToolbar } from './row-toolbar'
@@ -236,6 +239,118 @@ function releaseGlobalToggle(doc: Document): void {
 /** one notch bar per document, mounted with the first floating pane */
 const notches = new WeakMap<Document, Notch>()
 
+/** documents where a pane asked for the notch, so a wide screen can bring it back */
+const notchWanted = new WeakSet<Document>()
+
+/** viewport width below which floating panes collect into the bottom drawer */
+const MOBILE_QUERY = '(max-width: 767.98px)'
+
+/**
+ * One breakpoint listener per document. While the screen is small there is no
+ * notch and no floating pane: only the drawer and the controls that open it.
+ */
+interface MobileWatch {
+  mql: MediaQueryList
+  onChange: () => void
+  /** non-null exactly while the drawer layout is applied */
+  controls: DrawerControls | null
+}
+const mobileWatches = new WeakMap<Document, MobileWatch>()
+
+/** follow the breakpoint from here on; returns whether the screen is small now */
+function watchMobile(doc: Document): boolean {
+  const existing = mobileWatches.get(doc)
+  if (existing) return existing.mql.matches
+  const mql = doc.defaultView?.matchMedia?.(MOBILE_QUERY)
+  if (!mql) return false
+  const onChange = () => applyMobile(doc, mql.matches)
+  mql.addEventListener('change', onChange)
+  mobileWatches.set(doc, { mql, onChange, controls: null })
+  return mql.matches
+}
+
+function releaseMobile(doc: Document): void {
+  const watch = mobileWatches.get(doc)
+  if (!watch) return
+  watch.mql.removeEventListener('change', watch.onChange)
+  watch.controls?.dispose()
+  mobileWatches.delete(doc)
+}
+
+/**
+ * Cross the breakpoint. A small screen drops the notch and gathers every
+ * floating pane into the drawer; a wide one hands each pane back to the layout
+ * it had, floating or docked, since the drawer never writes the sidebar state.
+ */
+function applyMobile(doc: Document, mobile: boolean): void {
+  const watch = mobileWatches.get(doc)
+  if (!watch || (watch.controls !== null) === mobile) return
+  // the closed drawer stands in for hiding every pane, so the saved flag sits out
+  const hidden = readNotchState().hidden ?? false
+  batchPanes(() => {
+    if (mobile) {
+      notches.get(doc)?.dispose()
+      notches.delete(doc)
+      const dock = ensureDock(createDockHost(doc))
+      setDockDrawer(doc, true)
+      setDockVisible(doc, true)
+      for (const p of panesIn(doc)) {
+        if (hidden) p.hidden = false
+        p.dockInto(dock.body)
+      }
+      watch.controls = createDrawerControls({
+        document: doc,
+        drawer: dock.root,
+        setOpen: (open) => setDrawerOpen(doc, open),
+        ...valueActions(doc),
+      })
+      applyDockChrome(doc)
+      return
+    }
+    watch.controls?.dispose()
+    watch.controls = null
+    if (notchWanted.has(doc) && readDockState().docked) {
+      setDockDrawer(doc, false)
+    } else {
+      for (const p of panesIn(doc)) p.undock()
+      closeDock(doc)
+    }
+    if (hidden) {
+      for (const p of panesIn(doc)) p.hidden = true
+      setDockVisible(doc, false)
+    }
+    if (notchWanted.has(doc)) ensureNotch(doc)
+    syncNotch(doc)
+  })
+}
+
+/** the drawer controls wear the drawer's theme and the global glass setting */
+function syncDrawerControls(doc: Document): void {
+  const controls = mobileWatches.get(doc)?.controls
+  if (!controls) return
+  const chrome = dockChrome(doc)
+  const glass = readNotchState().glass ?? false
+  for (const el of controls.buttons) {
+    applyChrome(el, chrome)
+    el.classList.toggle('tiao-glass', glass)
+  }
+}
+
+/** the value edits the notch and the drawer controls both step over and reset */
+function valueActions(doc: Document): Pick<NotchHost, 'history' | 'reset'> {
+  return {
+    reset: () => {
+      Pane.resetValues(doc)
+    },
+    history: {
+      canUndo: () => Pane.canUndo(doc),
+      canRedo: () => Pane.canRedo(doc),
+      undo: () => Pane.undo(doc),
+      redo: () => Pane.redo(doc),
+    },
+  }
+}
+
 /**
  * Notch state shared by every pane in the page. The chrome keys are the global
  * settings panel's last broadcast: live panes take them immediately, and panes
@@ -292,6 +407,7 @@ function scheduleValueSync(doc: Document): void {
   queueMicrotask(() => {
     valuesPending.delete(doc)
     notches.get(doc)?.syncValues()
+    mobileWatches.get(doc)?.controls?.syncValues()
   })
 }
 
@@ -551,18 +667,10 @@ function ensureNotch(doc: Document): void {
       toggleDocked: () => {
         Pane.toggleDock(doc)
       },
-      reset: () => {
-        Pane.resetValues(doc)
-      },
+      ...valueActions(doc),
       exportValues: () => Pane.exportValues(doc),
       importValues: (data) => Pane.importValues(data, doc),
       countOverrides: () => Pane.countOverrides(doc),
-      history: {
-        canUndo: () => Pane.canUndo(doc),
-        canRedo: () => Pane.canRedo(doc),
-        undo: () => Pane.undo(doc),
-        redo: () => Pane.redo(doc),
-      },
       revealOverrides: () => {
         Pane.revealOverrides(doc)
       },
@@ -687,6 +795,8 @@ function releaseNotch(doc: Document): void {
   if (panesIn(doc).length > 0) return
   notches.get(doc)?.dispose()
   notches.delete(doc)
+  notchWanted.delete(doc)
+  releaseMobile(doc)
   closeDock(doc)
   releaseGlobalToggle(doc)
   releaseColorScheme(doc)
@@ -752,6 +862,7 @@ function applyDockChrome(doc: Document): void {
   for (const p of panesIn(doc)) {
     if (p.docked) p.setChrome(chrome)
   }
+  syncDrawerControls(doc)
   syncNotch(doc)
 }
 
@@ -826,12 +937,18 @@ export class Pane extends Container {
    * beside it) or back out to their free positions. Returns the new state.
    */
   static toggleDock(doc: Document = document): boolean {
+    // a small screen keeps every pane in the drawer; flip what a wide one restores
+    if (mobileWatches.get(doc)?.controls) {
+      const docked = !readDockState().docked
+      writeDockState({ docked })
+      return docked
+    }
     batchPanes(() => {
       if (dockBody(doc)) {
         for (const p of panesIn(doc)) p.undock()
         closeDock(doc)
       } else {
-        const body = ensureDock(createDockHost(doc))
+        const { body } = ensureDock(createDockHost(doc))
         for (const p of panesIn(doc)) p.dockInto(body)
         applyDockChrome(doc)
       }
@@ -877,6 +994,7 @@ export class Pane extends Container {
   static setGlass(glass: boolean, doc: Document = document): void {
     notchStore.patch({ glass })
     for (const p of panesIn(doc)) p.element.classList.toggle('tiao-glass', glass)
+    syncDrawerControls(doc)
     syncNotch(doc)
   }
 
@@ -888,6 +1006,9 @@ export class Pane extends Container {
   static toggleAll(doc: Document = document): boolean {
     const list = panesIn(doc)
     if (list.length === 0) return false
+    // on a small screen the closed drawer is the hidden state
+    const controls = mobileWatches.get(doc)?.controls
+    if (controls) return !controls.toggle()
     const hide = list.some((p) => !p.hidden)
     batchPanes(() => {
       for (const p of list) p.hidden = hide
@@ -1159,7 +1280,8 @@ export class Pane extends Container {
     }
     this.applyExpanded()
     this.applyDraggable()
-    this.hidden = options.hidden ?? (this.floating && (notchState.hidden ?? false))
+    const mobile = this.floating && watchMobile(doc)
+    this.hidden = options.hidden ?? (this.floating && !mobile && (notchState.hidden ?? false))
 
     // collapse on any titlebar click except the action buttons (and not right after a drag)
     let suppressClick = false
@@ -1369,7 +1491,10 @@ export class Pane extends Container {
     if (this.floating) {
       floatingPanes.add(this)
       ensureGlobalToggle(doc)
-      if (options.notch !== false) {
+      if (options.notch !== false) notchWanted.add(doc)
+      if (mobile) {
+        applyMobile(doc, true)
+      } else if (options.notch !== false) {
         // a previously docked session re-opens the sidebar before the first mount
         if (readDockState().docked) ensureDock(createDockHost(doc))
         ensureNotch(doc)
@@ -1392,7 +1517,7 @@ export class Pane extends Container {
       ;(options.container ?? doc.body).append(this.element)
     }
     // a hidden session folds the sidebar the same way toggleAll does
-    if (this.floating && this.hidden) setDockVisible(doc, false)
+    if (this.floating && this.hidden && !mobile) setDockVisible(doc, false)
     // a persisted free position may be off-screen on a smaller window
     this.clampToViewport()
     if (this.floating && this._anchor && !this.docked) packAnchored(doc, this._anchor)

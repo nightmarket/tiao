@@ -19,11 +19,14 @@
   /* the docked sidebar's footprint, for fixed page chrome body padding can't reach */
   --tiao-dock-inset-start: 0px;
   --tiao-dock-inset-end: 0px;
+  /* the small-screen drawer, and how far it pushes the page up while open */
+  --tiao-drawer-height: min(max(50dvh, 240px), 85dvh);
 }
 
 .tiao-pane,
 .tiao-notch,
-.tiao-dock {
+.tiao-dock,
+.tiao-drawer-button {
   --tiao-neutral-50: #fafafa;
   --tiao-neutral-100: #f5f5f5;
   --tiao-neutral-200: #e5e5e5;
@@ -73,6 +76,8 @@
   --tiao-shadow-popup:
     0 0 0 1px var(--tiao-border), 0 10px 32px rgba(15, 23, 42, 0.16), inset 0 1px 0
     rgba(255, 255, 255, 0.9);
+  /* the popup shadow cast upward, for the drawer that rises from the bottom edge */
+  --tiao-shadow-sheet: 0 0 0 1px var(--tiao-border), 0 -10px 32px rgba(15, 23, 42, 0.16);
   --tiao-shadow-raised: 0 1px 2px rgba(15, 23, 42, 0.12), 0 0 0 1px rgba(15, 23, 42, 0.05);
   --tiao-backdrop-filter: blur(16px) saturate(1.2);
   --tiao-overlay-filter: blur(3px) saturate(1.05);
@@ -145,7 +150,8 @@
 
 .tiao-pane.tiao-theme-dark,
 .tiao-notch.tiao-theme-dark,
-.tiao-dock.tiao-theme-dark {
+.tiao-dock.tiao-theme-dark,
+.tiao-drawer-button.tiao-theme-dark {
   --tiao-bg-solid: var(--tiao-neutral-900);
   --tiao-fg: var(--tiao-neutral-100);
   --tiao-fg-strong: var(--tiao-neutral-200);
@@ -167,12 +173,14 @@
   --tiao-graph-accent: #525252;
   --tiao-shadow: 0 4px 28px rgba(0, 0, 0, 0.45), 0 0 0 1px var(--tiao-border);
   --tiao-shadow-popup: 0 8px 32px rgba(0, 0, 0, 0.55), 0 0 0 1px var(--tiao-border);
+  --tiao-shadow-sheet: 0 -8px 32px rgba(0, 0, 0, 0.55), 0 0 0 1px var(--tiao-border);
   --tiao-shadow-raised: 0 1px 3px rgba(0, 0, 0, 0.35);
 }
 
 .tiao-pane.tiao-theme-solarized,
 .tiao-notch.tiao-theme-solarized,
-.tiao-dock.tiao-theme-solarized {
+.tiao-dock.tiao-theme-solarized,
+.tiao-drawer-button.tiao-theme-solarized {
   --tiao-neutral-50: #fdf6e3;
   --tiao-neutral-100: #f5efdc;
   --tiao-neutral-200: #eee8d5;
@@ -206,12 +214,14 @@
   --tiao-graph-accent: #839496;
   --tiao-shadow: 0 4px 28px rgba(0, 21, 27, 0.55), 0 0 0 1px var(--tiao-border);
   --tiao-shadow-popup: 0 8px 32px rgba(0, 21, 27, 0.65), 0 0 0 1px var(--tiao-border);
+  --tiao-shadow-sheet: 0 -8px 32px rgba(0, 21, 27, 0.65), 0 0 0 1px var(--tiao-border);
   --tiao-shadow-raised: 0 1px 3px rgba(0, 21, 27, 0.4);
 }
 
 .tiao-pane.tiao-theme-nord,
 .tiao-notch.tiao-theme-nord,
-.tiao-dock.tiao-theme-nord {
+.tiao-dock.tiao-theme-nord,
+.tiao-drawer-button.tiao-theme-nord {
   --tiao-neutral-50: #eceff4;
   --tiao-neutral-100: #e5e9f0;
   --tiao-neutral-200: #d8dee9;
@@ -245,12 +255,14 @@
   --tiao-graph-accent: #9aa3b5;
   --tiao-shadow: 0 4px 28px rgba(25, 28, 35, 0.55), 0 0 0 1px var(--tiao-border);
   --tiao-shadow-popup: 0 8px 32px rgba(25, 28, 35, 0.65), 0 0 0 1px var(--tiao-border);
+  --tiao-shadow-sheet: 0 -8px 32px rgba(25, 28, 35, 0.65), 0 0 0 1px var(--tiao-border);
   --tiao-shadow-raised: 0 1px 3px rgba(25, 28, 35, 0.4);
 }
 
 .tiao-pane.tiao-theme-catppuccin,
 .tiao-notch.tiao-theme-catppuccin,
-.tiao-dock.tiao-theme-catppuccin {
+.tiao-dock.tiao-theme-catppuccin,
+.tiao-drawer-button.tiao-theme-catppuccin {
   --tiao-neutral-50: #cdd6f4;
   --tiao-neutral-100: #c4cce8;
   --tiao-neutral-200: #bac2de;
@@ -284,6 +296,7 @@
   --tiao-graph-accent: #6c7086;
   --tiao-shadow: 0 4px 28px rgba(17, 17, 27, 0.55), 0 0 0 1px var(--tiao-border);
   --tiao-shadow-popup: 0 8px 32px rgba(17, 17, 27, 0.65), 0 0 0 1px var(--tiao-border);
+  --tiao-shadow-sheet: 0 -8px 32px rgba(17, 17, 27, 0.65), 0 0 0 1px var(--tiao-border);
   --tiao-shadow-raised: 0 1px 3px rgba(17, 17, 27, 0.4);
 }
 
@@ -334,11 +347,13 @@
 
 .tiao-pane.tiao-style-kiki,
 .tiao-notch.tiao-style-kiki,
-.tiao-dock.tiao-style-kiki {
+.tiao-dock.tiao-style-kiki,
+.tiao-drawer-button.tiao-style-kiki {
   --tiao-radius: 0;
   --tiao-radius-sm: 0;
   --tiao-shadow: 0 0 0 1px var(--tiao-border);
   --tiao-shadow-popup: 0 0 0 1px var(--tiao-border);
+  --tiao-shadow-sheet: 0 0 0 1px var(--tiao-border);
   --tiao-shadow-raised: 0 0 0 1px var(--tiao-border);
   --tiao-overlay-filter: none;
 }
@@ -349,7 +364,8 @@
  * every frame the canvas underneath changes.
  */
 .tiao-pane.tiao-glass,
-.tiao-notch.tiao-glass {
+.tiao-notch.tiao-glass,
+.tiao-drawer-button.tiao-glass {
   background: var(--tiao-bg);
   backdrop-filter: var(--tiao-backdrop-filter);
   -webkit-backdrop-filter: var(--tiao-backdrop-filter);
@@ -590,6 +606,162 @@
   max-height: none;
   overflow: clip;
   overscroll-behavior: auto;
+}
+
+/* ---- drawer: the dock on small screens, slid up over the bottom edge ---- */
+.tiao-dock.tiao-dock-drawer {
+  --tiao-drawer-header-height: 40px;
+
+  inset: auto 0 0;
+  width: auto;
+  height: var(--tiao-drawer-height);
+  padding-bottom: env(safe-area-inset-bottom);
+  border: none;
+  border-radius: var(--tiao-radius) var(--tiao-radius) 0 0;
+  box-shadow: var(--tiao-shadow-sheet);
+  transform: translateY(100%);
+  visibility: hidden;
+  /* stays painted until the slide down has finished */
+  transition:
+    transform 0.28s cubic-bezier(0.32, 0.72, 0, 1),
+    visibility 0s linear 0.28s;
+}
+.tiao-dock.tiao-dock-drawer.tiao-open {
+  transform: none;
+  visibility: visible;
+  transition: transform 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+}
+/* finger-sized header buttons */
+.tiao-dock-drawer > .tiao-dock-header {
+  --tiao-icon-size: 16px;
+  height: var(--tiao-drawer-header-height);
+  border-radius: inherit;
+}
+.tiao-dock-drawer > .tiao-dock-header .tiao-titlebar-btn {
+  width: 32px;
+  height: 32px;
+}
+/* the drawer has one home and one height */
+.tiao-dock-drawer > .tiao-dock-resize,
+.tiao-dock-drawer .tiao-row:has(.tiao-anchor-sides) {
+  display: none;
+}
+/* touch-sized panes: the tokens the size and spacing classes set, so every
+   control (sliders' tracks included) grows together; titles match the header */
+.tiao-dock-drawer .tiao-pane.tiao-docked {
+  --tiao-font-size: 13px;
+  --tiao-font-size-mono: 12px;
+  --tiao-row-height: 28px;
+  --tiao-titlebar-height: var(--tiao-drawer-header-height);
+  --tiao-header-height: 36px;
+  --tiao-gap: 10px;
+  --tiao-tree-pad: 8px;
+  --tiao-icon-size: 14px;
+  --tiao-row-pad-y: 5px;
+  --tiao-rack-pad-y: 6px;
+  --tiao-folder-pad-y: 6px;
+  --tiao-hover-pad: 5px;
+}
+
+/* ---- drawer controls: a row of round buttons parked in a corner ---- */
+.tiao-drawer-controls {
+  --tiao-drawer-controls-inset: 16px;
+
+  position: fixed;
+  z-index: 20000;
+  display: flex;
+  gap: 8px;
+  /* the gaps between buttons stay clickable for the page */
+  pointer-events: none;
+  transition: bottom 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+}
+.tiao-drawer-controls[data-tiao-corner^="top"] {
+  top: calc(env(safe-area-inset-top) + var(--tiao-drawer-controls-inset));
+}
+.tiao-drawer-controls[data-tiao-corner^="bottom"] {
+  bottom: calc(env(safe-area-inset-bottom) + var(--tiao-drawer-controls-inset));
+}
+.tiao-drawer-controls[data-tiao-corner$="left"] {
+  left: calc(env(safe-area-inset-left) + var(--tiao-drawer-controls-inset));
+}
+.tiao-drawer-controls[data-tiao-corner$="right"] {
+  right: calc(env(safe-area-inset-right) + var(--tiao-drawer-controls-inset));
+}
+/* a bottom-corner row rides up on the open drawer, so the toggle can close it */
+.tiao-drawer-controls.tiao-open[data-tiao-corner^="bottom"] {
+  bottom: calc(var(--tiao-drawer-height) + var(--tiao-drawer-controls-inset));
+}
+.tiao-drawer-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  margin: 0;
+  border: none;
+  border-radius: 50%;
+  color: var(--tiao-fg-muted);
+  cursor: pointer;
+  pointer-events: auto;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition: color 0.12s ease;
+}
+.tiao-drawer-button .tiao-icon {
+  width: 20px;
+  height: 20px;
+}
+.tiao-drawer-button:focus-visible {
+  outline: 1.5px solid var(--tiao-focus);
+  outline-offset: 2px;
+}
+.tiao-drawer-button:disabled {
+  color: var(--tiao-fg-faint);
+  cursor: default;
+}
+.tiao-drawer-toggle {
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1;
+  touch-action: none;
+}
+.tiao-drawer-toggle[aria-expanded="true"] {
+  color: var(--tiao-accent);
+}
+/* the toggle sits at the screen edge, the actions toward the middle */
+.tiao-drawer-controls[data-tiao-corner$="right"] > .tiao-drawer-toggle {
+  order: 1;
+}
+/* actions grow out of the toggle with the drawer, and are gone while it is closed */
+.tiao-drawer-action {
+  opacity: 0;
+  transform: scale(0.6);
+  visibility: hidden;
+  transition:
+    color 0.12s ease,
+    opacity 0.2s ease,
+    transform 0.28s cubic-bezier(0.32, 0.72, 0, 1),
+    visibility 0s linear 0.28s;
+}
+.tiao-drawer-controls.tiao-open > .tiao-drawer-action {
+  opacity: 1;
+  transform: none;
+  visibility: visible;
+  transition:
+    color 0.12s ease,
+    opacity 0.2s ease,
+    transform 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tiao-dock.tiao-dock-drawer,
+  .tiao-dock.tiao-dock-drawer.tiao-open,
+  .tiao-drawer-controls,
+  .tiao-drawer-action,
+  .tiao-drawer-controls.tiao-open > .tiao-drawer-action {
+    transition: none;
+  }
 }
 
 .tiao-disabled {
@@ -1843,6 +2015,15 @@
   box-sizing: border-box;
   width: 176px;
   margin-left: -88px;
+}
+/* no room beside a full-width drawer either: drop under its header, inside it */
+.tiao-dock-drawer > .tiao-pane-menu,
+.tiao-dock-drawer > .tiao-pane-menu.tiao-menu-left {
+  top: calc(var(--tiao-drawer-header-height) + 4px);
+  right: 6px;
+  left: auto;
+  max-height: calc(100% - var(--tiao-drawer-header-height) - 10px);
+  overflow-y: auto;
 }
 /* the notch's paste box for imported settings, dropped like the settings
    menu; content insets match a pane's rack + row padding at this spacing */
