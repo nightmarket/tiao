@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   maxChroma,
   maxChromaP3,
@@ -2888,6 +2888,381 @@ describe('Pane registry and chrome', () => {
 
     expect(store.get()).toEqual({ width: 320 })
     expect(JSON.parse(localStorage.getItem('tiao:cleared')!)).toEqual({ width: 320 })
+  })
+})
+
+describe('small screens', () => {
+  const realMatchMedia = window.matchMedia
+  const listeners = new Set<() => void>()
+  let small = true
+
+  /** cross the 768px breakpoint the way a resize or rotation does */
+  function setSmall(next: boolean): void {
+    small = next
+    for (const fn of listeners) fn()
+  }
+
+  const drawer = () => document.querySelector('.tiao-dock') as HTMLElement
+  const button = () => document.querySelector('.tiao-drawer-toggle') as HTMLButtonElement
+  const row = () => document.querySelector('.tiao-drawer-controls') as HTMLElement
+  const pressEscape = () =>
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+
+  beforeEach(() => {
+    small = true
+    listeners.clear()
+    window.matchMedia = ((query: string) => {
+      const breakpoint = query.includes('max-width')
+      return {
+        get matches() {
+          return breakpoint && small
+        },
+        media: query,
+        addEventListener(_type: string, fn: () => void) {
+          if (breakpoint) listeners.add(fn)
+        },
+        removeEventListener(_type: string, fn: () => void) {
+          listeners.delete(fn)
+        },
+      } as unknown as MediaQueryList
+    }) as typeof window.matchMedia
+  })
+
+  afterEach(() => {
+    window.matchMedia = realMatchMedia
+  })
+
+  it('gathers floating panes into a closed drawer behind one round button, without the notch', () => {
+    const a = new Pane({ title: 'A' })
+    const b = new Pane({ title: 'B' })
+
+    expect(document.querySelector('.tiao-notch')).toBeNull()
+    expect(drawer().classList.contains('tiao-dock-drawer')).toBe(true)
+    expect(a.docked && b.docked).toBe(true)
+    expect(a.element.parentElement).toBe(document.querySelector('.tiao-dock-body'))
+    // the same search + settings header the desktop sidebar has
+    expect(drawer().querySelectorAll('.tiao-dock-search, .tiao-dock-gear')).toHaveLength(2)
+    expect(drawer().getAttribute('role')).toBe('region')
+    expect(drawer().getAttribute('aria-label')).toBe('Debug panes')
+    expect(drawer().hasAttribute('inert')).toBe(true)
+
+    expect(document.querySelectorAll('.tiao-drawer-controls')).toHaveLength(1)
+    expect(button().matches('[class^="tiao-"]')).toBe(true)
+    expect(button().getAttribute('aria-label')).toBe('Debug settings')
+    expect(button().getAttribute('aria-expanded')).toBe('false')
+    expect(button().getAttribute('aria-controls')).toBe(drawer().id)
+    expect(button().textContent).toBe('T')
+    expect(row().dataset.tiaoCorner).toBe('bottom-right')
+    // wears the drawer's theme
+    expect(button().classList.contains('tiao-theme-dark')).toBe(true)
+    // the desktop sidebar's saved layout is never written
+    expect(localStorage.getItem('tiao:dock')).toBeNull()
+
+    a.dispose()
+    b.dispose()
+    expect(document.querySelector('.tiao-drawer-controls')).toBeNull()
+    expect(document.querySelector('.tiao-dock')).toBeNull()
+  })
+
+  it('the button slides the drawer open and pushes the page up, restoring its padding on close', () => {
+    document.body.style.setProperty('padding-block-end', '12px')
+    document.body.style.setProperty('padding-inline-start', '4px')
+    const pane = new Pane()
+
+    button().click()
+    expect(button().getAttribute('aria-expanded')).toBe('true')
+    expect(drawer().classList.contains('tiao-open')).toBe(true)
+    expect(drawer().hasAttribute('inert')).toBe(false)
+    expect(document.body.style.getPropertyValue('padding-block-end')).toBe(
+      'var(--tiao-drawer-height)',
+    )
+    // the drawer sits under the page, so its sides are left alone
+    expect(document.body.style.getPropertyValue('padding-inline-start')).toBe('4px')
+    expect(document.documentElement.classList.contains('tiao-docked')).toBe(false)
+
+    button().click()
+    expect(button().getAttribute('aria-expanded')).toBe('false')
+    expect(drawer().hasAttribute('inert')).toBe(true)
+    expect(document.body.style.getPropertyValue('padding-block-end')).toBe('12px')
+
+    // a page that changed its own padding in between gets that back
+    document.body.style.setProperty('padding-block-end', '20px')
+    button().click()
+    pane.dispose()
+    expect(document.body.style.getPropertyValue('padding-block-end')).toBe('20px')
+    expect(document.body.style.getPropertyValue('padding-inline-start')).toBe('4px')
+    document.body.style.removeProperty('padding-block-end')
+    document.body.style.removeProperty('padding-inline-start')
+  })
+
+  it('Escape closes the drawer and hands focus back, after any open menu inside it', () => {
+    const pane = new Pane()
+    button().click()
+    const gear = drawer().querySelector('.tiao-dock-gear') as HTMLButtonElement
+    gear.click()
+    gear.focus()
+    expect(drawer().querySelector('.tiao-pane-menu.tiao-open')).not.toBeNull()
+
+    pressEscape()
+    expect(drawer().querySelector('.tiao-pane-menu.tiao-open')).toBeNull()
+    expect(button().getAttribute('aria-expanded')).toBe('true')
+
+    pressEscape()
+    expect(button().getAttribute('aria-expanded')).toBe('false')
+    expect(drawer().classList.contains('tiao-open')).toBe(false)
+    expect(document.activeElement).toBe(button())
+    pane.dispose()
+  })
+
+  it('crossing the breakpoint swaps between the drawer and floating panes in both directions', () => {
+    setSmall(false)
+    const pane = new Pane({ anchor: 'top-right' })
+    expect(document.querySelector('.tiao-notch')).not.toBeNull()
+    expect(document.querySelector('.tiao-drawer-controls')).toBeNull()
+    expect(pane.element.style.right).toBe('8px')
+
+    setSmall(true)
+    expect(document.querySelector('.tiao-notch')).toBeNull()
+    expect(pane.docked).toBe(true)
+    expect(drawer().classList.contains('tiao-dock-drawer')).toBe(true)
+    button().click()
+
+    setSmall(false)
+    expect(document.querySelector('.tiao-drawer-controls')).toBeNull()
+    expect(document.querySelector('.tiao-dock')).toBeNull()
+    expect(document.querySelectorAll('.tiao-notch')).toHaveLength(1)
+    expect(pane.docked).toBe(false)
+    expect(pane.element.classList.contains('tiao-floating')).toBe(true)
+    expect(pane.element.parentElement).toBe(document.body)
+    expect(pane.element.style.right).toBe('8px')
+    expect(document.body.style.getPropertyValue('padding-block-end')).toBe('')
+    expect(localStorage.getItem('tiao:dock')).toBeNull()
+    pane.dispose()
+  })
+
+  it('a docked desktop session keeps its sidebar side and width through a small-screen stint', () => {
+    setSmall(false)
+    localStorage.setItem('tiao:dock', JSON.stringify({ docked: true, side: 'right', width: 360 }))
+    document.body.style.setProperty('padding-inline-end', '10px')
+    const pane = new Pane()
+    const inset = () => document.documentElement.style.getPropertyValue('--tiao-dock-inset-end')
+    expect(document.body.style.getPropertyValue('padding-inline-end')).toBe(
+      'var(--tiao-dock-inset-end)',
+    )
+
+    setSmall(true)
+    expect(drawer().classList.contains('tiao-dock-drawer')).toBe(true)
+    expect(document.body.style.getPropertyValue('padding-inline-end')).toBe('10px')
+    expect(inset()).toBe('0px')
+    expect(document.documentElement.classList.contains('tiao-docked')).toBe(false)
+
+    setSmall(false)
+    expect(drawer().classList.contains('tiao-dock-drawer')).toBe(false)
+    expect(drawer().classList.contains('tiao-dock-end')).toBe(true)
+    expect(drawer().hasAttribute('inert')).toBe(false)
+    expect(drawer().hasAttribute('role')).toBe(false)
+    expect(pane.docked).toBe(true)
+    expect(inset()).toBe('var(--tiao-dock-width, 300px)')
+    expect(document.documentElement.style.getPropertyValue('--tiao-dock-width')).toBe('360px')
+    expect(document.body.style.getPropertyValue('padding-inline-end')).toBe(
+      'var(--tiao-dock-inset-end)',
+    )
+    expect(JSON.parse(localStorage.getItem('tiao:dock')!)).toEqual({
+      docked: true,
+      side: 'right',
+      width: 360,
+    })
+
+    pane.dispose()
+    expect(document.body.style.getPropertyValue('padding-inline-end')).toBe('10px')
+    document.body.style.removeProperty('padding-inline-end')
+  })
+
+  it('dragging the button glides it to the nearest corner and remembers it; a tap still toggles', async () => {
+    const pane = new Pane()
+    const press = (type: string, x: number, y: number) =>
+      button().dispatchEvent(
+        new MouseEvent(type, { button: 0, buttons: 1, clientX: x, clientY: y, bubbles: true }),
+      )
+
+    // within the slop it is a tap, not a drag
+    press('pointerdown', 1000, 740)
+    press('pointermove', 1004, 742)
+    press('pointerup', 1004, 742)
+    expect(row().dataset.tiaoCorner).toBe('bottom-right')
+    button().click()
+    expect(button().getAttribute('aria-expanded')).toBe('true')
+
+    press('pointerdown', 1000, 740)
+    press('pointermove', 400, 300)
+    expect(row().style.transform).toBe('translate(-600px, -440px)')
+    press('pointerup', 120, 90)
+    // the click the drag's release produces must not toggle the drawer
+    button().click()
+    expect(button().getAttribute('aria-expanded')).toBe('true')
+    expect(row().dataset.tiaoCorner).toBe('top-left')
+    expect(row().style.transform).toBe('')
+    expect(JSON.parse(localStorage.getItem('tiao:mobile')!)).toEqual({ corner: 'top-left' })
+
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    button().click()
+    expect(button().getAttribute('aria-expanded')).toBe('false')
+
+    pane.dispose()
+    const revived = new Pane()
+    expect(row().dataset.tiaoCorner).toBe('top-left')
+    revived.dispose()
+  })
+
+  it('presses on the drawer controls never reach the page, and the toggle still drags', () => {
+    const pane = new Pane()
+    const types = ['pointerdown', 'pointerup', 'mousedown', 'mouseup', 'touchstart', 'click']
+    const seen: string[] = []
+    const onWindow = (e: Event) => seen.push(e.type)
+    for (const type of types) window.addEventListener(type, onWindow)
+    const press = (el: HTMLElement, type: string, x: number, y: number) =>
+      el.dispatchEvent(
+        new MouseEvent(type, { button: 0, buttons: 1, clientX: x, clientY: y, bubbles: true }),
+      )
+
+    press(button(), 'pointerdown', 1000, 740)
+    press(button(), 'pointerup', 1000, 740)
+    button().click()
+    expect(button().getAttribute('aria-expanded')).toBe('true')
+    const undo = row().querySelector('[aria-label="Undo"]') as HTMLButtonElement
+    press(undo, 'pointerdown', 900, 740)
+    press(undo, 'mousedown', 900, 740)
+    press(undo, 'pointerup', 900, 740)
+    undo.dispatchEvent(new Event('touchstart', { bubbles: true }))
+
+    press(button(), 'pointerdown', 1000, 740)
+    press(button(), 'pointermove', 100, 100)
+    press(button(), 'pointerup', 100, 100)
+    expect(row().dataset.tiaoCorner).toBe('top-left')
+    expect(seen).toEqual([])
+
+    // the page still hears its own presses
+    press(document.body, 'pointerup', 10, 10)
+    expect(seen).toEqual(['pointerup'])
+
+    for (const type of types) window.removeEventListener(type, onWindow)
+    pane.dispose()
+  })
+
+  it('the open drawer adds global undo, redo, and reset beside the toggle', async () => {
+    const params = { speed: 0 }
+    const pane = new Pane({ id: 'drawer-history' })
+    const speed = pane.addBinding(params, 'speed')
+    const action = (label: string) =>
+      row().querySelector(`[aria-label="${label}"]`) as HTMLButtonElement
+
+    // the toggle leads; CSS puts the actions on its side facing the middle
+    expect([...row().children].map((b) => b.getAttribute('aria-label'))).toEqual([
+      'Debug settings',
+      'Undo',
+      'Redo',
+      'Reset',
+    ])
+    for (const label of ['Undo', 'Redo', 'Reset']) {
+      expect(action(label).classList.contains('tiao-drawer-button')).toBe(true)
+      expect(action(label).classList.contains('tiao-theme-dark')).toBe(true)
+      expect(action(label).querySelector('.tiao-icon')).not.toBeNull()
+    }
+    expect(action('Reset').querySelector('.tiao-icon-rotate-ccw')).not.toBeNull()
+
+    // shown with the drawer, gone with it
+    expect(row().classList.contains('tiao-open')).toBe(false)
+    button().click()
+    expect(row().classList.contains('tiao-open')).toBe(true)
+
+    // the same global history the notch walks, kept in step as values change
+    speed.value.set(3)
+    await Promise.resolve()
+    expect(action('Undo').disabled).toBe(false)
+    action('Undo').click()
+    expect(params.speed).toBe(0)
+    await Promise.resolve()
+    expect(action('Redo').disabled).toBe(false)
+    action('Redo').click()
+    expect(params.speed).toBe(3)
+
+    action('Reset').click()
+    expect(params.speed).toBe(0)
+
+    while (Pane.canUndo()) Pane.undo()
+    await Promise.resolve()
+    expect(action('Undo').disabled).toBe(true)
+
+    button().click()
+    expect(row().classList.contains('tiao-open')).toBe(false)
+    pane.dispose()
+  })
+
+  it('a held label in the drawer is a plain tap, while a wide screen still scrubs from it', () => {
+    vi.useFakeTimers()
+    const params = { speed: 1 }
+    const pane = new Pane()
+    const binding = pane.addBinding(params, 'speed', { min: 0, max: 4, step: 0.01 })
+    const label = binding.element.querySelector('.tiao-label') as HTMLElement
+    const input = binding.element.querySelector('.tiao-num-input') as HTMLInputElement
+    const layer = () => document.querySelector('.tiao-cursor-layer')
+    const hold = () => {
+      label.dispatchEvent(
+        new MouseEvent('pointerdown', { button: 0, clientX: 25, clientY: 10, bubbles: true }),
+      )
+      vi.advanceTimersByTime(200)
+    }
+    const release = () =>
+      label.dispatchEvent(
+        new MouseEvent('pointerup', { button: 0, clientX: 25, clientY: 10, bubbles: true }),
+      )
+
+    hold()
+    expect(layer()).toBeNull()
+    release()
+    label.click()
+    expect(input.readOnly).toBe(false)
+    expect(params.speed).toBe(1)
+    input.blur()
+
+    setSmall(false)
+    hold()
+    expect(layer()).not.toBeNull()
+    release()
+    expect(layer()).toBeNull()
+    pane.dispose()
+    vi.useRealTimers()
+  })
+
+  it('hiding every pane maps to the closed drawer and leaves the saved hidden flag alone', () => {
+    localStorage.setItem('tiao:notch', JSON.stringify({ hidden: true }))
+    const pane = new Pane()
+    expect(pane.hidden).toBe(false)
+    expect(drawer().classList.contains('tiao-hidden')).toBe(false)
+
+    expect(Pane.toggleAll()).toBe(false)
+    expect(button().getAttribute('aria-expanded')).toBe('true')
+    expect(Pane.toggleAll()).toBe(true)
+    expect(button().getAttribute('aria-expanded')).toBe('false')
+    expect(JSON.parse(localStorage.getItem('tiao:notch')!).hidden).toBe(true)
+
+    // back on a wide screen the hidden session is hidden again
+    setSmall(false)
+    expect(pane.hidden).toBe(true)
+    pane.dispose()
+  })
+
+  it('toggling the dock on a small screen only changes what a wide screen restores', () => {
+    const pane = new Pane()
+    expect(Pane.toggleDock()).toBe(true)
+    expect(drawer().classList.contains('tiao-dock-drawer')).toBe(true)
+    expect(JSON.parse(localStorage.getItem('tiao:dock')!).docked).toBe(true)
+
+    setSmall(false)
+    expect(drawer().classList.contains('tiao-dock-drawer')).toBe(false)
+    expect(pane.docked).toBe(true)
+    expect(document.querySelector('.tiao-notch-dock')?.getAttribute('aria-pressed')).toBe('true')
+    pane.dispose()
   })
 })
 

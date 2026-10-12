@@ -475,6 +475,8 @@ export class BindingApi<T> extends Item {
         this.disposers.push(
           longPress(this.element, {
             filter: (e) => {
+              // a finger held on a label in the drawer is a tap (or a scroll), never a scrub
+              if (this.element.closest('.tiao-dock-drawer')) return false
               const t = e.target as Node | null
               return !(t && view.element.contains(t))
             },

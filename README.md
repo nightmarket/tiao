@@ -120,6 +120,7 @@ Storage stays out of the way of the frame budget: each key is parsed once rather
     left: var(--tiao-dock-inset-start, 0px);
   }
   ```
+- On small screens (viewport under 768px, followed live across resizes and rotation) there is no notch and no floating pane: every pane stacks in a drawer that slides up from the bottom edge, with the sidebar's search and settings header, and pads `<body>` from below by its height (`--tiao-drawer-height`, half the viewport by default) while it is open. A round gear button opens and closes it (`H` and `Pane.toggleAll()` do too); drag it and it settles into the nearest corner, remembered under `tiao:mobile`. The desktop layout is left untouched, so a wider window brings every pane back floating or docked as it was, and `Pane.toggleDock()` on a small screen only changes which of the two that will be.
 - `maxHeight: 500` (default) caps the pane height; content scrolls when it overflows
 - Floating panes that share an anchor pack along that edge with an 8px gap (wrapping to a new column inward if they would leave the viewport). Drag a pane or pick another cell in the 9-point grid to leave the pack.
 - Clicking a pane brings it above other overlapping panes

@@ -33,6 +33,12 @@ const DEFAULT_WIDTH = 300
 /** live width, so a resize drag flows into the insets without extra work */
 const WIDTH_VAR = `var(--tiao-dock-width, ${DEFAULT_WIDTH}px)`
 
+/** the drawer's height, which the page is padded by while it is open */
+const DRAWER_HEIGHT_VAR = 'var(--tiao-drawer-height)'
+
+/** id the drawer button points its aria-controls at */
+const DRAWER_ID = 'tiao-drawer'
+
 const store = jsonStore<DockState>('tiao:dock')
 
 export function readDockState(): DockState {
@@ -43,12 +49,22 @@ export function writeDockState(patch: DockState): void {
   store.patch(patch)
 }
 
-interface DockEntry {
+/** the sidebar element and the body its panes stack into */
+export interface DockShell {
   root: HTMLElement
   body: HTMLElement
+}
+
+interface DockEntry extends DockShell {
   /** the page's own inline padding, restored verbatim on close */
   priorPadding: { start: string; end: string }
+  /** the page's own bottom padding while the open drawer pushes it up */
+  priorBottom: string | null
   visible: boolean
+  /** laid out as a drawer under the page (small screens) instead of beside it */
+  drawer: boolean
+  /** drawer only: slid up into view */
+  open: boolean
   disposers: (() => void)[]
 }
 
@@ -65,10 +81,10 @@ export function dockBody(doc: Document): HTMLElement | null {
 }
 
 /** Create the sidebar (once per document) and reflow the page beside it. */
-export function ensureDock(host: DockHost): HTMLElement {
+export function ensureDock(host: DockHost): DockShell {
   const doc = host.document
   const existing = docks.get(doc)
-  if (existing) return existing.body
+  if (existing) return existing
 
   const chrome = withDocument(doc, () => {
     const searchBtn = h('button', 'tiao-titlebar-btn tiao-dock-search', searchIcon())
@@ -97,7 +113,10 @@ export function ensureDock(host: DockHost): HTMLElement {
       start: doc.body.style.getPropertyValue('padding-inline-start'),
       end: doc.body.style.getPropertyValue('padding-inline-end'),
     },
+    priorBottom: null,
     visible: true,
+    drawer: false,
+    open: false,
     disposers: [],
   }
   docks.set(doc, entry)
@@ -168,7 +187,7 @@ export function ensureDock(host: DockHost): HTMLElement {
   applyWidth(doc, readDockState().width)
   doc.body.prepend(entry.root)
   applySide(doc, entry)
-  return entry.body
+  return entry
 }
 
 /** Remove the sidebar and restore the page's original padding. */
@@ -195,6 +214,40 @@ export function setDockVisible(doc: Document, visible: boolean): void {
   applyLayout(doc, entry)
 }
 
+/**
+ * Lay the dock out as a drawer under the page (small screens) or as the
+ * sidebar beside it. The drawer starts closed, so it neither covers nor pads
+ * the page until it is opened.
+ */
+export function setDockDrawer(doc: Document, drawer: boolean): void {
+  const entry = docks.get(doc)
+  if (!entry || entry.drawer === drawer) return
+  entry.drawer = drawer
+  entry.open = false
+  const root = entry.root
+  root.classList.toggle('tiao-dock-drawer', drawer)
+  root.classList.remove('tiao-open')
+  root.toggleAttribute('inert', drawer)
+  if (drawer) {
+    root.id = DRAWER_ID
+    root.setAttribute('role', 'region')
+    root.setAttribute('aria-label', 'Debug panes')
+  } else {
+    for (const attr of ['id', 'role', 'aria-label']) root.removeAttribute(attr)
+  }
+  applyLayout(doc, entry)
+}
+
+/** Slide the drawer up, pushing the page up with it, or back down. */
+export function setDrawerOpen(doc: Document, open: boolean): void {
+  const entry = docks.get(doc)
+  if (!entry?.drawer || entry.open === open) return
+  entry.open = open
+  entry.root.classList.toggle('tiao-open', open)
+  entry.root.toggleAttribute('inert', !open)
+  applyLayout(doc, entry)
+}
+
 function dockSide(): DockSide {
   return readDockState().side ?? 'left'
 }
@@ -213,16 +266,12 @@ function applySide(doc: Document, entry: DockEntry): void {
 function applyLayout(doc: Document, entry: DockEntry): void {
   const root = doc.documentElement
   const side = dockSide()
-  root.style.setProperty(
-    '--tiao-dock-inset-start',
-    entry.visible && side === 'left' ? WIDTH_VAR : '0px',
-  )
-  root.style.setProperty(
-    '--tiao-dock-inset-end',
-    entry.visible && side === 'right' ? WIDTH_VAR : '0px',
-  )
-  root.classList.toggle('tiao-docked', entry.visible)
-  if (entry.visible) applyPadding(doc, entry)
+  // the drawer sits under the page, so it leaves the sides alone
+  const sidebar = entry.visible && !entry.drawer
+  root.style.setProperty('--tiao-dock-inset-start', sidebar && side === 'left' ? WIDTH_VAR : '0px')
+  root.style.setProperty('--tiao-dock-inset-end', sidebar && side === 'right' ? WIDTH_VAR : '0px')
+  root.classList.toggle('tiao-docked', sidebar)
+  if (sidebar || (entry.visible && entry.open)) applyPadding(doc, entry)
   else restorePadding(doc, entry)
 }
 
@@ -231,7 +280,8 @@ const INSET_ATTR = 'data-tiao-inset'
 /** opt a fixed element out of being inset */
 const SKIP_ATTR = 'data-tiao-no-inset'
 /** tiao's own UI sits beside the sidebar or inside it, never inset by it */
-const OWN_UI = '.tiao-dock, .tiao-notch, .tiao-pane, .tiao-scrub-overlay, .tiao-cursor-layer'
+const OWN_UI =
+  '.tiao-dock, .tiao-notch, .tiao-pane, .tiao-drawer-controls, .tiao-scrub-overlay, .tiao-cursor-layer'
 
 /**
  * Inset the page's own fixed chrome. Body padding only moves elements in normal
@@ -351,13 +401,23 @@ function applyWidth(doc: Document, width: number | undefined): void {
 
 function applyPadding(doc: Document, entry: DockEntry): void {
   restorePadding(doc, entry)
+  const style = doc.body.style
+  if (entry.drawer) {
+    // read on every open, so a page that changed its padding since gets that back
+    entry.priorBottom = style.getPropertyValue('padding-block-end')
+    style.setProperty('padding-block-end', DRAWER_HEIGHT_VAR)
+    return
+  }
   const edge = dockSide() === 'right' ? 'end' : 'start'
-  doc.body.style.setProperty(`padding-inline-${edge}`, `var(--tiao-dock-inset-${edge})`)
+  style.setProperty(`padding-inline-${edge}`, `var(--tiao-dock-inset-${edge})`)
 }
 
 function restorePadding(doc: Document, entry: DockEntry): void {
   setPadding(doc, 'padding-inline-start', entry.priorPadding.start)
   setPadding(doc, 'padding-inline-end', entry.priorPadding.end)
+  if (entry.priorBottom === null) return
+  setPadding(doc, 'padding-block-end', entry.priorBottom)
+  entry.priorBottom = null
 }
 
 function setPadding(doc: Document, edge: string, value: string): void {

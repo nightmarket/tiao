@@ -208,10 +208,7 @@ export function createNotch(host: NotchHost): Notch {
 
   let overrides = -1
   const syncValues = () => {
-    const canUndo = host.history.canUndo()
-    const canRedo = host.history.canRedo()
-    if (undoBtn.disabled === canUndo) undoBtn.disabled = !canUndo
-    if (redoBtn.disabled === canRedo) redoBtn.disabled = !canRedo
+    syncHistoryButtons(host.history, undoBtn, redoBtn)
     const n = host.countOverrides()
     if (n === overrides) return
     overrides = n
@@ -445,6 +442,18 @@ function createImportPanel(
       applyBtn.removeEventListener('click', submit)
     },
   }
+}
+
+/** undo and redo grey out when there is nothing to step over */
+export function syncHistoryButtons(
+  history: NotchHistory,
+  undo: HTMLButtonElement,
+  redo: HTMLButtonElement,
+): void {
+  const canUndo = history.canUndo()
+  const canRedo = history.canRedo()
+  if (undo.disabled === canUndo) undo.disabled = !canUndo
+  if (redo.disabled === canRedo) redo.disabled = !canRedo
 }
 
 /** icon button named by aria-label; its visible tooltip is a shorter form */
