@@ -1,5 +1,14 @@
 /*
- * Global Font setting. ABC Areal is licensed, so tiao never ships the file:
+ * Global Font setting. Geist ships with tiao: the "tiao Geist" faces are
+ * registered from JS when the setting picks them (see fonts.ts).
+ */
+:root[data-tiao-font="geist"] {
+  --tiao-face-ui: "tiao Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --tiao-face-mono: "tiao Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+/*
+ * ABC Areal is licensed, so tiao never ships the file:
  * the page declares an @font-face for "ABC Areal Superfamily Variable" (or
  * the system has it installed), else these fall through to the system stack.
  * One variable file carries both faces: its MONO axis selects the mono one

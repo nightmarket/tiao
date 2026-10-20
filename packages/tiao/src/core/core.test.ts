@@ -2780,11 +2780,41 @@ describe('Pane registry and chrome', () => {
     }
   })
 
+  it('defaults to the bundled Geist and registers its faces once per document', async () => {
+    const added: { family: string; source: string }[] = []
+    const FakeFontFace = class {
+      constructor(
+        public family: string,
+        public source: string,
+      ) {}
+    }
+    vi.stubGlobal('FontFace', FakeFontFace)
+    Object.defineProperty(document, 'fonts', {
+      configurable: true,
+      value: { add: (face: { family: string; source: string }) => added.push(face) },
+    })
+    try {
+      const pane = new Pane()
+      expect(Pane.font).toBe('geist')
+      expect(document.documentElement.dataset['tiaoFont']).toBe('geist')
+      await vi.waitFor(() => expect(added).toHaveLength(2))
+      expect(added.map((f) => f.family)).toEqual(['tiao Geist', 'tiao Geist Mono'])
+      expect(added[0]!.source).toMatch(/^url\(".+Geist-Variable\.woff2"\) format\("woff2"\)$/)
+      new Pane().dispose()
+      await Promise.resolve()
+      expect(added).toHaveLength(2)
+      pane.dispose()
+    } finally {
+      delete (document as { fonts?: unknown }).fonts
+      vi.unstubAllGlobals()
+    }
+  })
+
   it('notch font picks ABC Areal for every pane and persists', () => {
     const pane = new Pane()
     const root = document.documentElement
-    expect(Pane.font).toBe('system')
-    expect(root.dataset['tiaoFont']).toBeUndefined()
+    expect(Pane.font).toBe('geist')
+    expect(root.dataset['tiaoFont']).toBe('geist')
 
     ;(document.querySelector('.tiao-notch-gear') as HTMLButtonElement).click()
     const row = [...document.querySelectorAll('.tiao-notch .tiao-pane-menu .tiao-row')].find(

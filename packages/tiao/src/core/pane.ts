@@ -26,6 +26,7 @@ import {
 } from './dock'
 import { collapseSelection, draggable, gearIcon, h, icon, searchIcon, withDocument } from './dom'
 import { createDrawerControls, type DrawerControls } from './drawer-controls'
+import { registerGeist } from './fonts'
 import { ValueHistory } from './history'
 import { createNotch, type Notch, type NotchHost } from './notch'
 import { createPaneMenu } from './pane-menu'
@@ -176,12 +177,15 @@ export type PaneSpacing = 's' | 'm' | 'l'
 export type PaneFontSize = 'small' | 'normal' | 'large'
 
 /**
- * Typeface for every pane, set from the notch. `areal` asks for ABC Areal
- * Superfamily Variable, which tiao cannot ship (it is licensed): the page
- * declares the @font-face, or the system has it installed. Without either,
- * text falls back to the system stack.
+ * Typeface for every pane, set from the notch. `geist` (the default) is Geist
+ * and Geist Mono, which ship with tiao. `areal` asks for ABC Areal Superfamily
+ * Variable, which tiao cannot ship (it is licensed): the page declares the
+ * @font-face, or the system has it installed. Without either, text falls back
+ * to the system stack.
  */
-export type PaneFont = 'system' | 'areal'
+export type PaneFont = 'geist' | 'system' | 'areal'
+
+const DEFAULT_FONT: PaneFont = 'geist'
 
 /** default --tiao-accent, used when the computed style is unavailable (e.g. jsdom) */
 const DEFAULT_ACCENT = '#facc15'
@@ -387,6 +391,7 @@ function applyFont(doc: Document, font: PaneFont): void {
   const root = doc.documentElement
   if (font === 'system') delete root.dataset['tiaoFont']
   else root.dataset['tiaoFont'] = font
+  if (font === 'geist') registerGeist(doc)
 }
 
 /** the panes the notch counts, reveals, and resets: floating plus every id'd one */
@@ -1103,7 +1108,7 @@ export class Pane extends Container {
 
   /** typeface every pane draws with */
   static get font(): PaneFont {
-    return readNotchState().font ?? 'system'
+    return readNotchState().font ?? DEFAULT_FONT
   }
 
   static setFont(font: PaneFont, doc: Document = document): void {
@@ -1245,7 +1250,7 @@ export class Pane extends Container {
     if (options.theme) this.applyTheme(options.theme)
     // the global font size covers floating panes; inline ones keep their own
     const notchState = readNotchState()
-    applyFont(doc, notchState.font ?? 'system')
+    applyFont(doc, notchState.font ?? DEFAULT_FONT)
     if (this.floating) this.applyFontSize(notchState.fontSize ?? 'small')
     else if (options.size) this.size = options.size
     if (this.floating) {

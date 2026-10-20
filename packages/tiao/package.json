@@ -93,7 +93,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsup && cp src/core/styles.css dist/tiao.css && cp src/styles.d.ts dist/styles.d.ts",
+    "build": "tsup && cp src/core/styles.css dist/tiao.css && cp src/styles.d.ts dist/styles.d.ts && cp src/core/fonts/OFL.txt dist/Geist-OFL.txt",
     "prepack": "pnpm run build",
     "typecheck": "tsc --noEmit"
   },

@@ -100,6 +100,7 @@ const DOCK_SIDES: DockSide[] = ['left', 'right']
 
 /** Font dropdown entries, by the name each face goes by */
 const FONT_OPTIONS: Record<string, PaneFont> = {
+  Geist: 'geist',
   System: 'system',
   'ABC Areal': 'areal',
 }
@@ -180,7 +181,7 @@ function buildMenu(host: PaneMenuHost): { shell: HTMLElement; refresh: () => voi
   const settings = {
     draggable: placement?.getDraggable() ?? false,
     hiding: hiding?.get() ?? false,
-    font: font?.get() ?? 'system',
+    font: font?.get() ?? 'geist',
     theme: host.getTheme(),
     accent: host.getAccent(),
     numbers: host.getNumbers(),

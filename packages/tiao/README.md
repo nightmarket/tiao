@@ -40,6 +40,10 @@ React is an optional peer dependency and is only required for
 `@nightmarket/tiao/react`. The core injects its styles automatically; importing
 `@nightmarket/tiao/styles.css` disables that runtime injection.
 
+Panes draw in Geist and Geist Mono by default, bundled under the SIL Open Font
+License (`dist/Geist-OFL.txt`) and loaded on first use. `Pane.setFont('system')`
+switches to the platform stack.
+
 `useControls` and `mountPane` work without application-level environment
 checks. Gating resolves from one canonical env variable, `DEBUG_LEVEL`, read
 through your bundler's client-exposure prefix (`NEXT_PUBLIC_DEBUG_LEVEL` in
