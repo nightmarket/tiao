@@ -168,6 +168,7 @@ export function ensureDock(host: DockHost): DockShell {
     setAccent: host.setAccent,
     getNumbers: host.getNumbers,
     setNumbers: host.setNumbers,
+    hoverControls: host.hoverControls,
     sides: {
       getSide: () => dockSide(),
       setSide: (side) => {
@@ -281,7 +282,7 @@ const INSET_ATTR = 'data-tiao-inset'
 const SKIP_ATTR = 'data-tiao-no-inset'
 /** tiao's own UI sits beside the sidebar or inside it, never inset by it */
 const OWN_UI =
-  '.tiao-dock, .tiao-notch, .tiao-pane, .tiao-drawer-controls, .tiao-scrub-overlay, .tiao-cursor-layer'
+  '.tiao-dock, .tiao-notch, .tiao-pane, .tiao-pins, .tiao-drawer-controls, .tiao-scrub-overlay, .tiao-cursor-layer'
 
 /**
  * Inset the page's own fixed chrome. Body padding only moves elements in normal

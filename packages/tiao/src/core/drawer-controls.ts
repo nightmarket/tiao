@@ -1,4 +1,4 @@
-import { draggable, h, redoIcon, rotateCcwIcon, undoIcon, withDocument } from './dom'
+import { draggable, h, logoIcon, redoIcon, rotateCcwIcon, undoIcon, withDocument } from './dom'
 import { type NotchHost, syncHistoryButtons } from './notch'
 import { jsonStore } from './util'
 
@@ -53,7 +53,7 @@ export interface DrawerControls {
 
 /**
  * A row of round buttons on small screens, where the notch and floating panes
- * are gone. The T toggle opens and closes the drawer; while it is open, undo,
+ * are gone. The logo toggle opens and closes the drawer; while it is open, undo,
  * redo, and reset join it on the side facing the middle of the screen.
  * Dragging the toggle carries the row to the nearest viewport corner, which is
  * remembered, and a bottom-corner row rides up on the open drawer's top edge so
@@ -62,7 +62,7 @@ export interface DrawerControls {
 export function createDrawerControls(host: DrawerControlsHost): DrawerControls {
   const doc = host.document
   const { row, toggleBtn, undoBtn, redoBtn, resetBtn } = withDocument(doc, () => {
-    const toggleBtn = roundButton('tiao-drawer-toggle', 'T', 'Debug settings')
+    const toggleBtn = roundButton('tiao-drawer-toggle', logoIcon(), 'Debug settings')
     toggleBtn.setAttribute('aria-controls', host.drawer.id)
     toggleBtn.setAttribute('aria-expanded', 'false')
     const undoBtn = roundButton('tiao-drawer-action tiao-drawer-undo', undoIcon(), 'Undo')

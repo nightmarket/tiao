@@ -1,5 +1,4 @@
-import type { BindingApi } from './blade'
-import { adoptTokens, h, rotateCcwIcon, withDocument } from './dom'
+import { adoptTokens, h, pinIcon, rotateCcwIcon, withDocument } from './dom'
 import { tooltip } from './tooltip'
 import { clamp } from './util'
 
@@ -15,6 +14,7 @@ const THEME_TOKENS = [
   '--tiao-fg-faint',
   '--tiao-hover',
   '--tiao-focus',
+  '--tiao-accent',
   '--tiao-radius',
   '--tiao-radius-sm',
   '--tiao-shadow-popup',
@@ -23,8 +23,18 @@ const THEME_TOKENS = [
   '--tiao-font-size',
 ]
 
+/** what the toolbar acts on: a binding, through its row in a pane or its pinned card */
+export interface RowTarget {
+  pinned: boolean
+  readonly overridden: boolean
+  reset(): void
+}
+
+/** where the toolbar sits beside the row: level with its middle, or with its top */
+export type RowToolbarAlign = 'center' | 'top'
+
 interface RowToolbar {
-  open(binding: BindingApi<unknown>): void
+  open(target: RowTarget, row: HTMLElement, align: RowToolbarAlign): void
   close(): void
 }
 
@@ -32,16 +42,19 @@ interface RowToolbar {
 const toolbars = new WeakMap<Document, RowToolbar>()
 
 function createRowToolbar(doc: Document): RowToolbar {
-  const { el, resetBtn } = withDocument(doc, () => {
+  const { el, pinBtn, resetBtn } = withDocument(doc, () => {
+    const pinBtn = h('button', 'tiao-row-toolbar-btn tiao-row-toolbar-pin', pinIcon())
+    pinBtn.type = 'button'
     const resetBtn = h('button', 'tiao-row-toolbar-btn tiao-row-toolbar-reset', rotateCcwIcon())
     resetBtn.type = 'button'
     resetBtn.setAttribute('aria-label', 'Reset to default')
-    const el = h('div', 'tiao-row-toolbar', resetBtn)
+    const el = h('div', 'tiao-row-toolbar', pinBtn, resetBtn)
     el.setAttribute('role', 'toolbar')
     el.setAttribute('aria-label', 'Row actions')
-    return { el, resetBtn }
+    return { el, pinBtn, resetBtn }
   })
-  let current: BindingApi<unknown> | null = null
+  let current: { target: RowTarget; row: HTMLElement } | null = null
+  const pinLabel = () => (current?.target.pinned ? 'Unpin' : 'Pin')
 
   const onOutside = (e: PointerEvent) => {
     if (!el.contains(e.target as Node | null)) close()
@@ -54,7 +67,7 @@ function createRowToolbar(doc: Document): RowToolbar {
 
   function close() {
     if (!current) return
-    current.element.classList.remove('tiao-row-context')
+    current.row.classList.remove('tiao-row-context')
     current = null
     el.remove()
     doc.removeEventListener('pointerdown', onOutside, true)
@@ -63,38 +76,47 @@ function createRowToolbar(doc: Document): RowToolbar {
     doc.defaultView?.removeEventListener('resize', onMoved)
   }
 
-  function open(binding: BindingApi<unknown>) {
+  function open(target: RowTarget, row: HTMLElement, align: RowToolbarAlign) {
     if (!current) {
       doc.addEventListener('pointerdown', onOutside, true)
       doc.addEventListener('keydown', onKey)
       doc.addEventListener('scroll', onMoved, true)
       doc.defaultView?.addEventListener('resize', onMoved)
     }
-    current?.element.classList.remove('tiao-row-context')
-    current = binding
-    binding.element.classList.add('tiao-row-context')
-    adoptTokens(el, binding.element, THEME_TOKENS)
-    resetBtn.disabled = !binding.overridden
+    current?.row.classList.remove('tiao-row-context')
+    current = { target, row }
+    row.classList.add('tiao-row-context')
+    adoptTokens(el, row, THEME_TOKENS)
+    pinBtn.setAttribute('aria-pressed', String(target.pinned))
+    pinBtn.setAttribute('aria-label', pinLabel())
+    resetBtn.disabled = !target.overridden
     if (!el.isConnected) doc.body.append(el)
-    place(binding)
+    place(row, align)
   }
 
-  // beside the pane, centered on the row; flips left when the right has no room
-  function place(binding: BindingApi<unknown>) {
-    const row = binding.element.getBoundingClientRect()
-    const pane = (binding.element.closest('.tiao-pane') ?? binding.element).getBoundingClientRect()
+  // beside the pane (or card); flips left when the right has no room
+  function place(row: HTMLElement, align: RowToolbarAlign) {
+    const rowRect = row.getBoundingClientRect()
+    const pane = (row.closest('.tiao-pane') ?? row).getBoundingClientRect()
     const { offsetWidth: width, offsetHeight: height } = el
     const viewW = doc.documentElement.clientWidth
     const viewH = doc.documentElement.clientHeight
     let left = Math.round(pane.right + GAP)
     if (left + width > viewW - EDGE) left = Math.round(pane.left - GAP - width)
-    const top = Math.round(row.top + row.height / 2 - height / 2)
+    const top = Math.round(
+      align === 'top' ? rowRect.top : rowRect.top + rowRect.height / 2 - height / 2,
+    )
     el.style.left = `${clamp(left, EDGE, Math.max(EDGE, viewW - EDGE - width))}px`
     el.style.top = `${clamp(top, EDGE, Math.max(EDGE, viewH - EDGE - height))}px`
   }
 
+  pinBtn.addEventListener('click', () => {
+    if (current) current.target.pinned = !current.target.pinned
+    close()
+  })
+  tooltip(pinBtn, pinLabel)
   resetBtn.addEventListener('click', () => {
-    current?.reset()
+    current?.target.reset()
     close()
   })
   tooltip(resetBtn, () => 'Reset to default')
@@ -102,15 +124,19 @@ function createRowToolbar(doc: Document): RowToolbar {
   return { open, close }
 }
 
-/** Show the row actions beside `binding`'s pane, reusing the one toolbar. */
-export function openRowToolbar(binding: BindingApi<unknown>): void {
-  const doc = binding.element.ownerDocument
+/** Show `target`'s actions beside the pane or card holding `row`, reusing the one toolbar. */
+export function openRowToolbar(
+  target: RowTarget,
+  row: HTMLElement,
+  align: RowToolbarAlign = 'center',
+): void {
+  const doc = row.ownerDocument
   let toolbar = toolbars.get(doc)
   if (!toolbar) {
     toolbar = createRowToolbar(doc)
     toolbars.set(doc, toolbar)
   }
-  toolbar.open(binding)
+  toolbar.open(target, row, align)
 }
 
 export function closeRowToolbar(doc: Document): void {

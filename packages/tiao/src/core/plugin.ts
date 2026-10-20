@@ -36,7 +36,9 @@ export interface PluginContext<T> {
   options: BindingOptions
   /** row label (plugins with full-row layouts render it themselves) */
   label: string
-  /** register cleanup to run when the binding is disposed */
+  /** a pinned copy, drawn large at the bottom of the page; a plugin may lay out for it */
+  featured?: boolean
+  /** register cleanup to run when the binding (or its pinned copy) is disposed */
   onDispose(fn: () => void): void
 }
 

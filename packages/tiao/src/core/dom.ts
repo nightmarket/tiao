@@ -155,6 +155,58 @@ export function rotateCcwIcon(): SVGSVGElement {
   ])
 }
 
+/** Lucide "pin". */
+export function pinIcon(): SVGSVGElement {
+  return lucideIcon('pin', [
+    svgPath('M12 17v5'),
+    svgPath(
+      'M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z',
+    ),
+  ])
+}
+
+/** the logo's three nodes, mid-wander; the playground favicon draws the same shape */
+const LOGO_NODES = [
+  [35.5, 20.7],
+  [62.3, 56.1],
+  [17.7, 59.3],
+] as const
+const LOGO_NODE_RADIUS = 7.5
+
+/**
+ * tiao's logo as a sticker: three ringed nodes joined ring to ring, over a
+ * die-cut backing that traces the mark a few units out, leaving the triangle
+ * between the edges open. The mark is currentColor and the backing the theme's
+ * surface (see .tiao-logo).
+ */
+export function logoIcon(): SVGSVGElement {
+  const doc = creationDoc()
+  const svg = doc.createElementNS(SVG_NS, 'svg')
+  svg.setAttribute('viewBox', '0 0 80 80')
+  svg.setAttribute('class', 'tiao-logo')
+  svg.setAttribute('aria-hidden', 'true')
+  const [a, b, c] = LOGO_NODES
+  const sticker = doc.createElementNS(SVG_NS, 'g')
+  sticker.setAttribute('class', 'tiao-logo-sticker')
+  const outline = svgPath(`M${a} ${b} ${c}Z`)
+  outline.setAttribute('class', 'tiao-logo-sticker-edges')
+  sticker.append(outline)
+  for (const [x, y] of LOGO_NODES) {
+    const disc = svgCircle(x, y, LOGO_NODE_RADIUS)
+    disc.setAttribute('class', 'tiao-logo-sticker-node')
+    sticker.append(disc)
+  }
+  const edges = svgPath('M40 26.7 57.8 50.1M54.8 56.6 25.2 58.8M20.8 52.5 32.4 27.5')
+  edges.setAttribute('class', 'tiao-logo-edges')
+  svg.append(sticker, edges)
+  for (const [x, y] of LOGO_NODES) {
+    const node = svgCircle(x, y, LOGO_NODE_RADIUS)
+    node.setAttribute('class', 'tiao-logo-node')
+    svg.append(node)
+  }
+  return svg
+}
+
 /*
  * copy and import keep their straight edges on odd grid lines: at the 12px
  * notch size each unit is half a pixel, so a 1px stroke centered on an even

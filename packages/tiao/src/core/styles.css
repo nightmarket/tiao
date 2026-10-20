@@ -734,14 +734,55 @@
   color: var(--tiao-fg-faint);
   cursor: default;
 }
-.tiao-drawer-toggle {
-  font-size: 18px;
-  font-weight: 600;
-  line-height: 1;
+/* the logo sticker is the toggle's own backing, so the round one goes */
+.tiao-drawer-button.tiao-drawer-toggle {
+  color: var(--tiao-fg);
+  background: none;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   touch-action: none;
+}
+.tiao-drawer-toggle .tiao-logo {
+  width: 40px;
+  height: 40px;
 }
 .tiao-drawer-toggle[aria-expanded="true"] {
   color: var(--tiao-accent);
+}
+
+/* ---- logo: a die-cut sticker; the mark takes currentColor ---- */
+.tiao-logo {
+  display: block;
+  flex: none;
+  overflow: visible;
+}
+/* the backing runs 4 units outside the mark: edges 4.5 + 2 × 4 wide, and
+   discs out to the rings' outer radius (10) + 4 */
+.tiao-logo-sticker {
+  fill: var(--tiao-bg-solid);
+  stroke: var(--tiao-bg-solid);
+  stroke-linejoin: round;
+  /* viewBox units: a hairline edge, then a lift */
+  filter: drop-shadow(0 0 1.5px var(--tiao-border)) drop-shadow(0 3px 5px rgba(0, 0, 0, 0.22));
+}
+.tiao-logo-sticker-edges {
+  fill: none;
+  stroke-width: 12.5px;
+}
+.tiao-logo-sticker-node {
+  stroke-width: 13px;
+}
+.tiao-logo-edges,
+.tiao-logo-node {
+  fill: none;
+  stroke: currentColor;
+}
+.tiao-logo-edges {
+  stroke-width: 4.5px;
+}
+.tiao-logo-node {
+  stroke-width: 5px;
 }
 /* the toggle sits at the screen edge, the actions toward the middle */
 .tiao-drawer-controls[data-tiao-corner$="right"] > .tiao-drawer-toggle {
@@ -1439,6 +1480,7 @@
   overflow: hidden;
   cursor: ew-resize;
   touch-action: none;
+  transition: opacity 0.12s ease;
 }
 .tiao-slider-fill {
   position: absolute;
@@ -1713,6 +1755,9 @@
   color: var(--tiao-fg-faint);
   background: none;
   cursor: default;
+}
+.tiao-row-toolbar-btn[aria-pressed="true"] {
+  color: var(--tiao-accent);
 }
 
 /* ---- tooltip: short label dropped below an icon button (see tooltip.ts).
@@ -2426,6 +2471,265 @@
 .tiao-pad-axis-y .tiao-pad-axis-label {
   left: 4px;
   top: 3px;
+}
+
+/* ---- pins: featured values stacked at the bottom center of the page (see
+   pins.ts). Each card is a one-row pane, centered on whatever the docked
+   sidebar leaves of the page ---- */
+.tiao-pins {
+  /* how far it rises to clear the drawer controls */
+  --tiao-pins-lift: 0px;
+
+  position: fixed;
+  left: var(--tiao-dock-inset-start);
+  right: var(--tiao-dock-inset-end);
+  bottom: calc(env(safe-area-inset-bottom) + 32px + var(--tiao-pins-lift));
+  z-index: 9998;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  /* the gaps beside and between cards stay clickable for the page */
+  pointer-events: none;
+  transition: bottom 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+}
+/* a bottom-corner row of drawer buttons (44px tall) would sit under the stack */
+body:has(> .tiao-drawer-controls[data-tiao-corner^="bottom"]) > .tiao-pins {
+  --tiao-pins-lift: 44px;
+}
+/* the open drawer pushes the page up, and the stack rides on its top edge */
+body:has(> .tiao-dock-drawer.tiao-open) > .tiao-pins {
+  bottom: calc(var(--tiao-drawer-height) + 32px + var(--tiao-pins-lift));
+}
+/* larger and in the heading face rather than mono: labels lead, values follow.
+   Labels and values sit the row padding in from the card's edges in every
+   card, and a slider's track is the whole card */
+.tiao-pane.tiao-pin {
+  --tiao-font-mono: var(--tiao-font);
+  --tiao-font-mono-settings: normal;
+  --tiao-font-size: 15px;
+  --tiao-font-size-mono: 15px;
+  --tiao-row-height: 44px;
+  --tiao-row-pad-x: 16px;
+  --tiao-row-pad-y: 0px;
+  --tiao-handle-height: 20px;
+  --tiao-icon-size: 16px;
+  --tiao-gap: 12px;
+  /* the global Pinned > Rounding setting */
+  --tiao-pin-radius: 12px;
+  /* a toggle, swatch, or pad button at the end of the row sits concentric with
+     the card's corner: inset as far from the edge as from the top and bottom,
+     and rounded by the corner radius less that inset */
+  --tiao-pin-item: calc(var(--tiao-control-height) * 0.6);
+  --tiao-pin-item-inset: calc((var(--tiao-row-height) - var(--tiao-pin-item)) / 2);
+  --tiao-pin-item-radius: max(0px, var(--tiao-pin-radius) - var(--tiao-pin-item-inset));
+  width: min(320px, 100% - 32px);
+  border-radius: var(--tiao-pin-radius);
+  pointer-events: auto;
+}
+:root[data-tiao-pin-rounding="full"] .tiao-pane.tiao-pin {
+  --tiao-pin-radius: calc(var(--tiao-row-height) / 2);
+}
+:root[data-tiao-pin-rounding="s"] .tiao-pane.tiao-pin {
+  --tiao-pin-radius: 6px;
+}
+:root[data-tiao-pin-rounding="none"] .tiao-pane.tiao-pin {
+  --tiao-pin-radius: 0px;
+}
+.tiao-pin .tiao-row::before {
+  display: none;
+}
+.tiao-pin .tiao-label,
+.tiao-slider-label {
+  color: var(--tiao-fg);
+}
+.tiao-pane.tiao-pin :where(.tiao-num-input, .tiao-text-input, .tiao-select, .tiao-color-text) {
+  color: var(--tiao-fg-soft);
+}
+/* fields read as plain text until they're being typed in */
+.tiao-pin .tiao-row :is(.tiao-num-input, .tiao-text-input, .tiao-select):not(:focus) {
+  background: transparent;
+}
+.tiao-pin
+  .tiao-row:has(:is(.tiao-check, .tiao-color-swatch, .tiao-point-pad-toggle, .tiao-angle-knob)) {
+  padding-right: var(--tiao-pin-item-inset);
+}
+.tiao-pin :is(.tiao-check, .tiao-color-swatch, .tiao-point-pad-toggle, .tiao-angle-knob) {
+  width: var(--tiao-pin-item);
+  height: var(--tiao-pin-item);
+}
+.tiao-pin :is(.tiao-check, .tiao-color-swatch, .tiao-point-pad-toggle) {
+  border-radius: var(--tiao-pin-item-radius);
+}
+.tiao-pin .tiao-check::after {
+  border-radius: max(0px, var(--tiao-pin-item-radius) - 4px);
+}
+.tiao-pin .tiao-color {
+  justify-content: flex-end;
+  gap: 6px;
+}
+.tiao-pin .tiao-color-text {
+  flex: 0 1 auto;
+  width: auto;
+  padding: 0;
+  background: none;
+  field-sizing: content;
+}
+.tiao-pin .tiao-slider {
+  --tiao-handle-size: 3px;
+  --tiao-handle-inset: 8px;
+}
+/* in the accent at rest too, which a pane's handlebars only wear while hovered */
+.tiao-pane.tiao-pin .tiao-slider-handles::after,
+.tiao-pane.tiao-pin .tiao-slider-handles::before {
+  border-radius: 2px;
+  background: var(--tiao-accent);
+  opacity: 1;
+}
+.tiao-pin .tiao-row-full {
+  padding: 0;
+}
+.tiao-pin .tiao-row-full .tiao-number {
+  height: var(--tiao-row-height);
+}
+.tiao-pin .tiao-row-full .tiao-slider {
+  border-radius: var(--tiao-pin-radius);
+  background: none;
+}
+/* subtle at rest, stronger while the slider is in use */
+.tiao-pin .tiao-row-full .tiao-slider-fill {
+  border-radius: var(--tiao-pin-radius);
+  background: color-mix(in srgb, var(--tiao-fg) 7%, transparent);
+  transition: background 0.12s ease;
+}
+.tiao-pin .tiao-row-full:is(:hover, .tiao-row-active) .tiao-slider-fill {
+  background: color-mix(in srgb, var(--tiao-fg) 14%, transparent);
+}
+.tiao-pin .tiao-row-full .tiao-slider-handles {
+  transition: opacity 0.12s ease;
+}
+.tiao-pin .tiao-row-full .tiao-num-input {
+  height: 100%;
+  padding-right: var(--tiao-row-pad-x);
+}
+/* a pinned slider's label, at the left end of its track */
+.tiao-slider-label {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1;
+  max-width: 60%;
+  padding-left: var(--tiao-row-pad-x);
+  line-height: var(--tiao-row-height);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* ---- quiet rows: every pinned card, and every pane under the global Hover
+   Controls setting. Values show, and the rest of a control waits for the
+   pointer, keyboard focus, or a drag in its row: slider tracks, scrub grips,
+   dropdown carets, and field backgrounds, while ranges and vectors read as
+   comma-separated lists. Text sits right-aligned, and swatches, dials, and pad
+   buttons after it, the whole time ---- */
+:is(:root[data-tiao-hover-controls] .tiao-pane, .tiao-pane.tiao-pin)
+  .tiao-row
+  :is(.tiao-text-input, .tiao-select, .tiao-color-text) {
+  text-align: right;
+  text-align-last: right;
+}
+:is(:root[data-tiao-hover-controls] .tiao-pane, .tiao-pane.tiao-pin)
+  .tiao-row
+  :is(.tiao-color-swatch, .tiao-angle-knob, .tiao-point-pad-toggle) {
+  order: 1;
+}
+:is(:root[data-tiao-hover-controls] .tiao-pane, .tiao-pane.tiao-pin) .tiao-row .tiao-color-swatch {
+  width: calc(var(--tiao-control-height) * 0.6);
+  height: calc(var(--tiao-control-height) * 0.6);
+}
+:is(:root[data-tiao-hover-controls] .tiao-pane, .tiao-pane.tiao-pin)
+  .tiao-row
+  :is(.tiao-scrub-grip, .tiao-select-wrap > .tiao-icon-chevron) {
+  transition: opacity 0.12s ease;
+}
+/* touch screens can't hover, so they keep every control showing */
+@media (hover: hover) {
+  /* a pinned slider keeps its track, which is the card */
+  :is(:root[data-tiao-hover-controls] .tiao-pane, .tiao-pane.tiao-pin)
+    .tiao-row:not(.tiao-row-full, :hover, .tiao-row-active, :has(:focus-visible))
+    :is(.tiao-number > .tiao-slider, .tiao-scrub-grip, .tiao-select-wrap > .tiao-icon-chevron) {
+    opacity: 0;
+  }
+  .tiao-pin
+    .tiao-row-full:not(:hover, .tiao-row-active, :has(:focus-visible))
+    .tiao-slider-handles {
+    opacity: 0;
+  }
+  :is(:root[data-tiao-hover-controls] .tiao-pane, .tiao-pane.tiao-pin)
+    .tiao-row:not(:hover, .tiao-row-active, :has(:focus-visible))
+    :is(.tiao-num-input, .tiao-text-input, .tiao-select, .tiao-color-text) {
+    background: transparent;
+  }
+  :is(:root[data-tiao-hover-controls] .tiao-pane, .tiao-pane.tiao-pin)
+    .tiao-row:not(:hover, .tiao-row-active, :has(:focus-visible))
+    .tiao-select {
+    padding-right: 6px;
+  }
+  /* a hidden track's readouts sit at rest; !important beats the inline
+     transform that dodges them around the handle */
+  :is(:root[data-tiao-hover-controls] .tiao-pane, .tiao-pane.tiao-pin)
+    .tiao-row:not(:hover, .tiao-row-active, :has(:focus-visible))
+    .tiao-number
+    > :is(.tiao-slider-num, .tiao-interval-min, .tiao-interval-max) {
+    transform: none !important;
+  }
+}
+/* a list needs fields as wide as their text; without that they keep their layout */
+@media (hover: hover) {
+  @supports (field-sizing: content) {
+    :is(:root[data-tiao-hover-controls] .tiao-pane, .tiao-pane.tiao-pin)
+      .tiao-row:not(:hover, .tiao-row-active, :has(:focus-visible))
+      :is(.tiao-interval, .tiao-point-fields) {
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      gap: 0;
+    }
+    :is(:root[data-tiao-hover-controls] .tiao-pane, .tiao-pane.tiao-pin)
+      .tiao-row:not(:hover, .tiao-row-active, :has(:focus-visible))
+      :is(.tiao-interval-min, .tiao-interval-max, .tiao-point-fields > .tiao-scrub) {
+      position: static;
+      display: flex;
+      align-items: center;
+      flex: none;
+      width: auto;
+    }
+    :is(:root[data-tiao-hover-controls] .tiao-pane, .tiao-pane.tiao-pin)
+      .tiao-row:not(:hover, .tiao-row-active, :has(:focus-visible))
+      :is(.tiao-interval, .tiao-point-fields)
+      .tiao-num-input {
+      width: auto;
+      padding: 0;
+      field-sizing: content;
+    }
+    :is(:root[data-tiao-hover-controls] .tiao-pane, .tiao-pane.tiao-pin)
+      .tiao-row:not(:hover, .tiao-row-active, :has(:focus-visible))
+      :is(.tiao-interval-max, .tiao-point-fields > .tiao-scrub:last-child)
+      .tiao-num-input {
+      padding-right: 6px;
+    }
+    :is(:root[data-tiao-hover-controls] .tiao-pane, .tiao-pane.tiao-pin)
+      .tiao-row:not(:hover, .tiao-row-active, :has(:focus-visible))
+      :is(.tiao-interval-min, .tiao-point-fields > .tiao-scrub:not(:last-child))::after {
+      content: ", ";
+      white-space: pre;
+      color: var(--tiao-fg-dim);
+      font-family: var(--tiao-font-mono);
+      font-variation-settings: var(--tiao-font-mono-settings);
+      font-size: var(--tiao-font-size-mono);
+    }
+  }
 }
 
 /* ---- monitors ---- */

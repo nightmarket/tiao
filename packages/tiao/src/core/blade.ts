@@ -1,7 +1,17 @@
 import { h, icon, longPress, withDocument } from './dom'
 import { Emitter } from './emitter'
-import type { AddBindingOptions, BindingOptions, PluginRegistry, VisibilityOptions } from './plugin'
+import type { PinBoard } from './pins'
+import type {
+  AddBindingOptions,
+  BindingOptions,
+  InputPlugin,
+  MonitorPlugin,
+  PluginRegistry,
+  PluginView,
+  VisibilityOptions,
+} from './plugin'
 import { onInterval } from './ticker'
+import type { JSONStore } from './util'
 import { Value } from './value'
 import { sameShape, sameValue, type ValueStore } from './values'
 
@@ -17,6 +27,10 @@ export interface BladeHost {
   values?: ValueStore
   /** told of every settled edit and the value it replaced (feeds undo/redo) */
   onSettle?: SettleListener
+  /** the page's pinned values; absent where rows can't be featured */
+  pins?: PinBoard
+  /** which rows are pinned, by storage path; absent for panes without an id or storage */
+  pinStore?: JSONStore<Record<string, boolean>>
 }
 
 export type SettleListener = (binding: BindingApi<unknown>, from: unknown, to: unknown) => void
@@ -196,6 +210,7 @@ export abstract class Container extends Item {
     if (this.host.values && !pluginOpts.readonly && pluginOpts.persist !== false) {
       api.persistPath = valuePath(this, pluginOpts.label ?? key)
       persistValue(this.host.values, api.persistPath, api)
+      if (this.host.pinStore?.get()[api.persistPath]) api.pinned = true
     }
     // after the saved value lands, so restoring it isn't an edit
     if (this.host.onSettle && !pluginOpts.readonly) api.trackSettled(this.host.onSettle)
@@ -425,12 +440,13 @@ export class BindingApi<T> extends Item {
   private bindingEmitter = new Emitter<BindingEvents<T>>()
   private labelEl: HTMLElement | null = null
   private labelText: string
+  private readonly plugin: InputPlugin<unknown> | MonitorPlugin<unknown>
 
   constructor(
-    host: BladeHost,
+    private readonly host: BladeHost,
     private target: Record<string, T>,
     key: string,
-    options: BindingOptions,
+    private readonly options: BindingOptions,
   ) {
     super()
     this.key = key
@@ -449,6 +465,7 @@ export class BindingApi<T> extends Item {
         `tiao: no ${options.readonly ? 'monitor' : 'input'} plugin accepts key "${key}" (value: ${JSON.stringify(initial)})`,
       )
     }
+    this.plugin = plugin
 
     const view = plugin.create({
       document: host.document,
@@ -593,6 +610,33 @@ export class BindingApi<T> extends Item {
     return !this.monitor && !sameValue(this.value.get(), this.defaultValue)
   }
 
+  /**
+   * Featured in a larger card at the bottom center of the page, which stays up
+   * while the pane is hidden. Remembered across reloads for persisted rows.
+   */
+  get pinned(): boolean {
+    return this.host.pins?.has(this) ?? false
+  }
+  set pinned(v: boolean) {
+    const { pins, pinStore } = this.host
+    if (!pins) return
+    if (v) pins.pin(this)
+    else pins.unpin(this)
+    if (this.persistPath !== null) pinStore?.patch({ [this.persistPath]: v || undefined })
+  }
+
+  /** internal: a second view of this value, drawn large in the pinned stack */
+  feature(onDispose: (fn: () => void) => void): PluginView {
+    return this.plugin.create({
+      document: this.host.document,
+      value: this.value as Value<unknown>,
+      options: this.options,
+      label: this.label,
+      featured: true,
+      onDispose,
+    })
+  }
+
   /** internal: outline the row in the accent for a moment */
   flash(): void {
     const el = this.element
@@ -608,6 +652,8 @@ export class BindingApi<T> extends Item {
   }
 
   override dispose(): void {
+    // the stored pin stays, so the row comes back pinned when it is added again
+    this.host.pins?.unpin(this)
     this.bindingEmitter.clear()
     super.dispose()
   }

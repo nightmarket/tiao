@@ -1,3 +1,5 @@
+<img src="https://raw.githubusercontent.com/nightmarket/tiao/main/apps/playground/public/favicon.svg" alt="tiao" width="72" height="72" />
+
 # tiao
 
 A themeable, draggable debug pane with a vanilla TypeScript API, React hooks,

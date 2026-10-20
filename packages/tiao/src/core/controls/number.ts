@@ -46,18 +46,23 @@ function createSliderRow(ctx: PluginContext<number>, min: number, max: number): 
   scrub.element.classList.add('tiao-slider-num')
   const el = h('div', 'tiao-number', track, scrub.element)
 
-  const dodge = dodgeReadout({
-    el,
-    track,
-    readout: scrub.element,
-    input: scrub.input,
-    side: 'end',
-    onDispose: ctx.onDispose,
-  })
+  // pinned, the label sits inside the track and the value stays put at the right
+  const featured = ctx.featured ?? false
+  if (featured) el.append(h('span', 'tiao-slider-label', ctx.label))
+  const dodge = featured
+    ? null
+    : dodgeReadout({
+        el,
+        track,
+        readout: scrub.element,
+        input: scrub.input,
+        side: 'end',
+        onDispose: ctx.onDispose,
+      })
   const render = (v: number) => {
     const pct = clamp(mapRange(v, min, max, 0, 100), 0, 100)
     setSliderFillRange(track, 0, pct)
-    dodge(pct)
+    dodge?.(pct)
   }
   render(value.get())
   ctx.onDispose(value.subscribe(render))
@@ -80,6 +85,7 @@ function createSliderRow(ctx: PluginContext<number>, min: number, max: number): 
 
   return {
     element: el,
+    full: featured,
     activate: scrub.activate,
     beginScrub: (e) => {
       const base = value.get()

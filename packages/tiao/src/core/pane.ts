@@ -29,7 +29,8 @@ import { createDrawerControls, type DrawerControls } from './drawer-controls'
 import { registerGeist } from './fonts'
 import { ValueHistory } from './history'
 import { createNotch, type Notch, type NotchHost } from './notch'
-import { createPaneMenu } from './pane-menu'
+import { createPaneMenu, type PaneMenuToggle } from './pane-menu'
+import { createPinBoard, type PinBoard } from './pins'
 import { globalRegistry, PluginRegistry, type TiaoPlugin } from './plugin'
 import { openRowToolbar } from './row-toolbar'
 import { injectStyles } from './styles'
@@ -176,6 +177,11 @@ export type PaneSpacing = 's' | 'm' | 'l'
  */
 export type PaneFontSize = 'small' | 'normal' | 'large'
 
+/** corner rounding of the pinned cards and their sliders; `full` is a pill */
+export type PinRounding = 'none' | 's' | 'l' | 'full'
+
+const DEFAULT_PIN_ROUNDING: PinRounding = 'l'
+
 /**
  * Typeface for every pane, set from the notch. `geist` (the default) is Geist
  * and Geist Mono, which ship with tiao. `areal` asks for ABC Areal Superfamily
@@ -245,6 +251,22 @@ const notches = new WeakMap<Document, Notch>()
 
 /** documents where a pane asked for the notch, so a wide screen can bring it back */
 const notchWanted = new WeakSet<Document>()
+
+/** one stack of pinned values per document */
+const pinBoards = new WeakMap<Document, PinBoard>()
+
+/** pinned cards wear the global look and glass, like the notch */
+function pinBoardFor(doc: Document): PinBoard {
+  let board = pinBoards.get(doc)
+  if (!board) {
+    board = createPinBoard(doc, (card) => {
+      applyChrome(card, globalChrome(doc))
+      card.classList.toggle('tiao-glass', readNotchState().glass ?? false)
+    })
+    pinBoards.set(doc, board)
+  }
+  return board
+}
 
 /** viewport width below which floating panes collect into the bottom drawer */
 const MOBILE_QUERY = '(max-width: 767.98px)'
@@ -374,6 +396,9 @@ interface NotchState {
   style?: PaneStyle | undefined
   accent?: string | undefined
   numbers?: boolean | undefined
+  /** rows show just their values until hovered */
+  hoverControls?: boolean | undefined
+  pinRounding?: PinRounding | undefined
 }
 
 const notchStore = jsonStore<NotchState>('tiao:notch')
@@ -392,6 +417,24 @@ function applyFont(doc: Document, font: PaneFont): void {
   if (font === 'system') delete root.dataset['tiaoFont']
   else root.dataset['tiaoFont'] = font
   if (font === 'geist') registerGeist(doc)
+}
+
+/** on the root element like the font, so the panes, the sidebar, and the drawer all follow it */
+function applyHoverControls(doc: Document, on: boolean): void {
+  doc.documentElement.toggleAttribute('data-tiao-hover-controls', on)
+}
+
+function applyPinRounding(doc: Document, rounding: PinRounding): void {
+  const root = doc.documentElement
+  if (rounding === DEFAULT_PIN_ROUNDING) delete root.dataset['tiaoPinRounding']
+  else root.dataset['tiaoPinRounding'] = rounding
+}
+
+function hoverControlsToggle(doc: Document): PaneMenuToggle {
+  return {
+    get: () => Pane.hoverControls,
+    set: (v) => Pane.setHoverControls(v, doc),
+  }
 }
 
 /** the panes the notch counts, reveals, and resets: floating plus every id'd one */
@@ -695,6 +738,7 @@ function ensureNotch(doc: Document): void {
       setAccent: (accent) => setGlobalChrome(doc, { accent }),
       getNumbers: () => globalChrome(doc).numbers,
       setNumbers: (numbers) => setGlobalChrome(doc, { numbers }),
+      hoverControls: hoverControlsToggle(doc),
       fontSize: {
         get: () => Pane.fontSize,
         set: (v) => Pane.setFontSize(v, doc),
@@ -713,6 +757,10 @@ function ensureNotch(doc: Document): void {
       glass: {
         get: () => Pane.glass,
         set: (v) => Pane.setGlass(v, doc),
+      },
+      pinRounding: {
+        get: () => Pane.pinRounding,
+        set: (v) => Pane.setPinRounding(v, doc),
       },
     }),
   )
@@ -763,6 +811,7 @@ function syncNotch(doc: Document): void {
     queuedNotchSyncs.add(doc)
     return
   }
+  pinBoards.get(doc)?.sync()
   const notch = notches.get(doc)
   if (!notch) return
   // the notch re-declares the theme and size tokens, so it tracks the look
@@ -893,6 +942,7 @@ function createDockHost(doc: Document): DockHost {
     setAccent: (accent) => update({ accent }),
     getNumbers: () => dockChrome(doc).numbers,
     setNumbers: (numbers) => update({ numbers }),
+    hoverControls: hoverControlsToggle(doc),
   }
 }
 
@@ -1116,6 +1166,31 @@ export class Pane extends Container {
     applyFont(doc, font)
   }
 
+  /** whether rows show just their values until hovered */
+  static get hoverControls(): boolean {
+    return readNotchState().hoverControls ?? false
+  }
+
+  /**
+   * Show every row as just its value until the pointer comes over it, when
+   * slider tracks, scrub grips, dropdown carets, and field backgrounds return.
+   * Screens that can't hover always show them.
+   */
+  static setHoverControls(hoverControls: boolean, doc: Document = document): void {
+    notchStore.patch({ hoverControls })
+    applyHoverControls(doc, hoverControls)
+  }
+
+  /** how round the pinned cards are */
+  static get pinRounding(): PinRounding {
+    return readNotchState().pinRounding ?? DEFAULT_PIN_ROUNDING
+  }
+
+  static setPinRounding(pinRounding: PinRounding, doc: Document = document): void {
+    notchStore.patch({ pinRounding })
+    applyPinRounding(doc, pinRounding)
+  }
+
   /**
    * Every value the id'd panes in `doc` persist, as `pane id -> row path ->
    * value` (the shape storage holds), ready for JSON and importValues.
@@ -1160,9 +1235,12 @@ export class Pane extends Container {
     ensureBuiltins(globalRegistry)
     const doc = options.document ?? document
     const registry = new PluginRegistry(globalRegistry)
-    const host: BladeHost = { document: doc, registry }
+    const host: BladeHost = { document: doc, registry, pins: pinBoardFor(doc) }
     const storageKey = paneStorageKey(options)
-    if (storageKey) host.values = createValueStore(storageKey)
+    if (storageKey) {
+      host.values = createValueStore(storageKey)
+      host.pinStore = jsonStore(`${storageKey}:pins`)
+    }
     // the same panes trackedPanes() counts: floating or id'd, never a menu's own
     if (!options.container || options.id !== undefined) {
       host.onSettle = (binding, from, to) => historyFor(doc).record(binding, from, to)
@@ -1251,6 +1329,8 @@ export class Pane extends Container {
     // the global font size covers floating panes; inline ones keep their own
     const notchState = readNotchState()
     applyFont(doc, notchState.font ?? DEFAULT_FONT)
+    applyHoverControls(doc, notchState.hoverControls ?? false)
+    applyPinRounding(doc, notchState.pinRounding ?? DEFAULT_PIN_ROUNDING)
     if (this.floating) this.applyFontSize(notchState.fontSize ?? 'small')
     else if (options.size) this.size = options.size
     if (this.floating) {
@@ -1400,6 +1480,7 @@ export class Pane extends Container {
         setNumbers: (v) => {
           this.numbers = v
         },
+        hoverControls: hoverControlsToggle(doc),
         placement: {
           getDraggable: () => this._draggable,
           setDraggable: (v) => {
@@ -1427,7 +1508,7 @@ export class Pane extends Container {
           return
         }
         const binding = bindingAt(target)
-        if (binding && !binding.monitor) openRowToolbar(binding)
+        if (binding && !binding.monitor) openRowToolbar(binding, binding.element)
       }
       this.element.addEventListener('contextmenu', onContextMenu)
       this.disposers.push(() => {

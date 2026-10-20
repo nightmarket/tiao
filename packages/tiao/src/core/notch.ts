@@ -18,6 +18,7 @@ import {
   type PaneMenuFont,
   type PaneMenuFontSize,
   type PaneMenuHost,
+  type PaneMenuPinRounding,
   type PaneMenuSpacing,
   type PaneMenuToggle,
 } from './pane-menu'
@@ -34,6 +35,7 @@ export interface NotchHost
     | 'spacing'
     | 'hiding'
     | 'glass'
+    | 'pinRounding'
     | 'font'
     | 'menuBelow'
     | 'onDispose'
@@ -44,6 +46,7 @@ export interface NotchHost
   spacing: PaneMenuSpacing
   hiding: PaneMenuToggle
   glass: PaneMenuToggle
+  pinRounding: PaneMenuPinRounding
   getHidden(): boolean
   toggleHidden(): void
   getDocked(): boolean
@@ -179,11 +182,13 @@ export function createNotch(host: NotchHost): Notch {
     setAccent: host.setAccent,
     getNumbers: host.getNumbers,
     setNumbers: host.setNumbers,
+    hoverControls: host.hoverControls,
     font: host.font,
     fontSize: host.fontSize,
     spacing: host.spacing,
     hiding: host.hiding,
     glass: host.glass,
+    pinRounding: host.pinRounding,
     iconThemes: true,
     onDispose: (fn) => disposers.push(fn),
   })

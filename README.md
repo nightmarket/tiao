@@ -1,3 +1,5 @@
+<img src="apps/playground/public/favicon.svg" alt="tiao" width="72" height="72" />
+
 # tiao
 
 A themeable, draggable debug pane for tweaking parameters — tweakpane-style bindings with a modern look, a first-class React API, and a plug-and-play plugin system. Zero dependencies in core.
@@ -92,7 +94,9 @@ Storage stays out of the way of the frame budget: each key is parsed once rather
 ### Pane chrome
 
 - `anchor`: any corner, side center, or `'center'` (`'top-left'`, `'top-center'`, `'right-center'`, ...), or `container: element` for inline panes
-- Right-click an editable row for a small toolbar beside the pane; its one action so far resets that row to its code default.
+- Right-click an editable row for a small toolbar beside the pane: pin the row, or reset it to its code default.
+- A pinned row (`binding.pinned = true`) stays where it is and also gets a larger card in a stack at the bottom center of the page, in the heading face rather than mono; a slider card insets its label at the left of the track and keeps the value at the right. The card is a second view of the same value, so dragging either one moves both (and lands in undo), and it stays up while its pane is hidden or collapsed. Panes with an `id` remember their pins under `tiao:<id>:pins`.
+- Every settings menu has a Hover Controls switch (`Pane.setHoverControls()` / `Pane.hoverControls`, global and saved under `tiao:notch`): every row shows just its value until the pointer comes over it. Slider tracks, scrub grips, dropdown carets, and field backgrounds wait for the hover; ranges and vectors read as comma-separated lists (`20, 80`); text and dropdown values sit right-aligned, with color swatches, angle dials, and XY pad buttons after them. Screens that can't hover always show everything. Pinned cards always look this way, and the global settings' Pinned section sets how round they are (`Pane.setPinRounding()`: `'l'` by default, `'full'` pills, `'s'`, or `'none'`). Right-click a card for the same pin and reset actions as its row.
 - Hover the title bar for a gear icon (or right-click the title bar) to open the Pane Settings panel: toggle dragging, switch themes (system, light, dark, solarized, nord, catppuccin), pick the accent color, and jump between the 9 anchor positions on a mini window that mirrors your viewport's aspect ratio. System follows `prefers-color-scheme` and updates when the OS theme changes.
 - The search icon in the title bar opens a filter row: rows are matched by label/title, folders holding a match are forced open, and a folder-title match keeps its whole subtree visible. `pane.filter(query)` / `pane.searchOpen` do the same programmatically
 - `draggable: true` (default for floating panes); drag position, anchor, and the draggable toggle persist to `localStorage` when the pane has an `id`
@@ -120,7 +124,7 @@ Storage stays out of the way of the frame budget: each key is parsed once rather
     left: var(--tiao-dock-inset-start, 0px);
   }
   ```
-- On small screens (viewport under 768px, followed live across resizes and rotation) there is no notch and no floating pane: every pane stacks in a drawer that slides up from the bottom edge, with the sidebar's search and settings header, and pads `<body>` from below by its height (`--tiao-drawer-height`, half the viewport by default) while it is open. A round gear button opens and closes it (`H` and `Pane.toggleAll()` do too); drag it and it settles into the nearest corner, remembered under `tiao:mobile`. The desktop layout is left untouched, so a wider window brings every pane back floating or docked as it was, and `Pane.toggleDock()` on a small screen only changes which of the two that will be.
+- On small screens (viewport under 768px, followed live across resizes and rotation) there is no notch and no floating pane: every pane stacks in a drawer that slides up from the bottom edge, with the sidebar's search and settings header, and pads `<body>` from below by its height (`--tiao-drawer-height`, half the viewport by default) while it is open. A button wearing the tiao logo sticker opens and closes it (`H` and `Pane.toggleAll()` do too); drag it and it settles into the nearest corner, remembered under `tiao:mobile`. The desktop layout is left untouched, so a wider window brings every pane back floating or docked as it was, and `Pane.toggleDock()` on a small screen only changes which of the two that will be.
 - `maxHeight: 500` (default) caps the pane height; content scrolls when it overflows
 - Floating panes that share an anchor pack along that edge with an 8px gap (wrapping to a new column inward if they would leave the viewport). Drag a pane or pick another cell in the 9-point grid to leave the pack.
 - Clicking a pane brings it above other overlapping panes

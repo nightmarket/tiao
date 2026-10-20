@@ -10,6 +10,7 @@ import type {
   PaneSpacing,
   PaneStyle,
   PaneTheme,
+  PinRounding,
 } from './pane'
 import { withoutPersisting } from './util'
 
@@ -45,7 +46,13 @@ export interface PaneMenuSpacing {
   set(v: PaneSpacing): void
 }
 
-/** an on/off setting only the notch offers (hiding, glass) */
+/** how round the pinned cards are; only the notch offers it */
+export interface PaneMenuPinRounding {
+  get(): PinRounding
+  set(v: PinRounding): void
+}
+
+/** an on/off setting (hiding, glass, hover controls) */
 export interface PaneMenuToggle {
   get(): boolean
   set(v: boolean): void
@@ -64,6 +71,8 @@ export interface PaneMenuHost {
   setAccent(accent: string): void
   getNumbers(): boolean
   setNumbers(v: boolean): void
+  /** rows show just their values until hovered; one setting for every pane */
+  hoverControls: PaneMenuToggle
   /** omitted for menus that control a group of panes, e.g. the dock sidebar */
   placement?: PaneMenuPlacement
   /** the dock's stand-in for the pane anchor grid */
@@ -75,6 +84,7 @@ export interface PaneMenuHost {
   hiding?: PaneMenuToggle
   /** floating panes and the notch draw translucent and frosted */
   glass?: PaneMenuToggle
+  pinRounding?: PaneMenuPinRounding
   /** drop below the host instead of beside it (the notch bar is too narrow) */
   menuBelow?: boolean
   /** global settings: light / dark / system as icons, without the extra themes */
@@ -103,6 +113,13 @@ const FONT_OPTIONS: Record<string, PaneFont> = {
   Geist: 'geist',
   System: 'system',
   'ABC Areal': 'areal',
+}
+
+const PIN_ROUNDING_OPTIONS: Record<string, PinRounding> = {
+  Full: 'full',
+  Large: 'l',
+  Small: 's',
+  None: 'none',
 }
 
 /** quick accent swatches, loosely based on syntax-highlighting palettes */
@@ -185,6 +202,8 @@ function buildMenu(host: PaneMenuHost): { shell: HTMLElement; refresh: () => voi
     theme: host.getTheme(),
     accent: host.getAccent(),
     numbers: host.getNumbers(),
+    hoverControls: host.hoverControls.get(),
+    pinRounding: host.pinRounding?.get() ?? 'l',
   }
   const menuPane = host.createPane({ container: shell, menu: false, storage: false, size: 's' })
   host.onDispose(() => menuPane.dispose())
@@ -217,6 +236,10 @@ function buildMenu(host: PaneMenuHost): { shell: HTMLElement; refresh: () => voi
   }
   const numbersBinding = menuPane.addBinding(settings, 'numbers', { label: 'Numbers' })
   onEdit(numbersBinding, (v) => host.setNumbers(v))
+  const hoverControlsBinding = menuPane.addBinding(settings, 'hoverControls', {
+    label: 'Hover Controls',
+  })
+  onEdit(hoverControlsBinding, (v) => host.hoverControls.set(v))
   menuPane.addSeparator()
 
   if (font) {
@@ -392,13 +415,31 @@ function buildMenu(host: PaneMenuHost): { shell: HTMLElement; refresh: () => voi
     refreshers.push(anchors.render)
   }
 
+  const { pinRounding } = host
+  if (pinRounding) {
+    // a section of the menu, not of the app, so global numbering skips it
+    menuPane.numbers = false
+    const pinned = menuPane.addFolder({ title: 'Pinned' })
+    const binding = pinned.addBinding(settings, 'pinRounding', {
+      label: 'Rounding',
+      options: PIN_ROUNDING_OPTIONS,
+    })
+    onEdit(binding, (v) => pinRounding.set(v))
+    refreshers.push(() => {
+      settings.pinRounding = pinRounding.get()
+      binding.refresh()
+    })
+  }
+
   const refresh = () => {
     settings.theme = host.getTheme()
     settings.accent = host.getAccent()
     settings.numbers = host.getNumbers()
+    settings.hoverControls = host.hoverControls.get()
     refreshTheme()
     accentBinding.refresh()
     numbersBinding.refresh()
+    hoverControlsBinding.refresh()
     for (const fn of refreshers) fn()
     syncChrome()
   }

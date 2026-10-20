@@ -2875,6 +2875,135 @@ describe('Pane registry and chrome', () => {
     pane.dispose()
   })
 
+  it('pin from the row toolbar features the row in a card at the bottom, remembered across reloads', () => {
+    const params = { speed: 0.25, mode: 'a' }
+    const pane = new Pane({ id: 'pins' })
+    const speed = pane.addBinding(params, 'speed', { min: 0, max: 1 })
+    const mode = pane.addBinding(params, 'mode')
+    const rightClick = (el: Element) =>
+      el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))
+    const pinBtn = () => document.querySelector('.tiao-row-toolbar-pin') as HTMLButtonElement
+    const cards = () => [...document.querySelectorAll('.tiao-pins > .tiao-pin')]
+
+    rightClick(speed.element)
+    // beside reset
+    expect(pinBtn().nextElementSibling?.classList.contains('tiao-row-toolbar-reset')).toBe(true)
+    expect(pinBtn().getAttribute('aria-pressed')).toBe('false')
+    pinBtn().click()
+    expect(speed.pinned).toBe(true)
+    expect(cards()).toHaveLength(1)
+    // the row stays where it is in the pane
+    expect(speed.element.parentElement).toBe(pane.rack)
+
+    // a slider card insets the label in the track and keeps the value at the right
+    const card = cards()[0]!
+    expect(card.querySelector('.tiao-row-full .tiao-number .tiao-slider-label')?.textContent).toBe(
+      'speed',
+    )
+    expect(card.classList.contains('tiao-theme-dark')).toBe(true)
+    const input = card.querySelector('.tiao-num-input') as HTMLInputElement
+    speed.value.set(0.75)
+    expect(input.value).toBe(
+      speed.element.querySelector<HTMLInputElement>('.tiao-num-input')!.value,
+    )
+    expect((card.querySelector('.tiao-slider-num') as HTMLElement).style.transform).toBe('')
+
+    // other controls keep their label beside the control, newest at the bottom
+    mode.pinned = true
+    expect(cards()).toHaveLength(2)
+    expect(cards()[1]!.querySelector('.tiao-label')?.textContent).toBe('mode')
+
+    // hidden panes leave the cards up
+    pane.hidden = true
+    expect(cards()).toHaveLength(2)
+
+    // a reload brings both back; disposing doesn't forget them
+    pane.dispose()
+    expect(document.querySelector('.tiao-pins')).toBeNull()
+    const again = new Pane({ id: 'pins' })
+    const speed2 = again.addBinding(params, 'speed', { min: 0, max: 1 })
+    again.addBinding(params, 'mode')
+    expect(speed2.pinned).toBe(true)
+    expect(cards()).toHaveLength(2)
+
+    // the pressed pin unpins
+    rightClick(speed2.element)
+    expect(pinBtn().getAttribute('aria-pressed')).toBe('true')
+    expect(pinBtn().getAttribute('aria-label')).toBe('Unpin')
+    pinBtn().click()
+    expect(speed2.pinned).toBe(false)
+    expect(cards()).toHaveLength(1)
+    expect(JSON.parse(localStorage.getItem('tiao:pins:pins')!)).toEqual({ mode: true })
+
+    // a card's own right-click offers the same actions
+    params.mode = 'b'
+    again.refresh()
+    rightClick(cards()[0]!.querySelector('.tiao-label')!)
+    const reset = document.querySelector('.tiao-row-toolbar-reset') as HTMLButtonElement
+    expect(reset.disabled).toBe(false)
+    reset.click()
+    expect(params.mode).toBe('a')
+    rightClick(cards()[0]!)
+    expect(pinBtn().getAttribute('aria-label')).toBe('Unpin')
+    pinBtn().click()
+    expect(cards()).toHaveLength(0)
+    again.dispose()
+  })
+
+  it('menu "Hover Controls" hides slider tracks until their row is hovered, for every pane', () => {
+    const root = document.documentElement
+    const pane = new Pane({ id: 'hover-controls' })
+    pane.addBinding({ speed: 0.5 }, 'speed', { min: 0, max: 1 })
+    expect(Pane.hoverControls).toBe(false)
+    expect(root.hasAttribute('data-tiao-hover-controls')).toBe(false)
+
+    notchMenuCheck('Hover Controls').click()
+    expect(Pane.hoverControls).toBe(true)
+    expect(root.hasAttribute('data-tiao-hover-controls')).toBe(true)
+    expect(JSON.parse(localStorage.getItem('tiao:notch')!).hoverControls).toBe(true)
+
+    // a pane's own menu shows the same global setting
+    titlebarOf(pane).dispatchEvent(
+      new MouseEvent('contextmenu', { bubbles: true, cancelable: true }),
+    )
+    const paneMenu = pane.element.querySelector('.tiao-pane-menu') as HTMLElement
+    const row = [...paneMenu.querySelectorAll('.tiao-row')].find(
+      (r) => r.querySelector('.tiao-label')?.textContent === 'Hover Controls',
+    )
+    expect(row?.querySelector('.tiao-check')?.getAttribute('aria-checked')).toBe('true')
+
+    // a later page load applies it before anything paints
+    root.removeAttribute('data-tiao-hover-controls')
+    const later = new Pane()
+    expect(root.hasAttribute('data-tiao-hover-controls')).toBe(true)
+    Pane.setHoverControls(false)
+    expect(root.hasAttribute('data-tiao-hover-controls')).toBe(false)
+    later.dispose()
+    pane.dispose()
+  })
+
+  it('global "Pinned" section rounds the pinned cards, large by default', () => {
+    const root = document.documentElement
+    const pane = new Pane({ id: 'pin-rounding' })
+    expect(Pane.pinRounding).toBe('l')
+    expect(root.dataset['tiaoPinRounding']).toBeUndefined()
+
+    notchMenuCheck('Numbers').click()
+    const menu = openNotchMenu()
+    const section = menu.querySelector('.tiao-folder') as HTMLElement
+    expect(section.querySelector('.tiao-folder-title')?.textContent).toBe('Pinned')
+    // global numbering leaves the menu's own section alone
+    expect(section.querySelector('.tiao-folder-index')).toBeNull()
+    selectOption(notchMenuRow('Rounding').querySelector('select')!, 'Small')
+    expect(Pane.pinRounding).toBe('s')
+    expect(root.dataset['tiaoPinRounding']).toBe('s')
+    expect(JSON.parse(localStorage.getItem('tiao:notch')!).pinRounding).toBe('s')
+
+    Pane.setPinRounding('l')
+    expect(root.dataset['tiaoPinRounding']).toBeUndefined()
+    pane.dispose()
+  })
+
   it('notch undo/redo walk value edits, up to 10 steps, with reset as one', async () => {
     const params = { speed: 0, gain: 1 }
     const pane = new Pane({ id: 'history' })
@@ -3055,7 +3184,7 @@ describe('small screens', () => {
     expect(button().getAttribute('aria-label')).toBe('Debug settings')
     expect(button().getAttribute('aria-expanded')).toBe('false')
     expect(button().getAttribute('aria-controls')).toBe(drawer().id)
-    expect(button().textContent).toBe('T')
+    expect(button().querySelector('.tiao-logo')).not.toBeNull()
     expect(row().dataset.tiaoCorner).toBe('bottom-right')
     // wears the drawer's theme
     expect(button().classList.contains('tiao-theme-dark')).toBe(true)
