@@ -1,6 +1,7 @@
 import { h } from '../dom'
 import type { MonitorPlugin, PluginContext } from '../plugin'
 import { formatNumber } from '../util'
+import { createGraphSurface, type GraphSurface } from './graph-surface'
 
 /** Readonly text display for any value; bufferSize > 1 turns it into a log. */
 export const textMonitorPlugin: MonitorPlugin<unknown> = {
@@ -83,6 +84,46 @@ export const graphMonitorPlugin: MonitorPlugin<number> = {
   },
 }
 
+/** A graph redraws at most this often (20 Hz) however fast it's sampled… */
+const GRAPH_DRAW_MS = 50
+/** …and rewrites its readout and range label at most this often (4 Hz): text changes lay out the pane. */
+const GRAPH_TEXT_MS = 250
+
+const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now())
+
+/** Writes `el`'s text at once, then at most every `ms`, the latest text landing when the wait ends. */
+function throttledText(el: HTMLElement, ms: number) {
+  let last = -Infinity
+  let pending: string | null = null
+  let timer: ReturnType<typeof setTimeout> | 0 = 0
+  const write = (text: string) => {
+    last = now()
+    if (el.textContent !== text) el.textContent = text
+  }
+  return {
+    set(text: string) {
+      const wait = last + ms - now()
+      if (wait <= 0 && !timer) {
+        write(text)
+        return
+      }
+      pending = text
+      timer ||= setTimeout(
+        () => {
+          timer = 0
+          if (pending !== null) write(pending)
+          pending = null
+        },
+        Math.max(0, wait),
+      )
+    },
+    dispose() {
+      if (timer) clearTimeout(timer)
+      timer = 0
+    },
+  }
+}
+
 export function createGraph(
   ctx: Pick<PluginContext<number>, 'value' | 'options' | 'onDispose'>,
 ): HTMLElement {
@@ -108,7 +149,12 @@ export function createGraph(
   const label = typeof ctx.options.label === 'string' && ctx.options.label ? ctx.options.label : ''
   const labelEl = label ? h('span', 'tiao-graph-label', label) : null
   const el = h('div', 'tiao-graph', canvas, valueEl, labelEl)
-  let labelText = label
+  const numberText = throttledText(numberEl, GRAPH_TEXT_MS)
+  const labelText = labelEl ? throttledText(labelEl, GRAPH_TEXT_MS) : null
+  ctx.onDispose(() => {
+    numberText.dispose()
+    labelText?.dispose()
+  })
 
   const explicitMin = ctx.options.min
   const explicitMax = ctx.options.max
@@ -125,17 +171,18 @@ export function createGraph(
   let observedMax = -Infinity
   let observedMinCount = 0
   let observedMaxCount = 0
-  // getComputedStyle returns a live declaration; resolve it once, read per draw
-  let computed: CSSStyleDeclaration | null = null
-  let c2d: CanvasRenderingContext2D | null = null
-  let paintAccentRaw = ''
-  let paintStrokeRaw = ''
-  let paintOpacityRaw = ''
-  let paintColor = ''
-  let paintFillStyle = ''
+  /** created on first size, so a graph that never shows never starts the worker */
+  let surface: GraphSurface | null = null
+  ctx.onDispose(() => surface?.dispose())
+  // the theme lives on the pane as classes and inline tokens: re-resolve the paint only when those
+  // change, since reading computed style forces a style pass whenever the page has pending changes
+  let paintScope: string | null = null
+  let paintFill = ''
   let paintAlpha = 0.28
   let dpr = typeof devicePixelRatio === 'number' ? devicePixelRatio : 1
   let drawRaf = 0
+  let drawTimer: ReturnType<typeof setTimeout> | 0 = 0
+  let lastDrawAt = -Infinity
   let lastLabelMin = NaN
   let lastLabelMax = NaN
 
@@ -143,25 +190,17 @@ export function createGraph(
   const currentDpr = () => (typeof devicePixelRatio === 'number' ? devicePixelRatio : 1)
 
   const syncPaint = () => {
-    computed ??= getComputedStyle(el)
-    const accent = computed.getPropertyValue('--tiao-graph-accent')
-    const stroke = computed.getPropertyValue('--tiao-graph-stroke')
-    const opacity = computed.getPropertyValue('--tiao-graph-fill-opacity')
-    const color = computed.color
-    if (
-      accent === paintAccentRaw &&
-      stroke === paintStrokeRaw &&
-      opacity === paintOpacityRaw &&
-      color === paintColor
-    ) {
-      return
-    }
-    paintAccentRaw = accent
-    paintStrokeRaw = stroke
-    paintOpacityRaw = opacity
-    paintColor = color
-    paintFillStyle = accent.trim() || stroke.trim() || color
-    const configuredOpacity = Number.parseFloat(opacity)
+    const pane = el.closest('.tiao-pane')
+    const scope = pane ? `${pane.className}|${pane.getAttribute('style') ?? ''}` : ''
+    if (scope === paintScope) return
+    paintScope = scope
+    const computed = getComputedStyle(el)
+    const accent = computed.getPropertyValue('--tiao-graph-accent').trim()
+    const stroke = computed.getPropertyValue('--tiao-graph-stroke').trim()
+    paintFill = accent || stroke || computed.color
+    const configuredOpacity = Number.parseFloat(
+      computed.getPropertyValue('--tiao-graph-fill-opacity'),
+    )
     paintAlpha = Number.isFinite(configuredOpacity)
       ? Math.min(1, Math.max(0, configuredOpacity))
       : 0.28
@@ -177,10 +216,15 @@ export function createGraph(
     dpr = currentDpr()
     width = Math.round(rect.width * dpr)
     height = Math.round(rect.height * dpr)
-    if (canvas.width !== width) canvas.width = width
-    if (canvas.height !== height) canvas.height = height
+    surface ??= createGraphSurface(canvas, (fallback) => {
+      surface = fallback
+      dirty = true
+      scheduleDraw()
+    })
+    surface.resize(width, height)
     if (dirty) draw()
   }
+  // the graph box, not the canvas: a worker fallback swaps the canvas out
   const ro =
     typeof ResizeObserver === 'function'
       ? new ResizeObserver((entries) => {
@@ -188,9 +232,9 @@ export function createGraph(
           if (rect) resize(rect)
         })
       : null
-  ro?.observe(canvas)
+  ro?.observe(el)
   ctx.onDispose(() => ro?.disconnect())
-  // a collapse clips the canvas without resizing it, so size alone can't tell;
+  // a collapse clips the graph without resizing it, so size alone can't tell;
   // samples keep landing in the buffer and the plot catches up when shown
   const io =
     typeof IntersectionObserver === 'function'
@@ -201,18 +245,16 @@ export function createGraph(
           if (visible && dirty) draw()
         })
       : null
-  io?.observe(canvas)
+  io?.observe(el)
   ctx.onDispose(() => io?.disconnect())
 
   const draw = () => {
-    if (width === 0 || count === 0 || !visible) {
+    if (width === 0 || count === 0 || !visible || !surface) {
       dirty = true
       return
     }
-    c2d ??= canvas.getContext('2d')
-    if (!c2d) return
-    const c = c2d
     dirty = false
+    lastDrawAt = now()
     let min = hasMin ? explicitMin : observedMin
     let max = hasMax ? explicitMax : observedMax
     if (!Number.isFinite(min) || !Number.isFinite(max)) return
@@ -232,41 +274,25 @@ export function createGraph(
       max = min
       min = lower
     }
-    c.clearRect(0, 0, width, height)
     syncPaint()
-    c.fillStyle = paintFillStyle
-    c.globalAlpha = paintAlpha
-    c.beginPath()
-    const step = width / (bufferSize - 1)
-    const firstX = width - (count - 1) * step
-    const range = max - min
-    if (count === 1) {
-      const left = Math.max(0, width - Math.max(step, dpr))
-      const ratio = Math.min(1, Math.max(0, (sampleAt(0) - min) / range))
-      const y = (1 - ratio) * height
-      c.moveTo(left, y)
-      c.lineTo(width, y)
-      c.lineTo(width, height)
-      c.lineTo(left, height)
-    } else {
-      for (let i = 0; i < count; i++) {
-        const v = sampleAt(i)
-        const x = firstX + i * step
-        const ratio = Math.min(1, Math.max(0, (v - min) / range))
-        const y = (1 - ratio) * height
-        if (i === 0) c.moveTo(x, y)
-        else c.lineTo(x, y)
-      }
-      c.lineTo(width, height)
-      c.lineTo(Math.max(0, firstX), height)
-    }
-    c.closePath()
-    c.fill()
-    c.globalAlpha = 1
+    // a fresh array each draw: the worker surface takes ownership of it
+    const samples = new Float64Array(count)
+    for (let i = 0; i < count; i++) samples[i] = sampleAt(i)
+    surface.draw({
+      samples,
+      count,
+      bufferSize,
+      min,
+      max,
+      fill: paintFill,
+      alpha: paintAlpha,
+      width,
+      height,
+      dpr,
+    })
   }
 
-  const scheduleDraw = () => {
-    if (drawRaf) return
+  const requestDraw = () => {
     if (typeof requestAnimationFrame !== 'function') {
       draw()
       return
@@ -276,33 +302,42 @@ export function createGraph(
       draw()
     })
   }
+  const scheduleDraw = () => {
+    if (drawRaf || drawTimer) return
+    const wait = lastDrawAt + GRAPH_DRAW_MS - now()
+    if (wait <= 0) {
+      requestDraw()
+      return
+    }
+    drawTimer = setTimeout(() => {
+      drawTimer = 0
+      requestDraw()
+    }, wait)
+  }
 
   // Label shows the observed range over the plotted window, e.g. "FPS (80-140)".
   // Flat windows (no variance) show "(No Change)" instead of a single value.
   // The buffer *is* the window — the parenthesized range always describes exactly
   // what's on screen; the monitor interval determines its elapsed duration.
   const updateLabel = () => {
-    if (!labelEl || count === 0) return
+    if (!labelText || count === 0) return
     if (observedMin === lastLabelMin && observedMax === lastLabelMax) return
     lastLabelMin = observedMin
     lastLabelMax = observedMax
     const loText = format(observedMin)
     const hiText = format(observedMax)
-    const next = loText === hiText ? `${label} (No Change)` : `${label} (${loText}-${hiText})`
-    if (next !== labelText) {
-      labelText = next
-      labelEl.textContent = next
-    }
+    labelText.set(loText === hiText ? `${label} (No Change)` : `${label} (${loText}-${hiText})`)
   }
 
   ctx.onDispose(() => {
     if (drawRaf) cancelAnimationFrame(drawRaf)
+    if (drawTimer) clearTimeout(drawTimer)
     drawRaf = 0
+    drawTimer = 0
   })
   ctx.onDispose(
     ctx.value.subscribe((v) => {
-      const text = format(v)
-      if (numberEl.textContent !== text) numberEl.textContent = text
+      numberText.set(format(v))
       // Keep a transient invalid reading from poisoning the rolling scale.
       if (!Number.isFinite(v)) return
       let removed: number | undefined

@@ -1455,6 +1455,7 @@ describe('Pane registry and chrome', () => {
   })
 
   it('appends the observed value range to graph labels', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance'] })
     const params = { fps: 120 }
     const pane = new Pane()
     const binding = pane.addBinding(params, 'fps', {
@@ -1470,11 +1471,79 @@ describe('Pane registry and chrome', () => {
     expect(labelEl.textContent).toBe('FPS (No Change)')
     params.fps = 140
     binding.refresh()
+    // label text is rewritten at most every 250ms; the latest range lands when the wait ends
+    expect(labelEl.textContent).toBe('FPS (No Change)')
+    vi.advanceTimersByTime(250)
     expect(labelEl.textContent).toBe('FPS (80-140)')
     pane.dispose()
+    vi.useRealTimers()
+  })
+
+  it('resolves graph paint once per theme, not on every draw', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance'] })
+    const context = {
+      fillStyle: '',
+      globalAlpha: 1,
+      clearRect: vi.fn(),
+      beginPath: vi.fn(),
+      moveTo: vi.fn(),
+      lineTo: vi.fn(),
+      closePath: vi.fn(),
+      fill: vi.fn(),
+    }
+    const contextSpy = vi
+      .spyOn(HTMLCanvasElement.prototype, 'getContext')
+      .mockReturnValue(context as unknown as CanvasRenderingContext2D)
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        constructor(private callback: ResizeObserverCallback) {}
+        observe(target: Element) {
+          const contentRect = { width: 100, height: 40 } as DOMRectReadOnly
+          this.callback(
+            [{ target, contentRect } as ResizeObserverEntry],
+            this as unknown as ResizeObserver,
+          )
+        }
+        disconnect() {}
+        unobserve() {}
+      },
+    )
+    let frames: FrameRequestCallback[] = []
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => frames.push(cb))
+    vi.stubGlobal('cancelAnimationFrame', vi.fn())
+    const params = { fps: 0 }
+    const pane = new Pane()
+    const binding = pane.addBinding(params, 'fps', { readonly: true, view: 'graph', max: 100 })
+    const styleSpy = vi.spyOn(window, 'getComputedStyle')
+    const sample = (fps: number) => {
+      params.fps = fps
+      binding.refresh()
+      const queued = frames
+      frames = []
+      for (const cb of queued) cb(0)
+      vi.advanceTimersByTime(50)
+    }
+    sample(10)
+    sample(20)
+    sample(30)
+    const graphReads = () =>
+      styleSpy.mock.calls.filter(([el]) => el.classList.contains('tiao-graph')).length
+    expect(context.fill).toHaveBeenCalledTimes(3)
+    expect(graphReads()).toBe(1)
+    pane.theme = pane.theme === 'light' ? 'dark' : 'light'
+    sample(40)
+    expect(graphReads()).toBe(2)
+
+    pane.dispose()
+    styleSpy.mockRestore()
+    contextSpy.mockRestore()
+    vi.unstubAllGlobals()
+    vi.useRealTimers()
   })
 
   it('plots finite samples against zero and keeps the newest sample at the right edge', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance'] })
     const rect = {
       left: 0,
       right: 100,
@@ -1548,6 +1617,10 @@ describe('Pane registry and chrome', () => {
     const onChange = vi.fn()
     binding.on('change', onChange)
     binding.value.set(50, { source: 'monitor', sample: true })
+    // redraws are at most every 50ms
+    flushDraw()
+    expect(context.fill).toHaveBeenCalledTimes(1)
+    vi.advanceTimersByTime(50)
     flushDraw()
     expect(moveTo).toHaveBeenLastCalledWith(100 - (2 * 100) / 3, 30)
     expect(context.fill).toHaveBeenCalledTimes(2)
@@ -1557,6 +1630,7 @@ describe('Pane registry and chrome', () => {
     pane.dispose()
     contextSpy.mockRestore()
     vi.unstubAllGlobals()
+    vi.useRealTimers()
   })
 
   it('renders button groups as equal siblings with independent callbacks', () => {

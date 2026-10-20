@@ -138,7 +138,9 @@ mountPane({ theme: { accent: '#f0f', '--tiao-width': '320px' } }, (pane) => {
 })
 ```
 
-Graph monitors use the theme's neutral gray independently of `pane.accent`, with a light fill (`--tiao-graph-fill-opacity`, default `0.28`) over a barely tinted plot background so overlay labels stay readable. Override `--tiao-graph-accent` or `--tiao-graph-fill-opacity` only when you want a custom look.
+Graph monitors use the theme's neutral gray independently of `pane.accent`, with a light fill (`--tiao-graph-fill-opacity`, default `0.28`) over a barely tinted plot background so overlay labels stay readable. Override `--tiao-graph-accent` or `--tiao-graph-fill-opacity` only when you want a custom look, through the pane (the `theme` option or `pane.applyTheme`): graphs resolve their paint when the pane's theme, style or inline tokens change, not on every draw.
+
+Graphs stay off the page's critical path: they redraw at most 20 times a second and rewrite their readout and range label at most 4 times a second, and where the browser has `OffscreenCanvas` they draw in one worker shared by every graph on the page (falling back to the main thread if the worker can't start, e.g. under a CSP without `blob:` workers). Collapsed panes and folders skip layout, paint and hit testing for their contents.
 
 Theme, accent, and style are also editable from the Pane Settings panel (gear icon or right-click the title bar), and persist to `localStorage` when the pane has an `id`. Style is orthogonal to theme: **Bouba** = rounded corners / soft shadow; **Kiki** = sharp corners / hairline elevation. Either can be frosted with the global Glass setting.
 

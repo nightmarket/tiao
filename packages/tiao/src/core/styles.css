@@ -390,6 +390,11 @@
 .tiao-pane.tiao-floating {
   position: fixed;
   z-index: 9999;
+  /* its own layer, laid out apart from the page: a readout ticking inside never relayouts or
+     repaints what's under it. Popups portal to the pane root and overlays to <body>, so neither
+     paint nor size containment would hold them, and only layout is contained */
+  contain: layout style;
+  will-change: transform;
 }
 
 .tiao-hidden {
@@ -1031,6 +1036,15 @@
 .tiao-folder-clip {
   overflow: hidden;
   min-height: 0;
+}
+/* a collapsed body skips layout, paint and hit testing for everything inside it,
+   which otherwise stays laid out under the 0fr row and is tested on every pointer move.
+   Only collapsing transitions: it holds the contents visible until the collapse has played out,
+   while opening shows them at once, so they're there to grow into */
+.tiao-pane:not(.tiao-expanded) > .tiao-pane-body > .tiao-pane-clip,
+.tiao-folder:not(.tiao-expanded) > .tiao-folder-body > .tiao-folder-clip {
+  content-visibility: hidden;
+  transition: content-visibility 0.18s allow-discrete;
 }
 .tiao-pane > .tiao-pane-body > .tiao-pane-clip {
   max-height: calc(var(--tiao-max-height) - var(--tiao-titlebar-height));
@@ -2418,6 +2432,8 @@
   position: relative;
   width: 100%;
   height: 40px;
+  /* fixed-size box: its redraws and readout changes stay inside it */
+  contain: strict;
   border-radius: var(--tiao-radius-sm);
   background: color-mix(in srgb, var(--tiao-graph-accent) 3%, var(--tiao-surface));
   box-shadow: inset 0 0 0 1px var(--tiao-border);
@@ -2428,6 +2444,7 @@
   inset: 0;
   width: 100%;
   height: 100%;
+  pointer-events: none;
 }
 .tiao-graph-value {
   position: absolute;
@@ -2520,6 +2537,9 @@
 /* folders holding a match are forced open so the hits are reachable */
 .tiao-folder.tiao-search-open > .tiao-folder-body {
   grid-template-rows: 1fr;
+}
+.tiao-folder.tiao-search-open > .tiao-folder-body > .tiao-folder-clip {
+  content-visibility: visible;
 }
 .tiao-folder.tiao-search-open > .tiao-folder-header .tiao-icon-chevron {
   transform: none;
