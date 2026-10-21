@@ -338,13 +338,18 @@ export abstract class Container extends Item {
   }
 }
 
+/** titles of the folders and tab pages around `container` (itself included), outermost first */
+export function sectionTitles(container: Container | null): string[] {
+  const titles: string[] = []
+  for (let c = container; c; c = c.parent) {
+    if (c instanceof FolderApi || c instanceof TabPageApi) titles.unshift(c.title)
+  }
+  return titles
+}
+
 /** storage path for a row: enclosing folder / tab-page titles, then the key */
 function valuePath(container: Container, key: string): string {
-  const parts = [key]
-  for (let c: Container | null = container; c; c = c.parent) {
-    if (c instanceof FolderApi || c instanceof TabPageApi) parts.unshift(c.title)
-  }
-  return parts.join('/')
+  return [...sectionTitles(container), key].join('/')
 }
 
 /**
@@ -397,6 +402,25 @@ export function revealOverridden(item: Item, found: BindingApi<unknown>[]): bool
     return any
   }
   return false
+}
+
+/**
+ * Open the way from `item` down to `target`: collapsed folders expand and tabs
+ * switch to the page holding it. Returns whether `target` is under `item`.
+ */
+export function revealItem(item: Item, target: Item): boolean {
+  if (item === target) return true
+  if (item instanceof TabApi) {
+    const page = item.pages.findIndex((p) => revealItem(p, target))
+    if (page < 0) return false
+    item.selectedIndex = page
+    return true
+  }
+  if (!(item instanceof Container) || !item.children.some((c) => revealItem(c, target))) {
+    return false
+  }
+  if (item instanceof FolderApi) item.expanded = true
+  return true
 }
 
 /** visit every item under `root`, including tab pages that are not in `children` */
@@ -523,6 +547,14 @@ export class BindingApi<T> extends Item {
         this.element.addEventListener('click', onRowClick)
         this.disposers.push(() => this.element.removeEventListener('click', onRowClick))
       }
+    }
+
+    if (!this.monitor) {
+      this.disposers.push(
+        this.value.subscribe(() => {
+          this.element.classList.toggle('tiao-row-changed', this.overridden)
+        }),
+      )
     }
 
     if (options.readonly) {

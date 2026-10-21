@@ -55,6 +55,29 @@ function selectOption(select: HTMLSelectElement, label: string): void {
   select.dispatchEvent(new Event('change'))
 }
 
+/** a 2D context stub with every call a graph draws with */
+function graphContext() {
+  return {
+    fillStyle: '' as unknown,
+    strokeStyle: '' as unknown,
+    globalAlpha: 1,
+    globalCompositeOperation: 'source-over',
+    lineWidth: 1,
+    lineJoin: 'miter',
+    lineCap: 'butt',
+    clearRect: vi.fn(),
+    fillRect: vi.fn(),
+    beginPath: vi.fn(),
+    moveTo: vi.fn(),
+    lineTo: vi.fn(),
+    closePath: vi.fn(),
+    arc: vi.fn(),
+    fill: vi.fn(),
+    stroke: vi.fn(),
+    createLinearGradient: vi.fn(() => ({ addColorStop: vi.fn() })),
+  }
+}
+
 function sizePane(pane: Pane, width: number, height: number): void {
   Object.defineProperty(pane.element, 'offsetWidth', { value: width, configurable: true })
   Object.defineProperty(pane.element, 'offsetHeight', { value: height, configurable: true })
@@ -637,14 +660,14 @@ describe('Pane registry and chrome', () => {
       const pane = new Pane()
       const notch = document.querySelector('.tiao-notch') as HTMLElement
       const hide = notch.querySelector('.tiao-notch-hide') as HTMLButtonElement
-      const reset = notch.querySelector('.tiao-notch-reset') as HTMLButtonElement
+      const dock = notch.querySelector('.tiao-notch-dock') as HTMLButtonElement
       const bubble = () => document.querySelector('.tiao-tooltip')
 
       hide.dispatchEvent(new Event('pointerenter'))
       vi.advanceTimersByTime(140)
       expect(bubble()).toBeNull()
       vi.advanceTimersByTime(10)
-      expect(bubble()?.textContent).toBe('Hide panes')
+      expect(bubble()?.textContent).toBe('Hide panes (H)')
       // one bubble, rendered on <body> above everything
       const shared = bubble()!
       expect(shared.parentElement).toBe(document.body)
@@ -652,18 +675,18 @@ describe('Pane registry and chrome', () => {
       // moving straight to a neighbor skips the delay, and reuses the bubble
       hide.dispatchEvent(new Event('pointerleave'))
       expect(bubble()).toBeNull()
-      reset.dispatchEvent(new Event('pointerenter'))
-      expect(bubble()?.textContent).toBe('Reset 0 parameters to defaults')
+      dock.dispatchEvent(new Event('pointerenter'))
+      expect(bubble()?.textContent).toBe('Dock to sidebar')
       expect(bubble()).toBe(shared)
       expect(document.querySelectorAll('.tiao-tooltip')).toHaveLength(1)
 
       // a press dismisses it until the pointer leaves
-      reset.dispatchEvent(new Event('pointerdown'))
+      dock.dispatchEvent(new Event('pointerdown'))
       expect(bubble()).toBeNull()
-      reset.dispatchEvent(new Event('pointerenter'))
+      dock.dispatchEvent(new Event('pointerenter'))
       vi.advanceTimersByTime(500)
       expect(bubble()).toBeNull()
-      reset.dispatchEvent(new Event('pointerleave'))
+      dock.dispatchEvent(new Event('pointerleave'))
 
       vi.advanceTimersByTime(1000)
       const search = pane.element.querySelector('.tiao-pane-search') as HTMLButtonElement
@@ -1481,16 +1504,7 @@ describe('Pane registry and chrome', () => {
 
   it('resolves graph paint once per theme, not on every draw', () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance'] })
-    const context = {
-      fillStyle: '',
-      globalAlpha: 1,
-      clearRect: vi.fn(),
-      beginPath: vi.fn(),
-      moveTo: vi.fn(),
-      lineTo: vi.fn(),
-      closePath: vi.fn(),
-      fill: vi.fn(),
-    }
+    const context = graphContext()
     const contextSpy = vi
       .spyOn(HTMLCanvasElement.prototype, 'getContext')
       .mockReturnValue(context as unknown as CanvasRenderingContext2D)
@@ -1529,7 +1543,7 @@ describe('Pane registry and chrome', () => {
     sample(30)
     const graphReads = () =>
       styleSpy.mock.calls.filter(([el]) => el.classList.contains('tiao-graph')).length
-    expect(context.fill).toHaveBeenCalledTimes(3)
+    expect(context.stroke).toHaveBeenCalledTimes(3)
     expect(graphReads()).toBe(1)
     pane.theme = pane.theme === 'light' ? 'dark' : 'light'
     sample(40)
@@ -1555,18 +1569,10 @@ describe('Pane registry and chrome', () => {
       y: 0,
       toJSON: () => ({}),
     }
-    const moveTo = vi.fn()
-    const fillAlphas: number[] = []
-    const context = {
-      fillStyle: '',
-      globalAlpha: 1,
-      clearRect: vi.fn(),
-      beginPath: vi.fn(),
-      moveTo,
-      lineTo: vi.fn(),
-      closePath: vi.fn(),
-      fill: vi.fn(() => fillAlphas.push(context.globalAlpha)),
-    }
+    const fills: { alpha: number }[] = []
+    const context = graphContext()
+    context.fill.mockImplementation(() => fills.push({ alpha: context.globalAlpha }))
+    const { moveTo, arc } = context
     const contextSpy = vi
       .spyOn(HTMLCanvasElement.prototype, 'getContext')
       .mockReturnValue(context as unknown as CanvasRenderingContext2D)
@@ -1610,21 +1616,27 @@ describe('Pane registry and chrome', () => {
     binding.refresh()
     flushDraw()
 
-    // Four samples span 100px, so two samples occupy the rightmost third.
-    expect(moveTo).toHaveBeenLastCalledWith(100 - 100 / 3, 30)
-    expect(context.fill).toHaveBeenCalledTimes(1)
+    // the plot leaves room for the line and the newest sample's dot along the
+    // top and right: four samples span the 97.375px left, two the rightmost third
+    const inset = 2 + 1.25 / 2
+    const right = 100 - inset
+    const yAt = (v: number) => inset + (1 - v / 100) * (40 - 1.25 / 2 - inset)
+    expect(moveTo).toHaveBeenLastCalledWith(right - right / 3, yAt(25))
+    expect(arc).toHaveBeenLastCalledWith(right, yAt(50), 2, 0, 2 * Math.PI)
+    expect(context.stroke).toHaveBeenCalledTimes(1)
 
     const onChange = vi.fn()
     binding.on('change', onChange)
     binding.value.set(50, { source: 'monitor', sample: true })
     // redraws are at most every 50ms
     flushDraw()
-    expect(context.fill).toHaveBeenCalledTimes(1)
+    expect(context.stroke).toHaveBeenCalledTimes(1)
     vi.advanceTimersByTime(50)
     flushDraw()
-    expect(moveTo).toHaveBeenLastCalledWith(100 - (2 * 100) / 3, 30)
-    expect(context.fill).toHaveBeenCalledTimes(2)
-    expect(fillAlphas).toEqual([0.28, 0.28])
+    expect(moveTo).toHaveBeenLastCalledWith(right - (2 * right) / 3, yAt(25))
+    expect(context.stroke).toHaveBeenCalledTimes(2)
+    // each draw fills the area at the fill opacity, then the dot solid
+    expect(fills.map((f) => f.alpha)).toEqual([0.28, 1, 0.28, 1])
     expect(onChange).not.toHaveBeenCalled()
 
     pane.dispose()
@@ -2733,34 +2745,32 @@ describe('Pane registry and chrome', () => {
       const tab = pane.addTab({ pages: [{ title: 'One' }, { title: 'Two' }] })
       const mode = tab.pages[1]!.addBinding(params, 'mode')
       pane.addBinding(params, 'fps', { readonly: true })
-      const count = document.querySelector('.tiao-notch-count') as HTMLElement
-      const reveal = document.querySelector('.tiao-notch-reveal') as HTMLButtonElement
-      expect(count.textContent).toBe('0 set')
-      expect(reveal.disabled).toBe(true)
+      // the count and the button that points the rows out are one pill
+      const changes = document.querySelector('.tiao-notch-changes') as HTMLButtonElement
+      expect(changes.textContent).toBe('0 changed')
+      expect(changes.disabled).toBe(true)
 
       speed.value.set(2)
       tint.value.set({ r: 9, g: 2, b: 3 })
       mode.value.set('b')
       params.fps = 30
       await Promise.resolve()
-      expect(count.textContent).toBe('3 set')
-      expect(reveal.disabled).toBe(false)
-      const reset = document.querySelector('.tiao-notch-reset') as HTMLButtonElement
-      reset.dispatchEvent(new Event('pointerenter'))
-      vi.advanceTimersByTime(150)
-      expect(document.querySelector('.tiao-tooltip')?.textContent).toBe(
-        'Reset 3 parameters to defaults',
-      )
-      reset.dispatchEvent(new Event('pointerleave'))
+      expect(changes.textContent).toBe('3 changed')
+      expect(changes.getAttribute('aria-label')).toBe('Show 3 changed parameters')
+      expect(changes.disabled).toBe(false)
+      // each changed row carries its own marker
+      expect(speed.element.classList.contains('tiao-row-changed')).toBe(true)
+      expect(mode.element.classList.contains('tiao-row-changed')).toBe(true)
 
       // back to the default (a fresh but equal object) no longer counts
       tint.value.set({ r: 1, g: 2, b: 3 })
       await Promise.resolve()
-      expect(count.textContent).toBe('2 set')
+      expect(changes.textContent).toBe('2 changed')
+      expect(tint.element.classList.contains('tiao-row-changed')).toBe(false)
 
       tint.value.set({ r: 9, g: 2, b: 3 })
       pane.hidden = true
-      reveal.click()
+      changes.click()
       expect(pane.hidden).toBe(false)
       expect(pane.expanded).toBe(true)
       expect(folder.expanded).toBe(true)
@@ -2773,11 +2783,94 @@ describe('Pane registry and chrome', () => {
 
       ;(document.querySelector('.tiao-notch-reset') as HTMLButtonElement).click()
       await Promise.resolve()
-      expect(count.textContent).toBe('0 set')
+      expect(changes.textContent).toBe('0 changed')
+      expect(speed.element.classList.contains('tiao-row-changed')).toBe(false)
       pane.dispose()
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  it('search finds any row by name across panes, reveals it on Enter, and pins with Ctrl+Enter', () => {
+    vi.useFakeTimers()
+    try {
+      const params = { speed: 1, gain: 2, tint: '#ff0000' }
+      const a = new Pane({ id: 'search-a', title: 'Motion' })
+      a.addBinding(params, 'speed')
+      const folder = a.addFolder({ title: 'Mix', expanded: false })
+      const gain = folder.addBinding(params, 'gain', { label: 'Gain' })
+      const b = new Pane({ id: 'search-b', title: 'Look' })
+      const tint = b.addBinding(params, 'tint')
+      const palette = () => document.querySelector('.tiao-search-palette')
+      const input = () => palette()!.querySelector('input') as HTMLInputElement
+      const items = () => [...palette()!.querySelectorAll('.tiao-search-palette-item')]
+      const type = (text: string) => {
+        input().value = text
+        input().dispatchEvent(new Event('input'))
+      }
+      const key = (k: string, init: KeyboardEventInit = {}) =>
+        input().dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, ...init }))
+
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }))
+      expect(palette()).not.toBeNull()
+      expect(document.activeElement).toBe(input())
+      expect(items()).toHaveLength(3)
+
+      // a term matches labels, keys, and the pane and section titles around them
+      type('mix')
+      expect(
+        items().map((i) => i.querySelector('.tiao-search-palette-label')?.textContent),
+      ).toEqual(['Gain'])
+      expect(items()[0]!.querySelector('.tiao-search-palette-path')?.textContent).toBe(
+        'Motion › Mix',
+      )
+      expect(items()[0]!.querySelector('.tiao-search-palette-value')?.textContent).toBe('2')
+
+      a.hidden = true
+      key('Enter')
+      expect(palette()).toBeNull()
+      expect(a.hidden).toBe(false)
+      expect(folder.expanded).toBe(true)
+      expect(gain.element.classList.contains('tiao-row-flash')).toBe(true)
+
+      // the notch button opens it too; Ctrl+Enter pins instead
+      ;(document.querySelector('.tiao-notch-search') as HTMLButtonElement).click()
+      type('tint')
+      key('Enter', { ctrlKey: true })
+      expect(tint.pinned).toBe(true)
+
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }))
+      type('nothing like it')
+      expect(palette()!.querySelector('.tiao-search-palette-empty')?.textContent).toBe('No matches')
+      key('Escape')
+      expect(palette()).toBeNull()
+      a.dispose()
+      b.dispose()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('notch tucks copy, import, and reset into a menu under the more button', () => {
+    const pane = new Pane()
+    const more = document.querySelector('.tiao-notch-more') as HTMLButtonElement
+    const menu = document.querySelector('.tiao-notch-menu') as HTMLElement
+    expect([...menu.children].map((item) => item.textContent)).toEqual([
+      'Copy',
+      'Import',
+      'Reset to defaults',
+    ])
+    more.click()
+    expect(menu.classList.contains('tiao-open')).toBe(true)
+    expect(more.getAttribute('aria-expanded')).toBe('true')
+    document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }))
+    expect(menu.classList.contains('tiao-open')).toBe(false)
+
+    // reset runs from the menu, which closes behind it
+    more.click()
+    ;(menu.querySelector('.tiao-notch-reset') as HTMLButtonElement).click()
+    expect(menu.classList.contains('tiao-open')).toBe(false)
+    pane.dispose()
   })
 
   it('defaults to the bundled Geist and registers its faces once per document', async () => {
@@ -2982,19 +3075,17 @@ describe('Pane registry and chrome', () => {
     pane.dispose()
   })
 
-  it('global "Pinned" section rounds the pinned cards, large by default', () => {
+  it('global "Pinned Style" rounds the pinned cards, rounded by default', () => {
     const root = document.documentElement
     const pane = new Pane({ id: 'pin-rounding' })
     expect(Pane.pinRounding).toBe('l')
     expect(root.dataset['tiaoPinRounding']).toBeUndefined()
 
-    notchMenuCheck('Numbers').click()
-    const menu = openNotchMenu()
-    const section = menu.querySelector('.tiao-folder') as HTMLElement
-    expect(section.querySelector('.tiao-folder-title')?.textContent).toBe('Pinned')
-    // global numbering leaves the menu's own section alone
-    expect(section.querySelector('.tiao-folder-index')).toBeNull()
-    selectOption(notchMenuRow('Rounding').querySelector('select')!, 'Small')
+    // a section of its own between dividers, after Hover Controls and before Font
+    const row = notchMenuRow('Pinned Style')
+    expect(row.previousElementSibling?.classList.contains('tiao-separator')).toBe(true)
+    expect(row.nextElementSibling?.classList.contains('tiao-separator')).toBe(true)
+    selectOption(row.querySelector('select')!, 'Slightly Rounded')
     expect(Pane.pinRounding).toBe('s')
     expect(root.dataset['tiaoPinRounding']).toBe('s')
     expect(JSON.parse(localStorage.getItem('tiao:notch')!).pinRounding).toBe('s')

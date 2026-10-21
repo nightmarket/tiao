@@ -3,13 +3,15 @@ import {
   copyIcon,
   eyeIcon,
   eyeOffIcon,
-  focusIcon,
   gearIcon,
   h,
   importIcon,
+  logoMark,
+  moreIcon,
   panelLeftIcon,
   redoIcon,
   rotateCcwIcon,
+  searchIcon,
   undoIcon,
   withDocument,
 } from './dom'
@@ -22,6 +24,7 @@ import {
   type PaneMenuSpacing,
   type PaneMenuToggle,
 } from './pane-menu'
+import { SEARCH_KEY_HINT } from './search'
 import { tooltip } from './tooltip'
 
 /** the notch menu drives one theme, style, and accent for every pane at once */
@@ -63,6 +66,8 @@ export interface NotchHost
   history: NotchHistory
   /** flash every overridden row, opening what hides it */
   revealOverrides(): void
+  /** find any row in any pane by name */
+  openSearch(): void
 }
 
 export interface NotchHistory {
@@ -89,9 +94,10 @@ export interface Notch {
 
 /**
  * Global control bar pinned to the top edge of the viewport: hide/show every
- * floating pane, dock them into the sidebar, undo/redo value edits, count and point out the values
- * changed from their defaults, copy, import, or reset every bound value, and
- * open the settings panel that themes every pane at once.
+ * floating pane, dock them into the sidebar, search every row, undo/redo value
+ * edits, count and point out the values changed from their defaults, and open
+ * the settings panel that themes every pane at once. Copy, import, and reset
+ * of every bound value sit in an overflow menu.
  * Built by the Pane (which owns the pane registry) so this module stays free
  * of pane imports.
  *
@@ -105,36 +111,51 @@ export function createNotch(host: NotchHost): Notch {
   const chrome = withDocument(doc, () => {
     const hideBtn = notchButton('tiao-notch-hide', eyeIcon(), 'Hide debug panes')
     const dockBtn = notchButton('tiao-notch-dock', panelLeftIcon(), 'Dock panes to sidebar')
+    const searchBtn = notchButton('tiao-notch-search', searchIcon(), 'Search parameters')
     const gear = notchButton('tiao-notch-gear', gearIcon(), 'Global settings')
     gear.setAttribute('data-tiao-menu-trigger', '')
     const undoBtn = notchButton('tiao-notch-undo', undoIcon(), 'Undo')
     const redoBtn = notchButton('tiao-notch-redo', redoIcon(), 'Redo')
-    const count = h('span', 'tiao-notch-count')
-    const revealBtn = notchButton('tiao-notch-reveal', focusIcon(), 'Show changed parameters')
-    const copyBtn = notchButton('tiao-notch-copy', copyIcon(), 'Copy settings')
-    const importBtn = notchButton('tiao-notch-import', importIcon(), 'Import settings')
+    const changesText = h('span')
+    const changesBtn = h(
+      'button',
+      'tiao-notch-changes',
+      h('span', 'tiao-notch-changes-dot'),
+      changesText,
+    )
+    changesBtn.type = 'button'
+    const copyBtn = menuItem('tiao-notch-copy', copyIcon(), 'Copy', 'Copy settings')
+    const importBtn = menuItem('tiao-notch-import', importIcon(), 'Import', 'Import settings')
     importBtn.setAttribute('aria-haspopup', 'dialog')
     importBtn.setAttribute('aria-expanded', 'false')
-    const resetBtn = notchButton(
+    const resetBtn = menuItem(
       'tiao-notch-reset',
       rotateCcwIcon(),
+      'Reset to defaults',
       'Reset values and positions to defaults',
     )
+    const moreMenu = h('div', 'tiao-notch-menu', copyBtn, importBtn, resetBtn)
+    moreMenu.setAttribute('role', 'menu')
+    const moreBtn = notchButton('tiao-notch-more', moreIcon(), 'More actions')
+    moreBtn.setAttribute('aria-haspopup', 'menu')
+    moreBtn.setAttribute('aria-expanded', 'false')
+    const more = h('div', 'tiao-notch-more-wrap', moreBtn, moreMenu)
     const element = h(
       'div',
       'tiao-notch',
+      h('span', 'tiao-notch-logo', logoMark()),
+      h('div', 'tiao-notch-sep'),
       hideBtn,
       dockBtn,
-      gear,
+      searchBtn,
       h('div', 'tiao-notch-sep'),
       undoBtn,
       redoBtn,
       h('div', 'tiao-notch-sep'),
-      count,
-      revealBtn,
-      copyBtn,
-      importBtn,
-      resetBtn,
+      changesBtn,
+      h('div', 'tiao-notch-sep'),
+      more,
+      gear,
     )
     element.setAttribute('role', 'toolbar')
     element.setAttribute('aria-label', 'Debug panes')
@@ -142,28 +163,36 @@ export function createNotch(host: NotchHost): Notch {
       element,
       hideBtn,
       dockBtn,
+      searchBtn,
       gear,
       undoBtn,
       redoBtn,
-      count,
-      revealBtn,
+      changesBtn,
+      changesText,
       copyBtn,
       importBtn,
       resetBtn,
+      more,
+      moreBtn,
+      moreMenu,
     }
   })
   const {
     element,
     hideBtn,
     dockBtn,
+    searchBtn,
     gear,
     undoBtn,
     redoBtn,
-    count,
-    revealBtn,
+    changesBtn,
+    changesText,
     copyBtn,
     importBtn,
     resetBtn,
+    more,
+    moreBtn,
+    moreMenu,
   } = chrome
 
   const disposers: (() => void)[] = []
@@ -217,9 +246,30 @@ export function createNotch(host: NotchHost): Notch {
     const n = host.countOverrides()
     if (n === overrides) return
     overrides = n
-    count.textContent = `${n} set`
-    count.classList.toggle('tiao-notch-count-zero', n === 0)
-    revealBtn.disabled = n === 0
+    changesText.textContent = `${n} changed`
+    changesBtn.disabled = n === 0
+    changesBtn.setAttribute('aria-label', `Show ${n} changed parameters`)
+  }
+
+  let menuOpen = false
+  const onMenuOutside = (e: PointerEvent) => {
+    if (!more.contains(e.target as Node | null)) setMenuOpen(false)
+  }
+  const onMenuKey = (e: KeyboardEvent) => {
+    if (e.key === 'Escape') setMenuOpen(false)
+  }
+  function setMenuOpen(open: boolean) {
+    if (open === menuOpen) return
+    menuOpen = open
+    moreMenu.classList.toggle('tiao-open', open)
+    moreBtn.setAttribute('aria-expanded', String(open))
+    if (open) {
+      doc.addEventListener('pointerdown', onMenuOutside, true)
+      doc.addEventListener('keydown', onMenuKey)
+    } else {
+      doc.removeEventListener('pointerdown', onMenuOutside, true)
+      doc.removeEventListener('keydown', onMenuKey)
+    }
   }
 
   // sync runs per pane mount and global toggle, so state changes gate the DOM
@@ -259,56 +309,70 @@ export function createNotch(host: NotchHost): Notch {
     }
   }
 
+  // the menu stays open on a copy, so the item itself can confirm it
   let copiedTimer: ReturnType<typeof setTimeout> | undefined
+  const setCopyItem = (copied: boolean) => {
+    copyBtn.replaceChildren(
+      withDocument(doc, copied ? checkIcon : copyIcon),
+      copied ? 'Copied' : 'Copy',
+    )
+    copyBtn.setAttribute('aria-label', copied ? 'Copied settings' : 'Copy settings')
+    copyBtn.classList.toggle('tiao-notch-on', copied)
+  }
   const showCopied = () => {
     clearTimeout(copiedTimer)
-    copyBtn.replaceChildren(withDocument(doc, checkIcon))
-    copyBtn.setAttribute('aria-label', 'Copied settings')
-    copyBtn.classList.add('tiao-notch-on')
-    copiedTimer = setTimeout(() => {
-      copyBtn.replaceChildren(withDocument(doc, copyIcon))
-      copyBtn.setAttribute('aria-label', 'Copy settings')
-      copyBtn.classList.remove('tiao-notch-on')
-    }, COPIED_MS)
+    setCopyItem(true)
+    copiedTimer = setTimeout(() => setCopyItem(false), COPIED_MS)
   }
 
   const onHide = () => host.toggleHidden()
   const onDock = () => host.toggleDocked()
+  const onSearch = () => host.openSearch()
   const onGear = () => menu.toggle()
+  const onMore = () => setMenuOpen(!menuOpen)
   const onCopy = () => {
     const text = JSON.stringify(host.exportValues(), null, 2)
     // without clipboard access, hand the text over in the paste box instead
-    const fallback = () => importPanel.open(text, 'Clipboard unavailable, copy the text above')
+    const fallback = () => {
+      setMenuOpen(false)
+      importPanel.open(text, 'Clipboard unavailable, copy the text above')
+    }
     const clipboard = doc.defaultView?.navigator.clipboard
     if (!clipboard) fallback()
     else clipboard.writeText(text).then(showCopied, fallback)
   }
-  const onImport = () => importPanel.toggle()
-  const onReset = () => host.reset()
-  const onReveal = () => host.revealOverrides()
+  const onImport = () => {
+    setMenuOpen(false)
+    importPanel.toggle()
+  }
+  const onReset = () => {
+    setMenuOpen(false)
+    host.reset()
+  }
+  const onChanges = () => host.revealOverrides()
   const onUndo = () => host.history.undo()
   const onRedo = () => host.history.redo()
   hideBtn.addEventListener('click', onHide)
   dockBtn.addEventListener('click', onDock)
+  searchBtn.addEventListener('click', onSearch)
   gear.addEventListener('click', onGear)
+  moreBtn.addEventListener('click', onMore)
   undoBtn.addEventListener('click', onUndo)
   redoBtn.addEventListener('click', onRedo)
-  revealBtn.addEventListener('click', onReveal)
+  changesBtn.addEventListener('click', onChanges)
   copyBtn.addEventListener('click', onCopy)
   importBtn.addEventListener('click', onImport)
   resetBtn.addEventListener('click', onReset)
 
   disposers.push(
-    tooltip(hideBtn, () => (host.getHidden() ? 'Show panes' : 'Hide panes')),
+    tooltip(hideBtn, () => (host.getHidden() ? 'Show panes (H)' : 'Hide panes (H)')),
     tooltip(dockBtn, () => (host.getDocked() ? 'Undock' : 'Dock to sidebar')),
+    tooltip(searchBtn, () => `Search (${SEARCH_KEY_HINT})`),
     tooltip(gear, () => 'Settings'),
+    tooltip(moreBtn, () => 'More'),
     tooltip(undoBtn, () => 'Undo'),
     tooltip(redoBtn, () => 'Redo'),
-    tooltip(count, () => `${overrides} changed from defaults`),
-    tooltip(revealBtn, () => 'Show changed'),
-    tooltip(copyBtn, () => 'Copy settings'),
-    tooltip(importBtn, () => 'Import settings'),
-    tooltip(resetBtn, () => `Reset ${overrides} parameters to defaults`),
+    tooltip(changesBtn, () => 'Show changed'),
   )
 
   sync()
@@ -322,13 +386,16 @@ export function createNotch(host: NotchHost): Notch {
     dispose() {
       hideBtn.removeEventListener('click', onHide)
       dockBtn.removeEventListener('click', onDock)
+      searchBtn.removeEventListener('click', onSearch)
       gear.removeEventListener('click', onGear)
+      moreBtn.removeEventListener('click', onMore)
       undoBtn.removeEventListener('click', onUndo)
       redoBtn.removeEventListener('click', onRedo)
-      revealBtn.removeEventListener('click', onReveal)
+      changesBtn.removeEventListener('click', onChanges)
       copyBtn.removeEventListener('click', onCopy)
       importBtn.removeEventListener('click', onImport)
       resetBtn.removeEventListener('click', onReset)
+      setMenuOpen(false)
       clearTimeout(copiedTimer)
       stopWatching()
       for (const fn of disposers) fn()
@@ -465,6 +532,20 @@ export function syncHistoryButtons(
 function notchButton(cls: string, glyph: SVGSVGElement, label: string): HTMLButtonElement {
   const btn = h('button', `tiao-notch-btn ${cls}`, glyph)
   btn.type = 'button'
+  btn.setAttribute('aria-label', label)
+  return btn
+}
+
+/** an icon and a short visible name, with a fuller accessible one */
+function menuItem(
+  cls: string,
+  glyph: SVGSVGElement,
+  text: string,
+  label: string,
+): HTMLButtonElement {
+  const btn = h('button', `tiao-notch-menu-item ${cls}`, glyph, text)
+  btn.type = 'button'
+  btn.setAttribute('role', 'menuitem')
   btn.setAttribute('aria-label', label)
   return btn
 }

@@ -142,6 +142,11 @@ export function eyeOffIcon(): SVGSVGElement {
   ])
 }
 
+/** Lucide "ellipsis". */
+export function moreIcon(): SVGSVGElement {
+  return lucideIcon('more', [svgCircle(5, 12, 1), svgCircle(12, 12, 1), svgCircle(19, 12, 1)])
+}
+
 /** Lucide "panel-left". */
 export function panelLeftIcon(): SVGSVGElement {
   return lucideIcon('panel-left', [svgRect(3, 3, 18, 18, 2), svgPath('M9 3v18')])
@@ -174,17 +179,23 @@ const LOGO_NODES = [
 const LOGO_NODE_RADIUS = 7.5
 
 /**
- * tiao's logo as a sticker: three ringed nodes joined ring to ring, over a
- * die-cut backing that traces the mark a few units out, leaving the triangle
- * between the edges open. The mark is currentColor and the backing the theme's
- * surface (see .tiao-logo).
+ * tiao's logo: three ringed nodes joined ring to ring, in currentColor (see
+ * .tiao-logo). Cropped to the mark itself.
+ */
+export function logoMark(): SVGSVGElement {
+  const svg = logoSvg('6 6 68 68')
+  appendLogoMark(svg)
+  return svg
+}
+
+/**
+ * The logo as a sticker: the mark over a die-cut backing that traces it a few
+ * units out, leaving the triangle between the edges open. The backing is the
+ * theme's surface.
  */
 export function logoIcon(): SVGSVGElement {
   const doc = creationDoc()
-  const svg = doc.createElementNS(SVG_NS, 'svg')
-  svg.setAttribute('viewBox', '0 0 80 80')
-  svg.setAttribute('class', 'tiao-logo')
-  svg.setAttribute('aria-hidden', 'true')
+  const svg = logoSvg('0 0 80 80')
   const [a, b, c] = LOGO_NODES
   const sticker = doc.createElementNS(SVG_NS, 'g')
   sticker.setAttribute('class', 'tiao-logo-sticker')
@@ -196,15 +207,28 @@ export function logoIcon(): SVGSVGElement {
     disc.setAttribute('class', 'tiao-logo-sticker-node')
     sticker.append(disc)
   }
+  svg.append(sticker)
+  appendLogoMark(svg)
+  return svg
+}
+
+function logoSvg(viewBox: string): SVGSVGElement {
+  const svg = creationDoc().createElementNS(SVG_NS, 'svg')
+  svg.setAttribute('viewBox', viewBox)
+  svg.setAttribute('class', 'tiao-logo')
+  svg.setAttribute('aria-hidden', 'true')
+  return svg
+}
+
+function appendLogoMark(svg: SVGSVGElement): void {
   const edges = svgPath('M40 26.7 57.8 50.1M54.8 56.6 25.2 58.8M20.8 52.5 32.4 27.5')
   edges.setAttribute('class', 'tiao-logo-edges')
-  svg.append(sticker, edges)
+  svg.append(edges)
   for (const [x, y] of LOGO_NODES) {
     const node = svgCircle(x, y, LOGO_NODE_RADIUS)
     node.setAttribute('class', 'tiao-logo-node')
     svg.append(node)
   }
-  return svg
 }
 
 /*

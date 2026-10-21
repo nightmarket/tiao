@@ -11,7 +11,7 @@ export const textMonitorPlugin: MonitorPlugin<unknown> = {
     return true
   },
   create(ctx) {
-    const format = ctx.options.format ?? defaultFormat
+    const format = ctx.options.format ?? formatValue
     const bufferSize = typeof ctx.options['bufferSize'] === 'number' ? ctx.options['bufferSize'] : 1
     if (bufferSize > 1) return { element: createLog(ctx, bufferSize, format) }
 
@@ -64,7 +64,8 @@ function createLog(
   return el
 }
 
-function defaultFormat(v: unknown): string {
+/** a value as one line of text: numbers by formatNumber, strings as is, the rest as JSON */
+export function formatValue(v: unknown): string {
   if (typeof v === 'number') return formatNumber(v)
   if (typeof v === 'string') return v
   return JSON.stringify(v) ?? String(v)
@@ -177,7 +178,8 @@ export function createGraph(
   // the theme lives on the pane as classes and inline tokens: re-resolve the paint only when those
   // change, since reading computed style forces a style pass whenever the page has pending changes
   let paintScope: string | null = null
-  let paintFill = ''
+  let paintColor = ''
+  let paintDot = ''
   let paintAlpha = 0.28
   let dpr = typeof devicePixelRatio === 'number' ? devicePixelRatio : 1
   let drawRaf = 0
@@ -195,9 +197,8 @@ export function createGraph(
     if (scope === paintScope) return
     paintScope = scope
     const computed = getComputedStyle(el)
-    const accent = computed.getPropertyValue('--tiao-graph-accent').trim()
-    const stroke = computed.getPropertyValue('--tiao-graph-stroke').trim()
-    paintFill = accent || stroke || computed.color
+    paintColor = computed.getPropertyValue('--tiao-graph-accent').trim() || computed.color
+    paintDot = computed.getPropertyValue('--tiao-accent').trim() || paintColor
     const configuredOpacity = Number.parseFloat(
       computed.getPropertyValue('--tiao-graph-fill-opacity'),
     )
@@ -284,8 +285,9 @@ export function createGraph(
       bufferSize,
       min,
       max,
-      fill: paintFill,
+      color: paintColor,
       alpha: paintAlpha,
+      dot: paintDot,
       width,
       height,
       dpr,

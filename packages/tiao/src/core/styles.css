@@ -179,7 +179,7 @@
   --tiao-fill: rgba(255, 255, 255, 0.11);
   --tiao-accent: #facc15;
   --tiao-border: rgba(255, 255, 255, 0.08);
-  --tiao-graph-accent: #525252;
+  --tiao-graph-accent: #737373;
   --tiao-shadow: 0 4px 28px rgba(0, 0, 0, 0.45), 0 0 0 1px var(--tiao-border);
   --tiao-shadow-popup: 0 8px 32px rgba(0, 0, 0, 0.55), 0 0 0 1px var(--tiao-border);
   --tiao-shadow-sheet: 0 -8px 32px rgba(0, 0, 0, 0.55), 0 0 0 1px var(--tiao-border);
@@ -220,7 +220,7 @@
   --tiao-accent: #2aa198;
   --tiao-accent-fg: #002b36;
   --tiao-border: rgba(147, 161, 161, 0.35);
-  --tiao-graph-accent: #839496;
+  --tiao-graph-accent: #657b83;
   --tiao-shadow: 0 4px 28px rgba(0, 21, 27, 0.55), 0 0 0 1px var(--tiao-border);
   --tiao-shadow-popup: 0 8px 32px rgba(0, 21, 27, 0.65), 0 0 0 1px var(--tiao-border);
   --tiao-shadow-sheet: 0 -8px 32px rgba(0, 21, 27, 0.65), 0 0 0 1px var(--tiao-border);
@@ -261,7 +261,7 @@
   --tiao-accent: #88c0d0;
   --tiao-accent-fg: #2e3440;
   --tiao-border: rgba(216, 222, 233, 0.18);
-  --tiao-graph-accent: #9aa3b5;
+  --tiao-graph-accent: #7b849c;
   --tiao-shadow: 0 4px 28px rgba(25, 28, 35, 0.55), 0 0 0 1px var(--tiao-border);
   --tiao-shadow-popup: 0 8px 32px rgba(25, 28, 35, 0.65), 0 0 0 1px var(--tiao-border);
   --tiao-shadow-sheet: 0 -8px 32px rgba(25, 28, 35, 0.65), 0 0 0 1px var(--tiao-border);
@@ -410,6 +410,14 @@
   display: none !important;
 }
 
+/* a theme swap repaints every color in one frame; eased colors would trail it */
+:root.tiao-theme-changing :is(.tiao-pane, .tiao-notch, .tiao-dock, .tiao-drawer-button, .tiao-pins),
+:root.tiao-theme-changing
+  :is(.tiao-pane, .tiao-notch, .tiao-dock, .tiao-drawer-button, .tiao-pins)
+  :is(*, *::before, *::after) {
+  transition: none !important;
+}
+
 /*
  * fixed page chrome the docked sidebar would cover. !important because these
  * have to beat the page's own rules, and width goes auto so a bar sized to the
@@ -458,7 +466,7 @@
     .tiao-notch-near,
     :hover,
     :has(:focus-visible),
-    :has(.tiao-pane-menu.tiao-open, .tiao-import.tiao-open)
+    :has(.tiao-pane-menu.tiao-open, .tiao-import.tiao-open, .tiao-notch-menu.tiao-open)
   ) {
   opacity: 0;
   box-shadow: none;
@@ -491,29 +499,101 @@
 .tiao-notch-hidden-panes .tiao-notch-hide {
   color: var(--tiao-fg-faint);
 }
+/* the brand mark, sized and colored like the buttons beside it but quieter */
+.tiao-notch-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(var(--tiao-notch-icon) + 6px);
+  height: calc(var(--tiao-notch-icon) + 6px);
+  color: var(--tiao-fg-soft);
+}
+.tiao-notch-logo .tiao-logo {
+  width: calc(var(--tiao-notch-icon) + 2px);
+  height: calc(var(--tiao-notch-icon) + 2px);
+}
 .tiao-notch-sep {
   width: 1px;
   height: calc(var(--tiao-notch-icon) - 1px);
   margin: 0 2px;
   background: var(--tiao-border);
 }
-/* "3 set": rows changed from their code defaults */
-.tiao-notch-count {
-  /* button height, so its tooltip drops to the same line as theirs */
+/* "3 changed": rows off their code defaults, and the way to point them out.
+   The bar's one colored element, and only while something has changed */
+.tiao-notch-changes {
   display: flex;
   align-items: center;
+  gap: 5px;
   height: calc(var(--tiao-notch-icon) + 6px);
-  padding: 0 3px 0 2px;
-  color: var(--tiao-fg-soft);
-  font-family: var(--tiao-font-mono);
-  font-variation-settings: var(--tiao-font-mono-settings);
-  font-size: var(--tiao-font-size-mono);
+  padding: 0 8px 0 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tiao-accent) 16%, transparent);
+  color: var(--tiao-accent);
   font-variant-numeric: tabular-nums;
   line-height: 1;
   white-space: nowrap;
+  transition: background 0.12s ease;
 }
-.tiao-notch-count-zero {
+.tiao-notch-changes:hover {
+  background: color-mix(in srgb, var(--tiao-accent) 26%, transparent);
+}
+.tiao-notch-changes-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.tiao-notch-changes:disabled {
+  background: none;
   color: var(--tiao-fg-faint);
+  cursor: default;
+}
+.tiao-notch-changes:disabled .tiao-notch-changes-dot {
+  display: none;
+}
+/* copy, import, and reset, dropped under the ⋯ button */
+.tiao-notch-more-wrap {
+  position: relative;
+}
+.tiao-notch-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: -4px;
+  z-index: 100;
+  display: none;
+  flex-direction: column;
+  min-width: 150px;
+  padding: 3px;
+  background: var(--tiao-bg-solid);
+  border-radius: var(--tiao-radius);
+  box-shadow: var(--tiao-shadow-popup);
+}
+.tiao-notch-menu.tiao-open {
+  display: flex;
+}
+.tiao-notch-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: var(--tiao-radius-sm);
+  color: var(--tiao-fg-muted);
+  text-align: left;
+  white-space: nowrap;
+  transition:
+    color 0.12s ease,
+    background 0.12s ease;
+}
+.tiao-notch-menu-item .tiao-icon {
+  color: var(--tiao-fg-dim);
+}
+.tiao-notch-menu-item:hover {
+  background: var(--tiao-hover);
+  color: var(--tiao-fg);
+}
+.tiao-notch-menu-item.tiao-notch-on,
+.tiao-notch-menu-item.tiao-notch-on .tiao-icon {
+  color: var(--tiao-accent);
 }
 .tiao-notch-btn:disabled {
   color: var(--tiao-fg-faint);
@@ -893,12 +973,11 @@
   flex: none;
 }
 
-/* values and row labels are monospace and less primary than headers, so
-   section titles carry the hierarchy. Labels sit below headers (strong) and
-   above control-column values (dim) so sections stay differentiated. */
+/* values are monospace and labels the UI face, so the face tells a name from
+   its value. Semibold section titles (strong) carry the hierarchy over labels
+   (muted) and values (soft), which brighten as their row is used. */
 .tiao-pane
 :where(
-  .tiao-label,
   .tiao-num-input,
   .tiao-text-input,
   .tiao-select,
@@ -915,23 +994,26 @@
 .tiao-pane .tiao-folder-heading {
   color: var(--tiao-fg-strong);
 }
+.tiao-pane .tiao-folder-heading {
+  font-weight: 600;
+}
 .tiao-pane .tiao-label {
-  color: var(--tiao-fg-soft);
+  color: var(--tiao-fg-muted);
 }
 .tiao-pane
   :where(.tiao-num-input, .tiao-text-input, .tiao-select, .tiao-color-text, .tiao-monitor-text) {
-  color: var(--tiao-fg-dim);
+  color: var(--tiao-fg-soft);
 }
 /* hovering a row (or dragging it) raises that control's value; hovering a
    folder raises every adjustable value underneath one step so the section
    reads as active without flattening the hovered row. */
 .tiao-folder:hover :where(.tiao-num-input, .tiao-text-input, .tiao-select, .tiao-color-text) {
-  color: var(--tiao-fg-soft);
+  color: var(--tiao-fg-muted);
 }
 .tiao-row:hover :where(.tiao-num-input, .tiao-text-input, .tiao-select, .tiao-color-text),
 .tiao-row.tiao-row-active
   :where(.tiao-num-input, .tiao-text-input, .tiao-select, .tiao-color-text) {
-  color: var(--tiao-fg-muted);
+  color: var(--tiao-fg);
 }
 
 /* ---- pane chrome ---- */
@@ -1177,7 +1259,7 @@
 .tiao-pane:has(.tiao-row-active)
   .tiao-row:not(.tiao-row-active)
   :where(.tiao-num-input, .tiao-text-input, .tiao-select, .tiao-color-text) {
-  color: var(--tiao-fg-dim);
+  color: var(--tiao-fg-soft);
 }
 .tiao-pane:has(.tiao-row-active) .tiao-row:not(.tiao-row-active) .tiao-angle-knob,
 .tiao-pane:has(.tiao-row-active) .tiao-row:not(.tiao-row-active) .tiao-point-pad-toggle {
@@ -1193,15 +1275,26 @@
   cursor: pointer;
 }
 .tiao-label {
-  /* labelled rows split exactly in half so control columns align across rows.
-     each folder level indents the row by --tiao-indent; shrinking the label by
-     an extra half-indent/level (50% of the narrower row already absorbs the
-     other half) keeps control columns identical across nesting depths.
+  /* labelled rows give the label 55% so control columns align across rows.
+     each folder level indents the row by --tiao-indent; 55% of the narrower
+     row absorbs 0.55 of it, and the label gives up the other 0.45 per level,
+     which keeps control columns identical across nesting depths.
      --tiao-depth is set on folder racks from JS. */
-  flex: 0 0 calc(50% - (var(--tiao-depth, 0) + 1) * var(--tiao-indent) / 2);
+  flex: 0 0 calc(55% - (var(--tiao-depth, 0) * 0.45 + 0.5) * var(--tiao-indent));
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* changed from the default its code declared */
+.tiao-row-changed > .tiao-label::before {
+  content: "";
+  display: inline-block;
+  width: 4px;
+  height: 4px;
+  margin: 0 5px 1px 0;
+  border-radius: 50%;
+  background: var(--tiao-accent);
+  vertical-align: middle;
 }
 .tiao-control {
   flex: 1;
@@ -1226,6 +1319,10 @@
   position: relative;
   padding: var(--tiao-folder-pad-y) 0;
   border-radius: var(--tiao-radius-sm);
+}
+/* more air between sections than between rows */
+.tiao-rack > .tiao-folder:not(:first-child) {
+  margin-top: calc(var(--tiao-folder-pad-y) * 2);
 }
 /* section highlight: inset on top/bottom so the header and last control
    have a gap; flush left/right so the pill matches sibling row hovers */
@@ -1408,16 +1505,16 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  transition:
-    background 0.12s ease,
-    color 0.12s ease;
+  transition: color 0.12s ease;
 }
 .tiao-tab-button:hover {
   color: var(--tiao-fg-soft);
 }
+/* a pick lands at once; only hovering eases */
 .tiao-tab-button.tiao-selected {
   background: var(--tiao-bg-solid);
   color: var(--tiao-fg-strong);
+  transition: none;
 }
 .tiao-tab-page {
   display: none;
@@ -2488,7 +2585,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   /* the gaps beside and between cards stay clickable for the page */
   pointer-events: none;
   transition: bottom 0.28s cubic-bezier(0.32, 0.72, 0, 1);
@@ -2525,6 +2622,10 @@ body:has(> .tiao-dock-drawer.tiao-open) > .tiao-pins {
   --tiao-pin-item-radius: max(0px, var(--tiao-pin-radius) - var(--tiao-pin-item-inset));
   width: min(320px, 100% - 32px);
   border-radius: var(--tiao-pin-radius);
+  /* a pane's deep shadow would pool between stacked cards; these sit just above the page */
+  box-shadow:
+    0 0 0 1px var(--tiao-border),
+    var(--tiao-shadow-raised);
   pointer-events: auto;
 }
 :root[data-tiao-pin-rounding="full"] .tiao-pane.tiao-pin {
@@ -2560,6 +2661,11 @@ body:has(> .tiao-dock-drawer.tiao-open) > .tiao-pins {
 }
 .tiao-pin :is(.tiao-check, .tiao-color-swatch, .tiao-point-pad-toggle) {
   border-radius: var(--tiao-pin-item-radius);
+}
+/* an outline rather than a filled chip, so the on state is the only fill */
+.tiao-pin .tiao-check {
+  background: none;
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--tiao-fg) 22%, transparent);
 }
 .tiao-pin .tiao-check::after {
   border-radius: max(0px, var(--tiao-pin-item-radius) - 4px);
@@ -2627,6 +2733,97 @@ body:has(> .tiao-dock-drawer.tiao-open) > .tiao-pins {
   pointer-events: none;
 }
 
+/* ---- search: every row in every pane, found by name (see search.ts). A pane
+   so it wears the theme tokens, centered just under the notch ---- */
+.tiao-pane.tiao-search-palette {
+  --tiao-font-size: 13px;
+  --tiao-font-size-mono: 12px;
+  --tiao-icon-size: 14px;
+
+  position: fixed;
+  top: 48px;
+  left: 0;
+  right: 0;
+  z-index: 20001;
+  width: min(440px, 100% - 32px);
+  margin-inline: auto;
+  overflow: hidden;
+  box-shadow: var(--tiao-shadow-popup);
+}
+.tiao-search-palette-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--tiao-border);
+  color: var(--tiao-fg-dim);
+}
+.tiao-search-palette-input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  color: var(--tiao-fg);
+}
+.tiao-search-palette-input::placeholder {
+  color: var(--tiao-fg-dim);
+}
+.tiao-search-palette-input::-webkit-search-cancel-button {
+  display: none;
+}
+.tiao-search-palette-results {
+  max-height: 320px;
+  padding: 4px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.tiao-search-palette-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: var(--tiao-radius-sm);
+  text-align: left;
+}
+.tiao-search-palette-item.tiao-active {
+  background: var(--tiao-hover);
+}
+.tiao-search-palette-name {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.tiao-search-palette-label,
+.tiao-search-palette-path,
+.tiao-search-palette-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tiao-search-palette-label {
+  color: var(--tiao-fg);
+}
+.tiao-search-palette-path {
+  color: var(--tiao-fg-dim);
+  font-size: calc(var(--tiao-font-size) - 2px);
+}
+.tiao-search-palette-value {
+  flex: none;
+  max-width: 40%;
+  color: var(--tiao-fg-soft);
+  font-family: var(--tiao-font-mono);
+  font-variation-settings: var(--tiao-font-mono-settings);
+  font-size: var(--tiao-font-size-mono);
+  font-variant-numeric: tabular-nums;
+}
+.tiao-search-palette-empty {
+  padding: 12px 8px;
+  color: var(--tiao-fg-dim);
+}
+
 /* ---- quiet rows: every pinned card, and every pane under the global Hover
    Controls setting. Values show, and the rest of a control waits for the
    pointer, keyboard focus, or a drag in its row: slider tracks, scrub grips,
@@ -2668,7 +2865,14 @@ body:has(> .tiao-dock-drawer.tiao-open) > .tiao-pins {
   }
   :is(:root[data-tiao-hover-controls] .tiao-pane, .tiao-pane.tiao-pin)
     .tiao-row:not(:hover, .tiao-row-active, :has(:focus-visible))
-    :is(.tiao-num-input, .tiao-text-input, .tiao-select, .tiao-color-text) {
+    :is(
+      .tiao-num-input,
+      .tiao-text-input,
+      .tiao-select,
+      .tiao-color-text,
+      .tiao-point-pad-toggle,
+      .tiao-angle-knob
+    ) {
     background: transparent;
   }
   :is(:root[data-tiao-hover-controls] .tiao-pane, .tiao-pane.tiao-pin)

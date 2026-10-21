@@ -116,10 +116,10 @@ const FONT_OPTIONS: Record<string, PaneFont> = {
 }
 
 const PIN_ROUNDING_OPTIONS: Record<string, PinRounding> = {
-  Full: 'full',
-  Large: 'l',
-  Small: 's',
-  None: 'none',
+  'Fully Rounded': 'full',
+  Rounded: 'l',
+  'Slightly Rounded': 's',
+  Square: 'none',
 }
 
 /** quick accent swatches, loosely based on syntax-highlighting palettes */
@@ -241,6 +241,20 @@ function buildMenu(host: PaneMenuHost): { shell: HTMLElement; refresh: () => voi
   })
   onEdit(hoverControlsBinding, (v) => host.hoverControls.set(v))
   menuPane.addSeparator()
+
+  const { pinRounding } = host
+  if (pinRounding) {
+    const binding = menuPane.addBinding(settings, 'pinRounding', {
+      label: 'Pinned Style',
+      options: PIN_ROUNDING_OPTIONS,
+    })
+    onEdit(binding, (v) => pinRounding.set(v))
+    refreshers.push(() => {
+      settings.pinRounding = pinRounding.get()
+      binding.refresh()
+    })
+    menuPane.addSeparator()
+  }
 
   if (font) {
     const binding = menuPane.addBinding(settings, 'font', {
@@ -413,22 +427,6 @@ function buildMenu(host: PaneMenuHost): { shell: HTMLElement; refresh: () => voi
   if (anchors) {
     menuPane.rack.append(anchors.row)
     refreshers.push(anchors.render)
-  }
-
-  const { pinRounding } = host
-  if (pinRounding) {
-    // a section of the menu, not of the app, so global numbering skips it
-    menuPane.numbers = false
-    const pinned = menuPane.addFolder({ title: 'Pinned' })
-    const binding = pinned.addBinding(settings, 'pinRounding', {
-      label: 'Rounding',
-      options: PIN_ROUNDING_OPTIONS,
-    })
-    onEdit(binding, (v) => pinRounding.set(v))
-    refreshers.push(() => {
-      settings.pinRounding = pinRounding.get()
-      binding.refresh()
-    })
   }
 
   const refresh = () => {

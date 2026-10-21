@@ -6,8 +6,11 @@ export interface GraphFrame {
   bufferSize: number
   min: number
   max: number
-  fill: string
+  /** the line, and the area under it at `alpha` */
+  color: string
   alpha: number
+  /** the newest sample's dot */
+  dot: string
   width: number
   height: number
   dpr: number
@@ -16,40 +19,69 @@ export interface GraphFrame {
 type Context2D = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D
 
 /**
- * The area under the samples, newest at the right edge, filled against `min`..`max`.
+ * A line through the samples against `min`..`max`, newest at the right edge
+ * and marked with a dot, over the area beneath it fading toward the baseline.
  * Must stay self-contained, with no reference to anything outside its own body:
  * the graph worker's source is this function's text.
  */
 export function paintGraph(c: Context2D, f: GraphFrame): void {
   c.clearRect(0, 0, f.width, f.height)
-  c.fillStyle = f.fill
-  c.globalAlpha = f.alpha
-  c.beginPath()
-  const step = f.width / (f.bufferSize - 1)
-  const firstX = f.width - (f.count - 1) * step
+  const lineWidth = 1.25 * f.dpr
+  const dotRadius = 2 * f.dpr
+  // room for the line and the dot along the top and right edges, and the line along the bottom
+  const inset = dotRadius + lineWidth / 2
+  const right = f.width - inset
+  const plotHeight = f.height - lineWidth / 2 - inset
+  const step = right / (f.bufferSize - 1)
   const range = f.max - f.min
-  if (f.count === 1) {
-    const left = Math.max(0, f.width - Math.max(step, f.dpr))
-    const ratio = Math.min(1, Math.max(0, (f.samples[0]! - f.min) / range))
-    const y = (1 - ratio) * f.height
-    c.moveTo(left, y)
-    c.lineTo(f.width, y)
-    c.lineTo(f.width, f.height)
-    c.lineTo(left, f.height)
-  } else {
+  const yAt = (v: number) =>
+    inset + (1 - Math.min(1, Math.max(0, (v - f.min) / range))) * plotHeight
+  // a lone sample draws a short level line, at least a pixel wide
+  const left =
+    f.count === 1 ? Math.max(0, right - Math.max(step, f.dpr)) : right - (f.count - 1) * step
+  const trace = () => {
+    c.beginPath()
+    if (f.count === 1) {
+      const y = yAt(f.samples[0]!)
+      c.moveTo(left, y)
+      c.lineTo(right, y)
+      return
+    }
     for (let i = 0; i < f.count; i++) {
-      const x = firstX + i * step
-      const ratio = Math.min(1, Math.max(0, (f.samples[i]! - f.min) / range))
-      const y = (1 - ratio) * f.height
+      const x = left + i * step
+      const y = yAt(f.samples[i]!)
       if (i === 0) c.moveTo(x, y)
       else c.lineTo(x, y)
     }
-    c.lineTo(f.width, f.height)
-    c.lineTo(Math.max(0, firstX), f.height)
   }
+
+  trace()
+  c.lineTo(right, f.height)
+  c.lineTo(left, f.height)
   c.closePath()
+  c.fillStyle = f.color
+  c.globalAlpha = f.alpha
   c.fill()
+  // destination-in keeps only the gradient's alpha, so the fade can't tint the area
+  const fade = c.createLinearGradient(0, inset, 0, f.height)
+  fade.addColorStop(0, 'rgba(0, 0, 0, 1)')
+  fade.addColorStop(1, 'rgba(0, 0, 0, 0.1)')
   c.globalAlpha = 1
+  c.globalCompositeOperation = 'destination-in'
+  c.fillStyle = fade
+  c.fillRect(0, 0, f.width, f.height)
+  c.globalCompositeOperation = 'source-over'
+
+  trace()
+  c.strokeStyle = f.color
+  c.lineWidth = lineWidth
+  c.lineJoin = 'round'
+  c.lineCap = 'round'
+  c.stroke()
+  c.beginPath()
+  c.arc(right, yAt(f.samples[f.count - 1]!), dotRadius, 0, 2 * Math.PI)
+  c.fillStyle = f.dot
+  c.fill()
 }
 
 type GraphMessage =

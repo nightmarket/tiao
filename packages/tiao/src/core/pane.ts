@@ -5,7 +5,9 @@ import {
   Container,
   FolderApi,
   markPointerBlur,
+  revealItem,
   revealOverridden,
+  sectionTitles,
   TabApi,
   walkBindings,
 } from './blade'
@@ -33,6 +35,7 @@ import { createPaneMenu, type PaneMenuToggle } from './pane-menu'
 import { createPinBoard, type PinBoard } from './pins'
 import { globalRegistry, PluginRegistry, type TiaoPlugin } from './plugin'
 import { openRowToolbar } from './row-toolbar'
+import { createSearch, isSearchShortcut, type Search, type SearchEntry } from './search'
 import { injectStyles } from './styles'
 import { tooltip } from './tooltip'
 import { clamp, isRecord, type JSONStore, jsonStore } from './util'
@@ -230,9 +233,14 @@ function isTypingTarget(t: EventTarget | null): boolean {
 function ensureGlobalToggle(doc: Document): void {
   if (globalToggleInstalled.has(doc)) return
   const onKey = (e: KeyboardEvent) => {
+    if (isTypingTarget(e.target)) return
+    if (isSearchShortcut(e)) {
+      e.preventDefault()
+      searchFor(doc).open()
+      return
+    }
     if (e.key !== 'h' && e.key !== 'H') return
     if (e.metaKey || e.ctrlKey || e.altKey) return
-    if (isTypingTarget(e.target)) return
     Pane.toggleAll(doc)
   }
   doc.addEventListener('keydown', onKey)
@@ -251,6 +259,32 @@ const notches = new WeakMap<Document, Notch>()
 
 /** documents where a pane asked for the notch, so a wide screen can bring it back */
 const notchWanted = new WeakSet<Document>()
+
+/** one search across every pane per document, built on first use */
+const searches = new WeakMap<Document, Search>()
+
+function searchFor(doc: Document): Search {
+  let search = searches.get(doc)
+  if (!search) {
+    search = createSearch({
+      document: doc,
+      entries: () => {
+        const entries: SearchEntry[] = []
+        for (const p of trackedPanes(doc)) {
+          walkBindings(p, (binding) => {
+            const path = [p.title, ...sectionTitles(binding.parent)].filter(Boolean)
+            entries.push({ binding, path })
+          })
+        }
+        return entries
+      },
+      reveal: (binding) => Pane.reveal(binding, doc),
+      theme: (el) => applyChrome(el, globalChrome(doc)),
+    })
+    searches.set(doc, search)
+  }
+  return search
+}
 
 /** one stack of pinned values per document */
 const pinBoards = new WeakMap<Document, PinBoard>()
@@ -350,6 +384,21 @@ function applyMobile(doc: Document, mobile: boolean): void {
   })
 }
 
+/**
+ * Point out `rows`, whose folders and tabs are already open: show and expand
+ * their pane, flash them, and scroll to the first. Returns whether the pane had
+ * been hidden.
+ */
+function presentRows(p: Pane, rows: BindingApi<unknown>[]): boolean {
+  const wasHidden = p.hidden
+  if (wasHidden) p.hidden = false
+  p.expanded = true
+  for (const b of rows) b.flash()
+  // after the folders finish opening, so the row is where it will stay
+  setTimeout(() => rows[0]?.element.scrollIntoView?.({ block: 'nearest' }), FOLDER_EXPAND_MS)
+  return wasHidden
+}
+
 /** the drawer controls wear the drawer's theme and the global glass setting */
 function syncDrawerControls(doc: Document): void {
   const controls = mobileWatches.get(doc)?.controls
@@ -427,7 +476,8 @@ function applyHoverControls(doc: Document, on: boolean): void {
 function applyPinRounding(doc: Document, rounding: PinRounding): void {
   const root = doc.documentElement
   if (rounding === DEFAULT_PIN_ROUNDING) delete root.dataset['tiaoPinRounding']
-  else root.dataset['tiaoPinRounding'] = rounding
+  // every pane applies it on mount; rewriting the same value still invalidates style
+  else if (root.dataset['tiaoPinRounding'] !== rounding) root.dataset['tiaoPinRounding'] = rounding
 }
 
 function hoverControlsToggle(doc: Document): PaneMenuToggle {
@@ -722,6 +772,7 @@ function ensureNotch(doc: Document): void {
       revealOverrides: () => {
         Pane.revealOverrides(doc)
       },
+      openSearch: () => searchFor(doc).open(),
       font: {
         get: () => Pane.font,
         set: (v) => Pane.setFont(v, doc),
@@ -853,6 +904,8 @@ function releaseNotch(doc: Document): void {
   releaseMobile(doc)
   closeDock(doc)
   releaseGlobalToggle(doc)
+  searches.get(doc)?.dispose()
+  searches.delete(doc)
   releaseColorScheme(doc)
   releaseViewport(doc)
 }
@@ -882,8 +935,31 @@ function applyThemeClass(el: HTMLElement, theme: PaneTheme): void {
   // preference stays on the element so a system change can find who to repaint
   if (el.dataset.tiaoTheme !== theme) el.dataset.tiaoTheme = theme
   const next = THEME_CLASS[resolveTheme(theme, el.ownerDocument)]
+  const current = THEME_CLASSES.find((cls) => el.classList.contains(cls)) ?? null
+  if (current === next) return
+  if (el.isConnected) pauseTransitions(el.ownerDocument)
   // toggle(cls, force) leaves a class that is already right untouched
   for (const cls of THEME_CLASSES) el.classList.toggle(cls, cls === next)
+}
+
+const pausedTransitions = new WeakSet<Document>()
+
+/**
+ * Hold every transition in tiao's UI until a frame has painted in the new
+ * theme, so eased colors land with the rest instead of fading in after them.
+ */
+function pauseTransitions(doc: Document): void {
+  const win = doc.defaultView
+  if (!win || pausedTransitions.has(doc)) return
+  pausedTransitions.add(doc)
+  const root = doc.documentElement
+  root.classList.add('tiao-theme-changing')
+  win.requestAnimationFrame(() =>
+    win.requestAnimationFrame(() => {
+      root.classList.remove('tiao-theme-changing')
+      pausedTransitions.delete(doc)
+    }),
+  )
 }
 
 function applyStyleClass(el: HTMLElement, style: PaneStyle): void {
@@ -1136,17 +1212,9 @@ export class Pane extends Container {
       for (const p of trackedPanes(doc)) {
         const found: BindingApi<unknown>[] = []
         for (const child of p.children) revealOverridden(child, found)
-        const first = found[0]
-        if (!first) continue
+        if (found.length === 0) continue
         total += found.length
-        if (p.hidden) {
-          p.hidden = false
-          shown = true
-        }
-        p.expanded = true
-        for (const b of found) b.flash()
-        // after the folders finish opening, so the row is where it will stay
-        setTimeout(() => first.element.scrollIntoView?.({ block: 'nearest' }), FOLDER_EXPAND_MS)
+        if (presentRows(p, found)) shown = true
       }
       if (shown) {
         setDockVisible(doc, true)
@@ -1154,6 +1222,22 @@ export class Pane extends Container {
       }
     })
     return total
+  }
+
+  /**
+   * Outline `binding`'s row in the accent for a moment, first opening whatever
+   * hides it: a hidden or collapsed pane, folders, and tab pages. Returns
+   * whether a pane in `doc` holds it.
+   */
+  static reveal(binding: BindingApi<unknown>, doc: Document = document): boolean {
+    const pane = trackedPanes(doc).find((p) => revealItem(p, binding))
+    if (!pane) return false
+    batchPanes(() => {
+      if (!presentRows(pane, [binding])) return
+      setDockVisible(doc, true)
+      notchStore.patch({ hidden: false })
+    })
+    return true
   }
 
   /** typeface every pane draws with */
