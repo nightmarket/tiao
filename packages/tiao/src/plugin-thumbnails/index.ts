@@ -93,6 +93,8 @@ function thumbBox(thumb: string): HTMLElement {
     img.src = thumb
     img.alt = ''
     img.loading = 'lazy'
+    // a press picks the option; dragging would lift the picture out instead
+    img.draggable = false
     box.append(img)
   } else {
     box.style.background = thumb

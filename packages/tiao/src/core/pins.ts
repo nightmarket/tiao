@@ -8,7 +8,7 @@ export interface Pinnable extends RowTarget {
   feature(onDispose: (fn: () => void) => void): PluginView
 }
 
-/** the pinned values of one document */
+/** the pinned values of one namespace */
 export interface PinBoard {
   has(row: Pinnable): boolean
   pin(row: Pinnable): void
@@ -24,12 +24,16 @@ interface PinCard {
 
 /**
  * Featured values: each pinned row gets a card stacked at the bottom center of
- * the page, newest at the bottom. A card is a second view of the row's value,
- * drawn larger, so editing either one moves both, and it stays up while the
- * row's pane is hidden or collapsed. The stack is on <body> only while it
- * holds a card.
+ * the page, or of `root()` when the namespace is rooted in an element, newest
+ * at the bottom. A card is a second view of the row's value, drawn larger, so
+ * editing either one moves both, and it stays up while the row's pane is
+ * hidden or collapsed. The stack is mounted only while it holds a card.
  */
-export function createPinBoard(doc: Document, theme: (card: HTMLElement) => void): PinBoard {
+export function createPinBoard(
+  doc: Document,
+  root: () => HTMLElement | null,
+  theme: (card: HTMLElement) => void,
+): PinBoard {
   const stack = withDocument(doc, () => h('div', 'tiao-pins'))
   const cards = new Map<Pinnable, PinCard>()
   return {
@@ -40,7 +44,10 @@ export function createPinBoard(doc: Document, theme: (card: HTMLElement) => void
       theme(card.element)
       cards.set(row, card)
       stack.append(card.element)
-      if (!stack.isConnected) doc.body.append(stack)
+      const home = root()
+      stack.classList.toggle('tiao-pins-rooted', home !== null)
+      const parent = home ?? doc.body
+      if (stack.parentElement !== parent) parent.append(stack)
     },
     unpin(row) {
       const card = cards.get(row)

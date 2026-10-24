@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -62,8 +63,14 @@ function cssAsText(): Plugin {
   }
 }
 
+const { version } = JSON.parse(
+  readFileSync(path.join(repoRoot, 'packages/tiao/package.json'), 'utf8'),
+)
+
 export default defineConfig({
   plugins: [react(), cssAsText()],
+  // the docs show the version the package will publish as
+  define: { __TIAO_VERSION__: JSON.stringify(version) },
   resolve: {
     alias: aliases,
   },

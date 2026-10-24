@@ -161,7 +161,7 @@ function buildControls(): Pane {
   numbers.addBinding(params, 'exposure', { min: 0, max: 1, step: 0.01, label: 'Exposure (slider)' })
   numbers.addBinding(params, 'iterations', { min: 1, max: 64, step: 1, label: 'Iterations (int)' })
   numbers.addBinding(params, 'seed', { label: 'Seed (free scrubber)' })
-  numbers.addBinding(params, 'clipRange', { min: 0, max: 100, step: 1, label: 'Clip Range' })
+  numbers.addBinding(params, 'clipRange', { min: 0, max: 100, step: 1, label: 'Clip range' })
   numbers.addBinding(params, 'percent', {
     min: 0,
     max: 1,
@@ -173,7 +173,7 @@ function buildControls(): Pane {
   const text = pane.addFolder({ title: 'Text & Choice' })
   text.addBinding(params, 'label', { label: 'Label' })
   text.addBinding(params, 'blend', {
-    label: 'Blend Mode',
+    label: 'Blend mode',
     options: { Multiply: 'multiply', Screen: 'screen', Overlay: 'overlay' },
   })
   text.addBinding(params, 'city', {

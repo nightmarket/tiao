@@ -11,7 +11,7 @@ import { readoutOffset } from './controls/slider'
 import { setEwCursor } from './dom'
 import { Pane } from './pane'
 import { registerPlugin } from './plugin'
-import { formatNumber, jsonStore, snap, withoutPersisting } from './util'
+import { formatNumber, jsonStore, setTiaoStorage, snap, withoutPersisting } from './util'
 
 beforeEach(() => {
   document.body.innerHTML = ''
@@ -706,9 +706,9 @@ describe('Pane registry and chrome', () => {
     const pane = new Pane({ size: 's' })
     const inline = new Pane({ container: document.body.appendChild(document.createElement('div')) })
     expect(pane.size).toBe('s')
-    expect(notchMenuTab('Font Size', 'S').classList.contains('tiao-selected')).toBe(true)
+    expect(notchMenuTab('Font size', 'S').classList.contains('tiao-selected')).toBe(true)
 
-    notchMenuTab('Font Size', 'M').click()
+    notchMenuTab('Font size', 'M').click()
     expect(pane.size).toBe('m')
     // the global size covers floating panes; inline ones keep their own
     expect(inline.size).toBe('m')
@@ -717,7 +717,7 @@ describe('Pane registry and chrome', () => {
     const later = new Pane()
     expect(later.size).toBe('m')
 
-    notchMenuTab('Font Size', 'L').click()
+    notchMenuTab('Font size', 'L').click()
     expect(pane.size).toBe('l')
     expect(later.size).toBe('l')
     expect(inline.size).toBe('m')
@@ -726,7 +726,7 @@ describe('Pane registry and chrome', () => {
     const notch = document.querySelector('.tiao-notch')!
     expect(notch.classList.contains('tiao-size-l')).toBe(true)
 
-    notchMenuTab('Font Size', 'S').click()
+    notchMenuTab('Font size', 'S').click()
     expect(pane.size).toBe('s')
     expect(later.size).toBe('s')
     expect(notch.classList.contains('tiao-size-s')).toBe(true)
@@ -761,31 +761,33 @@ describe('Pane registry and chrome', () => {
     later.dispose()
   })
 
-  it('notch glass frosts every floating pane and the notch, and is off by default', () => {
+  it('notch glass frosts every floating pane and the notch, and is on by default', () => {
     const pane = new Pane()
     const container = document.createElement('div')
     document.body.append(container)
     const inline = new Pane({ container })
     const notch = document.querySelector('.tiao-notch') as HTMLElement
     const glassy = (el: HTMLElement) => el.classList.contains('tiao-glass')
-    expect(glassy(pane.element)).toBe(false)
-    expect(notchMenuTab('Glass', 'Off').classList.contains('tiao-selected')).toBe(true)
-
-    notchMenuTab('Glass', 'On').click()
     expect(Pane.glass).toBe(true)
     expect(glassy(pane.element)).toBe(true)
     expect(glassy(notch)).toBe(true)
     // inline panes sit in the page layout, not over a canvas
     expect(glassy(inline.element)).toBe(false)
-    expect(JSON.parse(localStorage.getItem('tiao:notch')!).glass).toBe(true)
-
-    const later = new Pane()
-    expect(glassy(later.element)).toBe(true)
+    expect(notchMenuTab('Glass', 'On').classList.contains('tiao-selected')).toBe(true)
 
     notchMenuTab('Glass', 'Off').click()
+    expect(Pane.glass).toBe(false)
     expect(glassy(pane.element)).toBe(false)
-    expect(glassy(later.element)).toBe(false)
     expect(glassy(notch)).toBe(false)
+    expect(JSON.parse(localStorage.getItem('tiao:notch')!).glass).toBe(false)
+
+    const later = new Pane()
+    expect(glassy(later.element)).toBe(false)
+
+    notchMenuTab('Glass', 'On').click()
+    expect(glassy(pane.element)).toBe(true)
+    expect(glassy(later.element)).toBe(true)
+    expect(glassy(notch)).toBe(true)
 
     pane.dispose()
     inline.dispose()
@@ -802,6 +804,105 @@ describe('Pane registry and chrome', () => {
     expect(JSON.parse(localStorage.getItem('tiao:notch')!).hiding).toBe(false)
 
     pane.dispose()
+  })
+
+  it('a namespace rooted in an element is its own tiao: panes, notch, undo, and theme', () => {
+    const root = document.createElement('div')
+    document.body.append(root)
+    // rooted before its panes mount, as a page would
+    const release = Pane.namespace('hero', { root })
+    const page = new Pane({ id: 'ns-page' })
+    const hero = new Pane({ id: 'ns-hero', namespace: 'hero', anchor: 'top-right' })
+    const inline = new Pane({ id: 'ns-inline', namespace: 'hero', container: root })
+    try {
+      const notches = [...document.querySelectorAll<HTMLElement>('.tiao-notch')]
+      const pageNotch = notches.find((n) => n.parentElement === document.body)!
+      const heroNotch = notches.find((n) => n.parentElement === root)!
+
+      // the hero's panes float inside its root, under a notch that stays shown
+      expect(hero.element.parentElement).toBe(root)
+      expect(hero.element.classList.contains('tiao-rooted')).toBe(true)
+      expect(page.element.classList.contains('tiao-rooted')).toBe(false)
+      expect(heroNotch.classList.contains('tiao-notch-auto-hide')).toBe(false)
+      expect(heroNotch.querySelector('.tiao-notch-dock')).not.toBeNull()
+      expect(pageNotch.querySelector('.tiao-notch-dock')).not.toBeNull()
+
+      // its theme reaches its own panes, inline ones in its root too, and leaves the page's alone
+      ;(heroNotch.querySelector('.tiao-notch-gear') as HTMLButtonElement).click()
+      const theme = [...heroNotch.querySelectorAll('.tiao-pane-menu .tiao-row')].find(
+        (r) => r.querySelector('.tiao-label')?.textContent === 'Theme',
+      )!
+      ;[...theme.querySelectorAll<HTMLButtonElement>('.tiao-tab-button')]
+        .find((b) => b.getAttribute('aria-label') === 'Light')!
+        .click()
+      expect(hero.theme).toBe('light')
+      expect(inline.theme).toBe('light')
+      expect(page.theme).toBe('dark')
+
+      // value edits count and undo per namespace
+      const params = { speed: 1 }
+      const speed = hero.addBinding(params, 'speed')
+      speed.value.set(2, { source: 'ui', last: true })
+      expect(Pane.countOverrides(hero.namespace)).toBe(1)
+      expect(Pane.countOverrides(document)).toBe(0)
+      Pane.undo(hero.namespace)
+      expect(params.speed).toBe(1)
+
+      // its pinned cards stack in its root, apart from the page's
+      speed.pinned = true
+      const heroPins = root.querySelector('.tiao-pins')!
+      expect(heroPins.classList.contains('tiao-pins-rooted')).toBe(true)
+      expect(heroPins.querySelectorAll('.tiao-pin')).toHaveLength(1)
+      expect(document.body.querySelector(':scope > .tiao-pins')).toBeNull()
+      speed.pinned = false
+      expect(heroPins.isConnected).toBe(false)
+
+      // H hides the namespace under the pointer, else the window's
+      root.dispatchEvent(new MouseEvent('pointermove', { bubbles: true }))
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'h' }))
+      expect(hero.hidden).toBe(true)
+      expect(page.hidden).toBe(false)
+    } finally {
+      hero.dispose()
+      inline.dispose()
+      page.dispose()
+      release()
+      root.remove()
+    }
+  })
+
+  it('a rooted namespace docks into a sidebar inside its element and leaves the page alone', () => {
+    const root = document.createElement('div')
+    document.body.append(root)
+    const release = Pane.namespace('scoped', { root })
+    const page = new Pane({ id: 'dock-page' })
+    const a = new Pane({ id: 'dock-a', namespace: 'scoped' })
+    const b = new Pane({ id: 'dock-b', namespace: 'scoped' })
+    try {
+      ;(root.querySelector('.tiao-notch-dock') as HTMLButtonElement).click()
+      const dock = root.querySelector(':scope > .tiao-dock')!
+      expect(dock.classList.contains('tiao-dock-rooted')).toBe(true)
+      expect([...dock.querySelector('.tiao-dock-body')!.children]).toEqual([a.element, b.element])
+      expect(root.classList.contains('tiao-docked')).toBe(true)
+
+      // the window keeps its floating panes, its padding, and its own sidebar state
+      expect(page.docked).toBe(false)
+      expect(Pane.docked).toBe(false)
+      expect(document.documentElement.classList.contains('tiao-docked')).toBe(false)
+      expect(document.body.style.getPropertyValue('padding-inline-start')).toBe('')
+
+      expect(Pane.toggleDock(a.namespace)).toBe(false)
+      expect(root.querySelector('.tiao-dock')).toBeNull()
+      expect(a.element.parentElement).toBe(root)
+      expect(a.docked).toBe(false)
+      expect(root.classList.contains('tiao-docked')).toBe(false)
+    } finally {
+      a.dispose()
+      b.dispose()
+      page.dispose()
+      release()
+      root.remove()
+    }
   })
 
   it('an armed notch reveals itself from the pointer nearing the top edge', () => {
@@ -823,6 +924,34 @@ describe('Pane registry and chrome', () => {
     expect(notch.classList.contains('tiao-notch-near')).toBe(false)
 
     pane.dispose()
+  })
+
+  it("a rooted notch with hiding retreats until the pointer nears its root's top edge", () => {
+    const root = document.createElement('div')
+    document.body.append(root)
+    root.getBoundingClientRect = () => new DOMRect(100, 300, 400, 300)
+    const release = Pane.namespace('quick', { root, hiding: true })
+    const pane = new Pane({ namespace: 'quick' })
+    const notch = root.querySelector('.tiao-notch') as HTMLElement
+    const near = () => notch.classList.contains('tiao-notch-near')
+    const move = (clientX: number, clientY: number) =>
+      document.dispatchEvent(new MouseEvent('pointermove', { clientX, clientY, bubbles: true }))
+    try {
+      expect(notch.classList.contains('tiao-notch-auto-hide')).toBe(true)
+      // the window's top edge isn't this notch's
+      move(300, 4)
+      expect(near()).toBe(false)
+      move(300, 310)
+      expect(near()).toBe(true)
+      move(50, 310)
+      expect(near()).toBe(false)
+      move(300, 450)
+      expect(near()).toBe(false)
+    } finally {
+      pane.dispose()
+      release()
+      root.remove()
+    }
   })
 
   it('notch settings theme every pane in both views and seed later panes', () => {
@@ -2335,6 +2464,48 @@ describe('Pane registry and chrome', () => {
     pane.dispose()
   })
 
+  it('an inline pane drags only when asked, and stays inside its container', () => {
+    const dragTitlebar = (pane: Pane, dx: number, dy: number) => {
+      const titlebar = pane.element.querySelector('.tiao-titlebar') as HTMLElement
+      titlebar.dispatchEvent(
+        new MouseEvent('pointerdown', { button: 0, clientX: 0, clientY: 0, bubbles: true }),
+      )
+      document.dispatchEvent(
+        new MouseEvent('pointermove', { clientX: dx, clientY: dy, bubbles: true, buttons: 1 }),
+      )
+      document.dispatchEvent(
+        new MouseEvent('pointerup', { button: 0, clientX: dx, clientY: dy, bubbles: true }),
+      )
+    }
+    const container = document.createElement('div')
+    document.body.append(container)
+    container.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, right: 400, bottom: 300, width: 400, height: 300 }) as DOMRect
+
+    const fixed = new Pane({ container })
+    expect(fixed.draggable).toBe(false)
+    dragTitlebar(fixed, 50, 50)
+    expect(fixed.element.style.translate).toBe('')
+    fixed.dispose()
+
+    const pane = new Pane({ container, draggable: true })
+    // laid out at (60, 50), plus wherever the drag has shifted it
+    pane.element.getBoundingClientRect = () => {
+      const shift = pane.element.style.translate || '0px 0px'
+      const [x = 0, y = 0] = shift.split(' ').map(Number.parseFloat)
+      return { left: 60 + x, top: 50 + y, right: 340 + x, bottom: 250 + y } as DOMRect
+    }
+    expect(pane.element.classList.contains('tiao-draggable')).toBe(true)
+    dragTitlebar(pane, 30, -20)
+    expect(pane.element.style.translate).toBe('30px -20px')
+    // a long drag stops at the container's edge
+    dragTitlebar(pane, 500, 500)
+    expect(pane.element.style.translate).toBe('60px 50px')
+    expect(pane.expanded).toBe(true)
+    pane.dispose()
+    container.remove()
+  })
+
   it('gear opens the settings menu with a draggable toggle and 9 anchor cells', () => {
     const pane = new Pane()
     const gear = pane.element.querySelector('.tiao-pane-gear') as HTMLButtonElement
@@ -2622,6 +2793,30 @@ describe('Pane registry and chrome', () => {
     revived.dispose()
   })
 
+  it('setTiaoStorage(false) starts panes from their code and saves nothing until it is back on', () => {
+    localStorage.setItem('tiao:fresh:values', JSON.stringify({ speed: 4 }))
+    setTiaoStorage(false)
+    try {
+      const params = { speed: 1 }
+      const pane = new Pane({ id: 'fresh' })
+      pane.addBinding(params, 'speed').value.set(3)
+      expect(params.speed).toBe(3)
+      pane.moveTo(10, 20)
+      pane.dispose()
+      expect(JSON.parse(localStorage.getItem('tiao:fresh:values')!)).toEqual({ speed: 4 })
+      expect(localStorage.getItem('tiao:fresh')).toBeNull()
+    } finally {
+      setTiaoStorage(true)
+    }
+
+    // back on, the saved copy is read again
+    const next = { speed: 1 }
+    const revived = new Pane({ id: 'fresh' })
+    revived.addBinding(next, 'speed')
+    expect(next.speed).toBe(4)
+    revived.dispose()
+  })
+
   it('skips saved values that no longer fit and honors persist: false', () => {
     localStorage.setItem(
       'tiao:mismatch:values',
@@ -2791,7 +2986,7 @@ describe('Pane registry and chrome', () => {
     }
   })
 
-  it('search finds any row by name across panes, reveals it on Enter, and pins with Ctrl+Enter', () => {
+  it('search opens on a quick T T, finds any row by name across panes, reveals it on Enter, and pins with Ctrl+Enter', () => {
     vi.useFakeTimers()
     try {
       const params = { speed: 1, gain: 2, tint: '#ff0000' }
@@ -2810,8 +3005,18 @@ describe('Pane registry and chrome', () => {
       }
       const key = (k: string, init: KeyboardEventInit = {}) =>
         input().dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, ...init }))
+      const tap = (k = 't') => document.dispatchEvent(new KeyboardEvent('keydown', { key: k }))
 
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }))
+      // taps too far apart, or with another key between them, don't count
+      tap()
+      vi.advanceTimersByTime(500)
+      tap()
+      tap('x')
+      tap()
+      expect(palette()).toBeNull()
+
+      tap()
+      tap()
       expect(palette()).not.toBeNull()
       expect(document.activeElement).toBe(input())
       expect(items()).toHaveLength(3)
@@ -2839,7 +3044,8 @@ describe('Pane registry and chrome', () => {
       key('Enter', { ctrlKey: true })
       expect(tint.pinned).toBe(true)
 
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }))
+      tap()
+      tap()
       type('nothing like it')
       expect(palette()!.querySelector('.tiao-search-palette-empty')?.textContent).toBe('No matches')
       key('Escape')
@@ -2873,27 +3079,33 @@ describe('Pane registry and chrome', () => {
     pane.dispose()
   })
 
-  it('defaults to the bundled Geist and registers its faces once per document', async () => {
+  it('defaults to the bundled Geist, hiding panes until its faces load once per document', async () => {
     const added: { family: string; source: string }[] = []
     const FakeFontFace = class {
       constructor(
         public family: string,
         public source: string,
       ) {}
+      load() {
+        return Promise.resolve(this)
+      }
     }
     vi.stubGlobal('FontFace', FakeFontFace)
     Object.defineProperty(document, 'fonts', {
       configurable: true,
       value: { add: (face: { family: string; source: string }) => added.push(face) },
     })
+    const root = document.documentElement
     try {
       const pane = new Pane()
       expect(Pane.font).toBe('geist')
-      expect(document.documentElement.dataset['tiaoFont']).toBe('geist')
-      await vi.waitFor(() => expect(added).toHaveLength(2))
+      expect(root.dataset['tiaoFont']).toBe('geist')
+      expect(root.hasAttribute('data-tiao-font-loading')).toBe(true)
+      await vi.waitFor(() => expect(root.hasAttribute('data-tiao-font-loading')).toBe(false))
       expect(added.map((f) => f.family)).toEqual(['tiao Geist', 'tiao Geist Mono'])
       expect(added[0]!.source).toMatch(/^url\(".+Geist-Variable\.woff2"\) format\("woff2"\)$/)
       new Pane().dispose()
+      expect(root.hasAttribute('data-tiao-font-loading')).toBe(false)
       await Promise.resolve()
       expect(added).toHaveLength(2)
       pane.dispose()
@@ -2965,6 +3177,27 @@ describe('Pane registry and chrome', () => {
     expect(toolbar.isConnected).toBe(false)
     rightClick(titlebarOf(pane))
     expect(pane.element.querySelector('.tiao-pane-menu.tiao-open')).not.toBeNull()
+    pane.dispose()
+  })
+
+  it('a pinned angle is its whole card: label, value, and dial, turned by a drag anywhere', () => {
+    const params = { yaw: 0 }
+    const pane = new Pane()
+    const yaw = pane.addBinding(params, 'yaw', { view: 'angle' })
+    yaw.pinned = true
+    const card = document.querySelector('.tiao-pins > .tiao-pin')!
+    expect(card.querySelector('.tiao-row-full .tiao-angle-label')?.textContent).toBe('yaw')
+    expect(card.querySelector('.tiao-angle-knob')).not.toBeNull()
+
+    const label = card.querySelector('.tiao-angle-label')!
+    const press = (type: string, clientX: number, buttons: number) =>
+      (type === 'pointerdown' ? label : document).dispatchEvent(
+        new MouseEvent(type, { button: 0, buttons, clientX, clientY: 10, bubbles: true }),
+      )
+    press('pointerdown', 10, 1)
+    press('pointermove', 20, 1)
+    press('pointerup', 20, 0)
+    expect(params.yaw).toBeGreaterThan(0)
     pane.dispose()
   })
 
@@ -3043,14 +3276,14 @@ describe('Pane registry and chrome', () => {
     again.dispose()
   })
 
-  it('menu "Hover Controls" hides slider tracks until their row is hovered, for every pane', () => {
+  it('menu "Minimal mode" hides slider tracks until their row is hovered, for every pane', () => {
     const root = document.documentElement
     const pane = new Pane({ id: 'hover-controls' })
     pane.addBinding({ speed: 0.5 }, 'speed', { min: 0, max: 1 })
     expect(Pane.hoverControls).toBe(false)
     expect(root.hasAttribute('data-tiao-hover-controls')).toBe(false)
 
-    notchMenuCheck('Hover Controls').click()
+    notchMenuCheck('Minimal mode').click()
     expect(Pane.hoverControls).toBe(true)
     expect(root.hasAttribute('data-tiao-hover-controls')).toBe(true)
     expect(JSON.parse(localStorage.getItem('tiao:notch')!).hoverControls).toBe(true)
@@ -3061,7 +3294,7 @@ describe('Pane registry and chrome', () => {
     )
     const paneMenu = pane.element.querySelector('.tiao-pane-menu') as HTMLElement
     const row = [...paneMenu.querySelectorAll('.tiao-row')].find(
-      (r) => r.querySelector('.tiao-label')?.textContent === 'Hover Controls',
+      (r) => r.querySelector('.tiao-label')?.textContent === 'Minimal mode',
     )
     expect(row?.querySelector('.tiao-check')?.getAttribute('aria-checked')).toBe('true')
 
@@ -3072,26 +3305,6 @@ describe('Pane registry and chrome', () => {
     Pane.setHoverControls(false)
     expect(root.hasAttribute('data-tiao-hover-controls')).toBe(false)
     later.dispose()
-    pane.dispose()
-  })
-
-  it('global "Pinned Style" rounds the pinned cards, rounded by default', () => {
-    const root = document.documentElement
-    const pane = new Pane({ id: 'pin-rounding' })
-    expect(Pane.pinRounding).toBe('l')
-    expect(root.dataset['tiaoPinRounding']).toBeUndefined()
-
-    // a section of its own between dividers, after Hover Controls and before Font
-    const row = notchMenuRow('Pinned Style')
-    expect(row.previousElementSibling?.classList.contains('tiao-separator')).toBe(true)
-    expect(row.nextElementSibling?.classList.contains('tiao-separator')).toBe(true)
-    selectOption(row.querySelector('select')!, 'Slightly Rounded')
-    expect(Pane.pinRounding).toBe('s')
-    expect(root.dataset['tiaoPinRounding']).toBe('s')
-    expect(JSON.parse(localStorage.getItem('tiao:notch')!).pinRounding).toBe('s')
-
-    Pane.setPinRounding('l')
-    expect(root.dataset['tiaoPinRounding']).toBeUndefined()
     pane.dispose()
   })
 

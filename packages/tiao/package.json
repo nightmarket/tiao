@@ -5,7 +5,6 @@
   "keywords": [
     "debug",
     "controls",
-    "tweakpane",
     "react",
     "webgl",
     "webgpu"
@@ -90,7 +89,8 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "THIRD_PARTY_NOTICES.md"
   ],
   "scripts": {
     "build": "tsup && cp src/core/styles.css dist/tiao.css && cp src/styles.d.ts dist/styles.d.ts && cp src/core/fonts/OFL.txt dist/Geist-OFL.txt",

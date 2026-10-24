@@ -1,0 +1,923 @@
+.docs {
+  --docs-accent: #facc15;
+  --docs-width: 640px;
+  --docs-text: 14px;
+  --docs-nav-width: 168px;
+  /* the columns either side of the text */
+  --docs-side-width: 256px;
+
+  --docs-fg: #f5f5f5;
+  --docs-fg-muted: #a3a3a3;
+  --docs-fg-dim: #737373;
+  --docs-surface: rgba(255, 255, 255, 0.045);
+  --docs-surface-hover: rgba(255, 255, 255, 0.09);
+  --docs-line: rgba(255, 255, 255, 0.08);
+  /* the page behind everything, as index.html paints it */
+  --docs-page: #040404;
+  /* a rule with a small ring at each end, filled with the page so the line stops at it */
+  --docs-ring: radial-gradient(
+    circle closest-side,
+    var(--docs-page) calc(100% - 1.5px),
+    var(--docs-line) calc(100% - 1.5px) calc(100% - 0.5px),
+    transparent 100%
+  );
+  --docs-rule:
+    var(--docs-ring) left center / 7px 7px no-repeat,
+    var(--docs-ring) right center / 7px 7px no-repeat,
+    linear-gradient(var(--docs-line), var(--docs-line)) center / calc(100% - 14px) 1px no-repeat;
+  --docs-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --docs-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  --docs-demo-width: 280px;
+  /* the page's top padding, which the landing screen fits under */
+  --docs-top: 56px;
+  --docs-fade-out: 240ms;
+
+  /* two equal side columns keep the text centered with the nav to its left; the demo above spans all three */
+  display: grid;
+  grid-template-columns:
+    var(--docs-side-width) minmax(0, var(--docs-width))
+    var(--docs-side-width);
+  justify-content: center;
+  gap: 56px;
+  position: relative;
+  padding: var(--docs-top) 24px 48px;
+  font-family: var(--docs-font);
+  color: var(--docs-fg);
+  -webkit-font-smoothing: antialiased;
+}
+
+.docs :focus-visible {
+  outline: 2px solid var(--docs-accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.docs code,
+.docs kbd {
+  font-family: var(--docs-mono);
+  font-size: 0.86em;
+}
+
+.docs :not(pre) > code {
+  color: var(--docs-fg);
+}
+
+.docs kbd {
+  display: inline-block;
+  min-width: 1.6em;
+  padding: 0 0.4em;
+  border: 1px solid var(--docs-line);
+  border-radius: 4px;
+  background: var(--docs-surface);
+  text-align: center;
+  line-height: 1.6;
+}
+
+/* ---- sidebar ---- */
+
+.docs-nav {
+  position: sticky;
+  top: 56px;
+  align-self: start;
+  justify-self: end;
+  width: var(--docs-nav-width);
+  max-height: calc(100vh - 56px);
+  overflow-y: auto;
+  scrollbar-width: none;
+  font-size: 13px;
+}
+
+.docs-logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 28px;
+  color: var(--docs-fg);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 20px;
+  text-decoration: none;
+}
+
+.docs-logo img {
+  width: 20px;
+  height: 20px;
+}
+
+.docs-version {
+  padding: 0 5px;
+  border-radius: 4px;
+  background: var(--docs-surface);
+  color: var(--docs-fg-dim);
+  font-family: var(--docs-mono);
+  font-size: 10px;
+  font-weight: 400;
+  line-height: 16px;
+}
+
+/* a brand mark before an outbound link's name */
+.docs-brand {
+  width: 12px;
+  height: 12px;
+  margin-right: 6px;
+  vertical-align: -1px;
+  fill: currentColor;
+}
+
+.docs-nav ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.docs-nav .docs-nav-group {
+  margin-top: 20px;
+}
+
+/* GitHub and npm again, at the page's top right */
+.docs-corner {
+  position: absolute;
+  top: 20px;
+  right: 24px;
+  z-index: 1;
+  display: flex;
+  gap: 16px;
+  margin: 0;
+  padding: 0;
+  font-size: 13px;
+  list-style: none;
+}
+
+.docs-corner a {
+  color: var(--docs-fg-muted);
+  text-decoration: none;
+  transition: color var(--docs-fade-out);
+}
+
+.docs-corner a:hover {
+  color: var(--docs-fg);
+  transition-duration: 0ms;
+}
+
+.docs-nav nav a {
+  display: block;
+  padding: 3px 0;
+  color: var(--docs-fg-muted);
+  text-decoration: none;
+  transition: color var(--docs-fade-out);
+}
+
+.docs-nav nav a:hover,
+.docs-nav nav a[aria-current="page"] {
+  color: var(--docs-fg);
+  transition-duration: 0ms;
+}
+
+.docs-nav nav a[aria-current="page"] {
+  font-weight: 500;
+}
+
+.docs-arrow {
+  width: 11px;
+  height: 11px;
+  margin-left: 3px;
+  vertical-align: -1px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.6;
+}
+
+/* ---- content ---- */
+
+.docs-main {
+  min-width: 0;
+  font-size: var(--docs-text);
+  line-height: 1.6;
+}
+
+.docs-main p {
+  margin: 0 0 1em;
+  color: var(--docs-fg-muted);
+}
+
+.docs-main :is(p, li) a {
+  color: var(--docs-fg);
+  text-decoration: underline;
+  text-decoration-color: var(--docs-accent);
+  text-underline-offset: 3px;
+}
+
+.docs-hero {
+  margin-bottom: 56px;
+}
+
+.docs-hero h1 {
+  margin: 0 0 16px;
+  font-size: 2em;
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+
+.docs-hero p {
+  max-width: 34em;
+}
+
+/* sized by its column rather than its command, so a long prompt wraps instead of widening it */
+.docs-install {
+  display: grid;
+  justify-items: center;
+  gap: 16px;
+  width: min(100%, 22em);
+  justify-self: center;
+  contain: inline-size;
+}
+
+.docs-tabs {
+  display: flex;
+  gap: 2px;
+}
+
+/* the selected tab's pill slides between them */
+.docs-tabs button {
+  position: relative;
+  padding: 3px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--docs-fg-dim);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: color var(--docs-fade-out);
+}
+
+.docs-tabs button:hover,
+.docs-tabs button[aria-selected="true"] {
+  color: var(--docs-fg);
+  transition-duration: 0ms;
+}
+
+.docs-tab-label {
+  position: relative;
+}
+
+.docs-tab-bg {
+  position: absolute;
+  inset: 0;
+  background: var(--docs-surface-hover);
+}
+
+.docs-code-tabs {
+  display: grid;
+  gap: 10px;
+}
+
+.docs-install-command {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  padding: 6px 6px 6px 14px;
+  background: var(--docs-surface);
+  text-align: left;
+}
+
+/* a long prompt wraps inside the box rather than widening it; the package and the prompt stay plain gray beside the colored command */
+.docs-install-command code {
+  color: var(--docs-fg-muted);
+  white-space: normal;
+  text-wrap: pretty;
+}
+
+.docs-section {
+  margin-top: 56px;
+}
+
+/* a ringed rule after the title */
+.docs-section h2 {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 16px;
+  font-size: 1em;
+  font-weight: 500;
+}
+
+.docs-section h2::after {
+  content: "";
+  flex: 1;
+  height: 7px;
+  background: var(--docs-rule);
+}
+
+.docs-list {
+  margin: 0 0 1em;
+  padding-left: 1.2em;
+  color: var(--docs-fg-muted);
+}
+
+.docs-list li + li {
+  margin-top: 4px;
+}
+
+.docs-table {
+  margin: 0 0 1em;
+}
+
+.docs-table > div {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  gap: 16px;
+  padding: 8px 0;
+}
+
+.docs-table > div + div {
+  border-top: 1px solid var(--docs-line);
+}
+
+.docs-table dt {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.docs-table dd {
+  margin: 0;
+  color: var(--docs-fg-muted);
+}
+
+/* ---- code ---- */
+
+.docs-code {
+  position: relative;
+  margin: 0 0 1em;
+  border-radius: 8px;
+  background: var(--docs-surface);
+}
+
+.docs-code pre {
+  margin: 0;
+  padding: 12px 14px;
+  overflow-x: auto;
+  font-size: 12px;
+  line-height: 1.65;
+  scrollbar-width: none;
+}
+
+/* Safari, which ignores scrollbar-width */
+.docs-code pre::-webkit-scrollbar {
+  display: none;
+}
+
+.docs-code code {
+  font-size: inherit;
+}
+
+.docs-copy {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: var(--docs-surface);
+  color: var(--docs-fg-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity var(--docs-fade-out),
+    color var(--docs-fade-out),
+    background var(--docs-fade-out);
+}
+
+.docs-code:hover .docs-copy,
+.docs-copy:focus-visible {
+  opacity: 1;
+  transition-duration: 0ms;
+}
+
+.docs-copy:hover {
+  color: var(--docs-fg);
+  background: var(--docs-surface-hover);
+  transition-duration: 0ms;
+}
+
+.docs-copy svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.docs-code-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 6px 6px 14px;
+  color: var(--docs-fg-muted);
+  font-family: var(--docs-mono);
+  font-size: 12px;
+  box-shadow: inset 0 -1px 0 var(--docs-line);
+}
+
+/* the long text wraps rather than scrolling sideways */
+.docs-code-title ~ div pre {
+  white-space: pre-wrap;
+}
+
+.docs-install-command .docs-copy,
+.docs-code-title .docs-copy {
+  position: static;
+  opacity: 1;
+}
+
+/* ---- on this page ---- */
+
+.docs [data-toc] {
+  scroll-margin-top: 32px;
+}
+
+/* nested under the current page's link; clipped while it unfolds */
+.docs-toc {
+  overflow: hidden;
+  font-size: 12px;
+}
+
+/* a rounded track down the side, with the current entry's bar riding on it */
+.docs-toc ul {
+  position: relative;
+  margin: 4px 0 8px;
+}
+
+.docs-toc ul::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--docs-line);
+}
+
+.docs-toc-item {
+  position: relative;
+}
+
+.docs-toc button {
+  display: block;
+  width: 100%;
+  padding: 3px 0 3px 12px;
+  overflow: hidden;
+  border: 0;
+  background: none;
+  color: var(--docs-fg-dim);
+  font: inherit;
+  line-height: 1.5;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color var(--docs-fade-out);
+}
+
+.docs-toc button:hover,
+.docs-toc button[aria-current="true"] {
+  color: var(--docs-fg);
+  transition-duration: 0ms;
+}
+
+.docs-toc-bar {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  left: 0;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--docs-accent);
+}
+
+/* ---- shader window ---- */
+
+/* a faint stroked frame with the traffic lights in its top margin, and the scene inset in it */
+.docs-window {
+  --docs-window-inset: 6px;
+  --docs-window-top: 24px;
+  --docs-window-radius: 14px;
+
+  position: relative;
+  margin: 0;
+  padding: var(--docs-window-top) var(--docs-window-inset) var(--docs-window-inset);
+  border-radius: var(--docs-window-radius);
+  box-shadow: inset 0 0 0 1px var(--docs-line);
+}
+
+.docs-window-lights {
+  position: absolute;
+  top: 0;
+  left: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: var(--docs-window-top);
+}
+
+.docs-window-lights span {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16);
+}
+
+/* the hero namespace's root: its pane and notch float in here */
+.docs-window-view {
+  position: relative;
+}
+
+/* the same stroke as the frame, so the two read as one window inside another */
+.docs-window-screen {
+  display: block;
+  width: 100%;
+  border: 0;
+  aspect-ratio: 16 / 9;
+  border-radius: calc(var(--docs-window-radius) - var(--docs-window-inset));
+  background: #000;
+  box-shadow: 0 0 0 1px var(--docs-line);
+}
+
+/* the quick start's window, its pane floating over it */
+.docs-demo-screen {
+  aspect-ratio: 2.2;
+  background: var(--docs-surface);
+}
+
+/* a tooltip under the window's top edge, pointing up at the notch tucked behind it, where there's a pointer to hover with */
+.docs-window-hint {
+  --docs-hint-bg: #262626;
+
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  padding: 3px 9px;
+  border-radius: 6px;
+  background: var(--docs-hint-bg);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  color: var(--docs-fg-muted);
+  font-size: 11px;
+  line-height: 16px;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  translate: -50% 0;
+  transition: opacity var(--docs-fade-out);
+}
+
+.docs-window-hint::before {
+  content: "";
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  border: 4px solid transparent;
+  border-bottom-color: var(--docs-hint-bg);
+  translate: -50% 0;
+}
+
+/* under the notch, which centers on what a docked sidebar leaves */
+.docs-window-view.tiao-docked > .docs-window-hint {
+  left: calc(50% + (var(--tiao-dock-inset-start) - var(--tiao-dock-inset-end)) / 2);
+}
+
+@keyframes docs-hint-bob {
+  50% {
+    translate: -50% -3px;
+  }
+}
+
+@media (hover: hover) {
+  .docs-window:has(.tiao-notch-auto-hide:not(.tiao-notch-near, :hover)) .docs-window-hint {
+    opacity: 1;
+    transition-duration: 0ms;
+  }
+}
+
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .docs-window-hint {
+    animation: docs-hint-bob 1.8s ease-in-out infinite;
+  }
+}
+
+/* every demo's labels start with a capital, as pinned cards' already do */
+.tiao-label::first-letter {
+  text-transform: uppercase;
+}
+
+.docs-section > .docs-window {
+  margin-bottom: 16px;
+}
+
+/* the showcase's panes float over the gradient they drive, with room for them fully open between the notch and the pinned card */
+.docs-showcase-screen {
+  height: 540px;
+}
+
+/* the label control, written in the screen's corner */
+.docs-showcase-caption {
+  position: absolute;
+  bottom: 16px;
+  left: 18px;
+  color: rgba(255, 255, 255, 0.7);
+  font-family: var(--docs-mono);
+  font-size: 12px;
+  pointer-events: none;
+}
+
+/* a docked sidebar takes the side of the screen, its outer corners following the screen's */
+.docs-window-view > .tiao-dock {
+  --docs-dock-radius: calc(var(--docs-window-radius) - var(--docs-window-inset));
+
+  overflow: hidden;
+  border-start-start-radius: var(--docs-dock-radius);
+  border-end-start-radius: var(--docs-dock-radius);
+}
+
+.docs-window-view > .tiao-dock.tiao-dock-end {
+  border-radius: 0;
+  border-start-end-radius: var(--docs-dock-radius);
+  border-end-end-radius: var(--docs-dock-radius);
+}
+
+/* the landing tour's cursor, a popover in the top layer above every overlay: its tip sits at the element's origin, so it presses where it points */
+.docs-tour-cursor {
+  position: fixed;
+  inset: 0 auto auto 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  overflow: visible;
+  opacity: 0;
+  pointer-events: none;
+  transform-origin: 0 0;
+}
+
+.docs-tour-cursor svg {
+  position: absolute;
+  top: -5.9px;
+  left: -5px;
+  width: 30px;
+  height: 30px;
+  fill: #fff;
+  stroke: #000;
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.35));
+}
+
+/* the landing screen: what tiao is, the demo, and the install, all centered */
+.docs-stage {
+  display: grid;
+  grid-column: 1 / -1;
+  justify-items: center;
+  gap: 32px;
+}
+
+/* stacked, the demo takes the column */
+.docs-stage > .docs-window {
+  justify-self: stretch;
+}
+
+.docs-stage-header {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  text-align: center;
+}
+
+.docs-stage-header .docs-logo {
+  gap: 8px;
+  margin: 0;
+  font-size: 17px;
+  line-height: 24px;
+}
+
+.docs-stage-header .docs-logo img {
+  width: 22px;
+  height: 22px;
+}
+
+.docs-stage-header p {
+  max-width: 24em;
+  margin: 0;
+  font-size: var(--docs-text);
+  color: var(--docs-fg-muted);
+  line-height: 1.6;
+  text-wrap: balance;
+}
+
+/* the sidebar isn't sticky here, and the header above already names tiao */
+@media (max-width: 1099px) {
+  .docs-stage ~ .docs-nav > .docs-logo {
+    display: none;
+  }
+}
+
+/*
+ * The landing screen on a large display fills the viewport: the header and
+ * the install sit in rows of one height, each with equal space above and
+ * below, so the demo between them is centered too.
+ */
+@media (min-width: 1100px) and (min-height: 640px) {
+  .docs-stage {
+    --docs-stage-row: 96px;
+    --docs-stage-space: 28px;
+
+    grid-template-rows:
+      minmax(var(--docs-stage-space), 1fr) var(--docs-stage-row)
+      minmax(var(--docs-stage-space), 1fr) auto
+      minmax(var(--docs-stage-space), 1fr) var(--docs-stage-row)
+      minmax(var(--docs-stage-space), 1fr);
+    gap: 0;
+    height: 100svh;
+    margin-top: calc(-1 * var(--docs-top));
+  }
+
+  .docs-stage-header {
+    grid-row: 2;
+    align-self: center;
+  }
+
+  /* the screen as wide as the height left between the rows and their spaces allows at 16:9 */
+  .docs-stage > .docs-window {
+    grid-row: 4;
+    justify-self: center;
+    width: min(
+      100% -
+      2 *
+      var(--docs-window-inset),
+      calc(
+        (
+          100svh -
+          2 *
+          var(--docs-stage-row) -
+          4 *
+          var(--docs-stage-space) -
+          var(--docs-window-top) -
+          var(--docs-window-inset)
+        ) *
+        16 / 9
+      )
+    );
+  }
+
+  .docs-stage > .docs-install {
+    grid-row: 6;
+    align-self: center;
+  }
+}
+
+/* ---- live panes ---- */
+
+.docs-demo {
+  width: var(--docs-demo-width);
+  margin-bottom: 1em;
+}
+.docs-reference {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--docs-demo-width);
+  gap: 16px 32px;
+  align-items: start;
+  padding: 32px 0;
+}
+
+.docs-reference > .docs-demo,
+.docs-reference > .docs-code {
+  margin: 0;
+}
+
+.docs-reference > .docs-code {
+  grid-column: 1 / -1;
+}
+
+.docs-reference h3 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 8px;
+  font-size: 1em;
+  font-weight: 500;
+}
+
+.docs-badge {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--docs-surface);
+  color: var(--docs-fg-muted);
+  font-family: var(--docs-mono);
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.docs-stars {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+}
+
+/* ---- footer ---- */
+
+/* under the text, ruled off from it like a section */
+.docs-footer {
+  grid-column: 2;
+  color: var(--docs-fg-dim);
+  font-size: 13px;
+  text-align: center;
+}
+
+.docs-footer::before {
+  content: "";
+  display: block;
+  height: 7px;
+  margin-bottom: 20px;
+  background: var(--docs-rule);
+}
+
+.docs-footer a {
+  color: var(--docs-fg-muted);
+  text-decoration: none;
+  transition: color var(--docs-fade-out);
+}
+
+.docs-footer a:hover {
+  color: var(--docs-fg);
+  transition-duration: 0ms;
+}
+
+/* ---- tablets: the sidebar becomes a row of links ---- */
+
+@media (max-width: 1099px) {
+  .docs {
+    grid-template-columns: minmax(0, var(--docs-width));
+    justify-content: center;
+    gap: 32px;
+  }
+
+  .docs-nav {
+    position: static;
+    justify-self: stretch;
+    width: auto;
+    max-height: none;
+  }
+
+  .docs-toc {
+    display: none;
+  }
+
+  .docs-logo {
+    margin-bottom: 16px;
+  }
+
+  .docs-nav nav,
+  .docs-nav ul {
+    display: flex;
+    flex-wrap: wrap;
+    column-gap: 16px;
+  }
+
+  .docs-nav .docs-nav-group {
+    margin-top: 0;
+  }
+
+  .docs-footer {
+    grid-column: auto;
+  }
+}
+
+/* ---- phones: tiao moves every pane into its bottom drawer ---- */
+
+@media (max-width: 767px) {
+  .docs {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 24px 16px 96px;
+  }
+
+  .docs-hero {
+    margin-bottom: 40px;
+  }
+
+  .docs-reference {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

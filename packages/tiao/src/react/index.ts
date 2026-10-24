@@ -1,4 +1,4 @@
-export { setTiaoEnabled } from './config'
+export { setTiaoEnabled, setTiaoStorage } from './config'
 export { DEFAULT_PANE_ID } from './controls'
 export { getManager, loadCore } from './manager'
 export { ControlStore } from './store'

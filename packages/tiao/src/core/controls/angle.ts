@@ -1,4 +1,4 @@
-import { h, SVG_NS, startDrag } from '../dom'
+import { h, SVG_NS, setEwCursor, setRowActive, startDrag } from '../dom'
 import type { InputPlugin, PluginContext, PluginView } from '../plugin'
 import { clamp, formatNumber, snap } from '../util'
 import { createStickyOverlay } from './popup'
@@ -87,6 +87,35 @@ function createAngleRow(ctx: PluginContext<number>): PluginView {
 
   const root = h('div', 'tiao-angle', knob, scrub.element)
   const doc = ctx.document
+
+  // pinned, the card is the control: its label leads, and a drag anywhere
+  // outside the field and dial turns the value, the card's width a full turn
+  const featured = ctx.featured ?? false
+  if (featured) {
+    root.prepend(h('span', 'tiao-angle-label', ctx.label))
+    const ownsPress = (target: EventTarget | null) =>
+      target instanceof Node && (knob.contains(target) || scrub.element.contains(target))
+    const onPointerDown = (e: PointerEvent) => {
+      if (e.button !== 0 || ownsPress(e.target)) return
+      const base = value.get()
+      const perPx = fromRad(TAU) / (root.getBoundingClientRect().width || 1)
+      const turn = (dx: number, last: boolean) =>
+        value.set(constrain(base + dx * perPx), { source: 'ui', last })
+      setRowActive(root, true)
+      setEwCursor(root, true)
+      startDrag(e, {
+        onStart: (ev) => ev.preventDefault(),
+        onMove: (s) => turn(s.dx, false),
+        onEnd: (s) => {
+          turn(s.dx, true)
+          setRowActive(root, false)
+          setEwCursor(root, false)
+        },
+      })
+    }
+    root.addEventListener('pointerdown', onPointerDown)
+    ctx.onDispose(() => root.removeEventListener('pointerdown', onPointerDown))
+  }
 
   // --- shared transparent dial overlay (click sticky + long-press drag) ---
   const dial = createAngleDial(doc, DIAL_SIZE)
@@ -192,6 +221,7 @@ function createAngleRow(ctx: PluginContext<number>): PluginView {
 
   return {
     element: root,
+    full: featured,
     activate: () => dialOverlay.toggleSticky(),
     beginScrub: beginAngleDrag,
   }

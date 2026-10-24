@@ -28,14 +28,14 @@ import {
 } from './dock'
 import { collapseSelection, draggable, gearIcon, h, icon, searchIcon, withDocument } from './dom'
 import { createDrawerControls, type DrawerControls } from './drawer-controls'
-import { registerGeist } from './fonts'
+import { loadGeist } from './fonts'
 import { ValueHistory } from './history'
 import { createNotch, type Notch, type NotchHost } from './notch'
 import { createPaneMenu, type PaneMenuToggle } from './pane-menu'
 import { createPinBoard, type PinBoard } from './pins'
 import { globalRegistry, PluginRegistry, type TiaoPlugin } from './plugin'
 import { openRowToolbar } from './row-toolbar'
-import { createSearch, isSearchShortcut, type Search, type SearchEntry } from './search'
+import { createSearch, createSearchShortcut, type Search, type SearchEntry } from './search'
 import { injectStyles } from './styles'
 import { tooltip } from './tooltip'
 import { clamp, isRecord, type JSONStore, jsonStore } from './util'
@@ -58,12 +58,17 @@ export interface PaneOptions {
   title?: string
   /** render inline inside this element instead of floating */
   container?: HTMLElement
+  /** the tiao this pane joins (see Pane.namespace); panes without one share the window's */
+  namespace?: string | Namespace
   anchor?: Anchor
   /** offset in px from the anchored edge(s) */
   margin?: number
   /** sidebar position, z-index style: lower sorts first, ties keep creation order */
   order?: number
-  /** floating panes are draggable by default (toggleable from the pane menu) */
+  /**
+   * floating panes are draggable by default (toggleable from the pane menu); inline ones
+   * opt in and move by their title bar within their container
+   */
   draggable?: boolean
   expanded?: boolean
   hidden?: boolean
@@ -180,11 +185,6 @@ export type PaneSpacing = 's' | 'm' | 'l'
  */
 export type PaneFontSize = 'small' | 'normal' | 'large'
 
-/** corner rounding of the pinned cards and their sliders; `full` is a pill */
-export type PinRounding = 'none' | 's' | 'l' | 'full'
-
-const DEFAULT_PIN_ROUNDING: PinRounding = 'l'
-
 /**
  * Typeface for every pane, set from the notch. `geist` (the default) is Geist
  * and Geist Mono, which ship with tiao. `areal` asks for ABC Areal Superfamily
@@ -198,6 +198,9 @@ const DEFAULT_FONT: PaneFont = 'geist'
 
 /** default --tiao-accent, used when the computed style is unavailable (e.g. jsdom) */
 const DEFAULT_ACCENT = '#facc15'
+
+/** floating panes and the notch start frosted */
+const DEFAULT_GLASS = true
 
 /** inline styles a floating pane owns; parked and restored around docking */
 const FREE_PROPS = ['left', 'top', 'right', 'bottom', 'transform', 'width', 'z-index']
@@ -219,8 +222,8 @@ const panes = new Map<string, Pane>()
 /** all live floating panes (for the global H toggle) */
 const floatingPanes = new Set<Pane>()
 
-/** one global-toggle listener per document */
-const globalToggleInstalled = new WeakMap<Document, (e: KeyboardEvent) => void>()
+/** one global-toggle listener per document, and its removal */
+const globalToggleInstalled = new WeakMap<Document, () => void>()
 
 /** shared stacking counter so the last-interacted floating pane wins */
 let zTop = 9999
@@ -232,6 +235,12 @@ function isTypingTarget(t: EventTarget | null): boolean {
 
 function ensureGlobalToggle(doc: Document): void {
   if (globalToggleInstalled.has(doc)) return
+  const isSearchShortcut = createSearchShortcut()
+  // H hides the namespace under the pointer, so its last position is kept
+  let pointed: EventTarget | null = null
+  const onPointer = (e: PointerEvent) => {
+    pointed = e.target
+  }
   const onKey = (e: KeyboardEvent) => {
     if (isTypingTarget(e.target)) return
     if (isSearchShortcut(e)) {
@@ -241,24 +250,94 @@ function ensureGlobalToggle(doc: Document): void {
     }
     if (e.key !== 'h' && e.key !== 'H') return
     if (e.metaKey || e.ctrlKey || e.altKey) return
-    Pane.toggleAll(doc)
+    Pane.toggleAll(spaceAt(doc, pointed))
   }
   doc.addEventListener('keydown', onKey)
-  globalToggleInstalled.set(doc, onKey)
+  doc.addEventListener('pointermove', onPointer, { passive: true })
+  globalToggleInstalled.set(doc, () => {
+    doc.removeEventListener('keydown', onKey)
+    doc.removeEventListener('pointermove', onPointer)
+  })
 }
 
 function releaseGlobalToggle(doc: Document): void {
-  const onKey = globalToggleInstalled.get(doc)
-  if (!onKey) return
-  doc.removeEventListener('keydown', onKey)
+  globalToggleInstalled.get(doc)?.()
   globalToggleInstalled.delete(doc)
 }
 
-/** one notch bar per document, mounted with the first floating pane */
-const notches = new WeakMap<Document, Notch>()
+/** the namespace a pane joins when it names none: it floats over the window */
+const DEFAULT_NAMESPACE = 'default'
 
-/** documents where a pane asked for the notch, so a wide screen can bring it back */
-const notchWanted = new WeakSet<Document>()
+/**
+ * A separate tiao on the page, with its own floating panes, notch, undo
+ * history, changed count, and theme. The default namespace floats over the
+ * window. Any other can be rooted in an element (Pane.namespace): its panes
+ * then float inside that element, anchored to its corners and scrolling with
+ * it, and its notch and pinned cards ride the element's top and bottom edges.
+ * Search and the page-wide settings (font, size, spacing, glass, hover
+ * controls) are shared by every namespace in a document.
+ */
+export interface Namespace {
+  readonly name: string
+  readonly document: Document
+  /** where its panes float, or null for the window */
+  readonly root: HTMLElement | null
+  /** whether its notch follows the Hiding setting on the root, rather than staying shown */
+  readonly hiding: boolean
+}
+
+interface Space extends Namespace {
+  root: HTMLElement | null
+  hiding: boolean
+  /** re-lays its panes when the root changes size */
+  observer: ResizeObserver | null
+}
+
+const spaces = new WeakMap<Document, Map<string, Space>>()
+
+function spaceFor(doc: Document, name: string = DEFAULT_NAMESPACE): Space {
+  let named = spaces.get(doc)
+  if (!named) {
+    named = new Map()
+    spaces.set(doc, named)
+  }
+  let space = named.get(name)
+  if (!space) {
+    space = { name, document: doc, root: null, hiding: false, observer: null }
+    named.set(name, space)
+  }
+  return space
+}
+
+/** a Document means its default namespace */
+function toSpace(scope: Document | Namespace): Namespace {
+  return 'documentElement' in scope ? spaceFor(scope) : spaceFor(scope.document, scope.name)
+}
+
+function isDefault(space: Namespace): boolean {
+  return space.name === DEFAULT_NAMESPACE
+}
+
+/** the window docks into a sidebar beside the page, a rooted namespace into one inside its element */
+function hasDock(space: Namespace): boolean {
+  return isDefault(space) || space.root !== null
+}
+
+/** the rooted namespace whose element holds `target`, else the window's */
+function spaceAt(doc: Document, target: EventTarget | null): Namespace {
+  if (target instanceof Node) {
+    for (const space of spaces.get(doc)?.values() ?? []) {
+      if (space.root?.contains(target)) return space
+    }
+  }
+  return spaceFor(doc)
+}
+
+/** one notch bar per namespace, mounted with its first floating pane */
+const notches = new WeakMap<Namespace, Notch>()
+
+/** namespaces where a pane asked for the notch, so a wide screen can bring it back */
+const notchWanted = new WeakSet<Namespace>()
 
 /** one search across every pane per document, built on first use */
 const searches = new WeakMap<Document, Search>()
@@ -279,25 +358,29 @@ function searchFor(doc: Document): Search {
         return entries
       },
       reveal: (binding) => Pane.reveal(binding, doc),
-      theme: (el) => applyChrome(el, globalChrome(doc)),
+      theme: (el) => applyChrome(el, globalChrome(spaceFor(doc))),
     })
     searches.set(doc, search)
   }
   return search
 }
 
-/** one stack of pinned values per document */
-const pinBoards = new WeakMap<Document, PinBoard>()
+/** one stack of pinned values per namespace, in its root when it has one */
+const pinBoards = new WeakMap<Namespace, PinBoard>()
 
-/** pinned cards wear the global look and glass, like the notch */
-function pinBoardFor(doc: Document): PinBoard {
-  let board = pinBoards.get(doc)
+/** pinned cards wear their namespace's look and the page's glass, like its notch */
+function pinBoardFor(space: Namespace): PinBoard {
+  let board = pinBoards.get(space)
   if (!board) {
-    board = createPinBoard(doc, (card) => {
-      applyChrome(card, globalChrome(doc))
-      card.classList.toggle('tiao-glass', readNotchState().glass ?? false)
-    })
-    pinBoards.set(doc, board)
+    board = createPinBoard(
+      space.document,
+      () => space.root,
+      (card) => {
+        applyChrome(card, globalChrome(space))
+        card.classList.toggle('tiao-glass', readNotchState().glass ?? DEFAULT_GLASS)
+      },
+    )
+    pinBoards.set(space, board)
   }
   return board
 }
@@ -338,22 +421,32 @@ function releaseMobile(doc: Document): void {
 }
 
 /**
- * Cross the breakpoint. A small screen drops the notch and gathers every
- * floating pane into the drawer; a wide one hands each pane back to the layout
- * it had, floating or docked, since the drawer never writes the sidebar state.
+ * Cross the breakpoint. A small screen drops every notch and gathers every
+ * floating pane, rooted ones too, into the drawer; a wide one hands each pane
+ * back to the layout it had, floating or docked, since the drawer never writes
+ * the sidebar state.
  */
 function applyMobile(doc: Document, mobile: boolean): void {
   const watch = mobileWatches.get(doc)
   if (!watch || (watch.controls !== null) === mobile) return
+  const windowSpace = spaceFor(doc)
+  const rooted = [...(spaces.get(doc)?.values() ?? [])].filter((space) => space.root !== null)
   // the closed drawer stands in for hiding every pane, so the saved flag sits out
   const hidden = readNotchState().hidden ?? false
   batchPanes(() => {
     if (mobile) {
-      notches.get(doc)?.dispose()
-      notches.delete(doc)
-      const dock = ensureDock(createDockHost(doc))
-      setDockDrawer(doc, true)
-      setDockVisible(doc, true)
+      for (const space of spaces.get(doc)?.values() ?? []) {
+        notches.get(space)?.dispose()
+        notches.delete(space)
+      }
+      // rooted sidebars give their panes up to the drawer, which takes every one
+      for (const space of rooted) {
+        for (const p of panesOf(space)) p.undock()
+        closeDock(space)
+      }
+      const dock = ensureDock(createDockHost(windowSpace))
+      setDockDrawer(windowSpace, true)
+      setDockVisible(windowSpace, true)
       for (const p of panesIn(doc)) {
         if (hidden) p.hidden = false
         p.dockInto(dock.body)
@@ -361,26 +454,33 @@ function applyMobile(doc: Document, mobile: boolean): void {
       watch.controls = createDrawerControls({
         document: doc,
         drawer: dock.root,
-        setOpen: (open) => setDrawerOpen(doc, open),
-        ...valueActions(doc),
+        setOpen: (open) => setDrawerOpen(windowSpace, open),
+        ...valueActions(windowSpace),
       })
-      applyDockChrome(doc)
+      applyDockChrome(windowSpace)
       return
     }
     watch.controls?.dispose()
     watch.controls = null
-    if (notchWanted.has(doc) && readDockState().docked) {
-      setDockDrawer(doc, false)
+    // the window's sidebar only holds its own panes; rooted ones go home, or into their own
+    for (const p of panesIn(doc)) if (p.namespace !== windowSpace) p.undock()
+    if (notchWanted.has(windowSpace) && readDockState(windowSpace).docked) {
+      setDockDrawer(windowSpace, false)
     } else {
-      for (const p of panesIn(doc)) p.undock()
-      closeDock(doc)
+      for (const p of panesOf(windowSpace)) p.undock()
+      closeDock(windowSpace)
+    }
+    for (const space of rooted) {
+      if (notchWanted.has(space) && readDockState(space).docked) dockPanes(space)
     }
     if (hidden) {
-      for (const p of panesIn(doc)) p.hidden = true
-      setDockVisible(doc, false)
+      for (const p of panesOf(windowSpace)) p.hidden = true
+      setDockVisible(windowSpace, false)
     }
-    if (notchWanted.has(doc)) ensureNotch(doc)
-    syncNotch(doc)
+    for (const space of spaces.get(doc)?.values() ?? []) {
+      if (notchWanted.has(space)) ensureNotch(space)
+      syncNotch(space)
+    }
   })
 }
 
@@ -403,8 +503,8 @@ function presentRows(p: Pane, rows: BindingApi<unknown>[]): boolean {
 function syncDrawerControls(doc: Document): void {
   const controls = mobileWatches.get(doc)?.controls
   if (!controls) return
-  const chrome = dockChrome(doc)
-  const glass = readNotchState().glass ?? false
+  const chrome = dockChrome(spaceFor(doc))
+  const glass = readNotchState().glass ?? DEFAULT_GLASS
   for (const el of controls.buttons) {
     applyChrome(el, chrome)
     el.classList.toggle('tiao-glass', glass)
@@ -412,16 +512,16 @@ function syncDrawerControls(doc: Document): void {
 }
 
 /** the value edits the notch and the drawer controls both step over and reset */
-function valueActions(doc: Document): Pick<NotchHost, 'history' | 'reset'> {
+function valueActions(space: Namespace): Pick<NotchHost, 'history' | 'reset'> {
   return {
     reset: () => {
-      Pane.resetValues(doc)
+      Pane.resetValues(space)
     },
     history: {
-      canUndo: () => Pane.canUndo(doc),
-      canRedo: () => Pane.canRedo(doc),
-      undo: () => Pane.undo(doc),
-      redo: () => Pane.redo(doc),
+      canUndo: () => Pane.canUndo(space),
+      canRedo: () => Pane.canRedo(space),
+      undo: () => Pane.undo(space),
+      redo: () => Pane.redo(space),
     },
   }
 }
@@ -447,13 +547,28 @@ interface NotchState {
   numbers?: boolean | undefined
   /** rows show just their values until hovered */
   hoverControls?: boolean | undefined
-  pinRounding?: PinRounding | undefined
 }
 
 const notchStore = jsonStore<NotchState>('tiao:notch')
 
 function readNotchState(): NotchState {
   return notchStore.get()
+}
+
+/** the part of the notch state each namespace keeps for itself */
+type ChromeState = Pick<NotchState, 'theme' | 'style' | 'accent' | 'numbers'>
+
+/** where a namespace's theme, style, accent, and numbering persist; the window's share tiao:notch */
+const chromeStores = new Map<string, JSONStore<ChromeState>>()
+
+function chromeStore(space: Namespace): JSONStore<ChromeState> {
+  if (isDefault(space)) return notchStore
+  let store = chromeStores.get(space.name)
+  if (!store) {
+    store = jsonStore<ChromeState>(`tiao:notch:${space.name}`)
+    chromeStores.set(space.name, store)
+  }
+  return store
 }
 
 /**
@@ -465,19 +580,12 @@ function applyFont(doc: Document, font: PaneFont): void {
   const root = doc.documentElement
   if (font === 'system') delete root.dataset['tiaoFont']
   else root.dataset['tiaoFont'] = font
-  if (font === 'geist') registerGeist(doc)
+  if (font === 'geist') void loadGeist(doc)
 }
 
 /** on the root element like the font, so the panes, the sidebar, and the drawer all follow it */
 function applyHoverControls(doc: Document, on: boolean): void {
   doc.documentElement.toggleAttribute('data-tiao-hover-controls', on)
-}
-
-function applyPinRounding(doc: Document, rounding: PinRounding): void {
-  const root = doc.documentElement
-  if (rounding === DEFAULT_PIN_ROUNDING) delete root.dataset['tiaoPinRounding']
-  // every pane applies it on mount; rewriting the same value still invalidates style
-  else if (root.dataset['tiaoPinRounding'] !== rounding) root.dataset['tiaoPinRounding'] = rounding
 }
 
 function hoverControlsToggle(doc: Document): PaneMenuToggle {
@@ -487,7 +595,7 @@ function hoverControlsToggle(doc: Document): PaneMenuToggle {
   }
 }
 
-/** the panes the notch counts, reveals, and resets: floating plus every id'd one */
+/** the panes search covers: floating plus every id'd one, in every namespace */
 function trackedPanes(doc: Document): Pane[] {
   // inline panes without an id (the settings menu's own pane) drive the
   // chrome rather than the app, so their rows don't count
@@ -496,35 +604,49 @@ function trackedPanes(doc: Document): Pane[] {
   )
 }
 
-/** value changes arrive per drag frame; refresh the notch once per burst */
-const valuesPending = new WeakSet<Document>()
+/** the panes a namespace's notch counts, reveals, and resets */
+function trackedOf(space: Namespace): Pane[] {
+  return trackedPanes(space.document).filter((p) => p.namespace === space)
+}
 
-function scheduleValueSync(doc: Document): void {
-  if (valuesPending.has(doc)) return
-  valuesPending.add(doc)
+/** value changes arrive per drag frame; refresh the notch once per burst */
+const valuesPending = new WeakSet<Namespace>()
+
+function scheduleValueSync(space: Namespace): void {
+  if (valuesPending.has(space)) return
+  valuesPending.add(space)
   queueMicrotask(() => {
-    valuesPending.delete(doc)
-    notches.get(doc)?.syncValues()
-    mobileWatches.get(doc)?.controls?.syncValues()
+    valuesPending.delete(space)
+    notches.get(space)?.syncValues()
+    if (isDefault(space)) mobileWatches.get(space.document)?.controls?.syncValues()
   })
 }
 
-/** undo/redo across every tracked pane in a document */
-const histories = new WeakMap<Document, ValueHistory>()
+/** undo/redo across every tracked pane in a namespace */
+const histories = new WeakMap<Namespace, ValueHistory>()
 
-function historyFor(doc: Document): ValueHistory {
-  let history = histories.get(doc)
+function historyFor(space: Namespace): ValueHistory {
+  let history = histories.get(space)
   if (!history) {
-    history = new ValueHistory(() => scheduleValueSync(doc))
-    histories.set(doc, history)
+    history = new ValueHistory(() => scheduleValueSync(space))
+    histories.set(space, history)
   }
   return history
 }
 
+/** every floating pane in the document, whatever its namespace */
 function panesIn(doc: Document): Pane[] {
   const list: Pane[] = []
   for (const p of floatingPanes) {
     if (p.element.ownerDocument === doc) list.push(p)
+  }
+  return list
+}
+
+function panesOf(space: Namespace): Pane[] {
+  const list: Pane[] = []
+  for (const p of floatingPanes) {
+    if (p.namespace === space) list.push(p)
   }
   return list
 }
@@ -580,9 +702,9 @@ let packing = false
  * forced layout. Inside a batch those queue up and run once at the end.
  */
 let batchDepth = 0
-/** anchors to re-pack per document; null re-packs all of them */
-const queuedPacks = new Map<Document, Set<Anchor> | null>()
-const queuedNotchSyncs = new Set<Document>()
+/** anchors to re-pack per namespace; null re-packs all of them */
+const queuedPacks = new Map<Namespace, Set<Anchor> | null>()
+const queuedNotchSyncs = new Set<Namespace>()
 
 function batchPanes(fn: () => void): void {
   batchDepth++
@@ -599,24 +721,31 @@ function flushPaneBatch(): void {
   const syncs = [...queuedNotchSyncs]
   queuedPacks.clear()
   queuedNotchSyncs.clear()
-  for (const [doc, anchors] of packs) packAnchored(doc, anchors ?? undefined)
-  for (const doc of syncs) syncNotch(doc)
+  for (const [space, anchors] of packs) packAnchored(space, anchors ?? undefined)
+  for (const space of syncs) syncNotch(space)
+}
+
+/** the box a namespace's panes float in: its root's padding box, or the viewport */
+function spaceSize(space: Namespace): { width: number; height: number } {
+  if (space.root) return { width: space.root.clientWidth, height: space.root.clientHeight }
+  const win = space.document.defaultView
+  return { width: win?.innerWidth ?? 0, height: win?.innerHeight ?? 0 }
 }
 
 /**
- * Lay out every movable, visible, still-anchored pane in `doc` so siblings
+ * Lay out every movable, visible, still-anchored pane in `space` so siblings
  * that share an anchor sit along that edge instead of occupying one spot.
  */
-function packAnchored(doc: Document, only?: Anchor | ReadonlySet<Anchor>): void {
+function packAnchored(space: Namespace, only?: Anchor | ReadonlySet<Anchor>): void {
   if (batchDepth > 0) {
-    const queued = queuedPacks.get(doc)
+    const queued = queuedPacks.get(space)
     if (queued === null) return
-    if (only === undefined) queuedPacks.set(doc, null)
+    if (only === undefined) queuedPacks.set(space, null)
     else {
       const set = queued ?? new Set<Anchor>()
       if (typeof only === 'string') set.add(only)
       else for (const a of only) set.add(a)
-      queuedPacks.set(doc, set)
+      queuedPacks.set(space, set)
     }
     return
   }
@@ -624,7 +753,7 @@ function packAnchored(doc: Document, only?: Anchor | ReadonlySet<Anchor>): void 
   packing = true
   try {
     const groups = new Map<Anchor, Pane[]>()
-    for (const p of panesIn(doc)) {
+    for (const p of panesOf(space)) {
       if (p.docked || p.hidden) continue
       const anchor = p.anchor
       if (!anchor) continue
@@ -635,12 +764,12 @@ function packAnchored(doc: Document, only?: Anchor | ReadonlySet<Anchor>): void 
       if (list) list.push(p)
       else groups.set(anchor, [p])
     }
-    const viewH = doc.defaultView?.innerHeight ?? 0
+    const viewH = spaceSize(space).height
     // every size is read before any pane moves, so layout is computed once
     // rather than once per pane
     const sized: { anchor: Anchor; list: Pane[]; sizes: PaneBox[] }[] = []
     for (const [anchor, list] of groups) {
-      // order, then creation (panesIn walks the insertion-ordered floating set)
+      // order, then creation (panesOf walks the insertion-ordered floating set)
       list.sort((a, b) => a.order - b.order)
       sized.push({ anchor, list, sizes: list.map(measurePane) })
     }
@@ -747,74 +876,81 @@ function paneStorageKey(options: PaneOptions): string | null {
   return `tiao:${options.id}`
 }
 
-function ensureNotch(doc: Document): void {
+function ensureNotch(space: Namespace): void {
+  const doc = space.document
   watchColorScheme(doc)
-  if (notches.has(doc)) return
-  notches.set(
-    doc,
-    createNotch({
-      document: doc,
-      getHidden: () => {
-        const list = panesIn(doc)
-        return list.length > 0 && list.every((p) => p.hidden)
+  if (notches.has(space)) return
+  const notch = createNotch({
+    document: doc,
+    getHidden: () => {
+      const list = panesOf(space)
+      return list.length > 0 && list.every((p) => p.hidden)
+    },
+    toggleHidden: () => {
+      Pane.toggleAll(space)
+    },
+    dockable: hasDock(space),
+    getDocked: () => dockBody(space) !== null,
+    toggleDocked: () => {
+      Pane.toggleDock(space)
+    },
+    ...valueActions(space),
+    exportValues: () => Pane.exportValues(space),
+    importValues: (data) => Pane.importValues(data, space),
+    countOverrides: () => Pane.countOverrides(space),
+    revealOverrides: () => {
+      Pane.revealOverrides(space)
+    },
+    openSearch: () => searchFor(doc).open(),
+    font: {
+      get: () => Pane.font,
+      set: (v) => Pane.setFont(v, doc),
+    },
+    createPane: (options) => new Pane(options),
+    getTheme: () => globalChrome(space).theme,
+    setTheme: (theme) => setGlobalChrome(space, { theme }),
+    getStyle: () => globalChrome(space).style,
+    setStyle: (style) => setGlobalChrome(space, { style }),
+    getAccent: () => {
+      const first = panesOf(space)[0]
+      return first ? resolvedAccent(first.element) : globalChrome(space).accent
+    },
+    setAccent: (accent) => setGlobalChrome(space, { accent }),
+    getNumbers: () => globalChrome(space).numbers,
+    setNumbers: (numbers) => setGlobalChrome(space, { numbers }),
+    hoverControls: hoverControlsToggle(doc),
+    fontSize: {
+      get: () => Pane.fontSize,
+      set: (v) => Pane.setFontSize(v, doc),
+    },
+    spacing: {
+      get: () => Pane.spacing,
+      set: (v) => Pane.setSpacing(v, doc),
+    },
+    hiding: {
+      get: () => readNotchState().hiding ?? true,
+      set: (hiding) => {
+        notchStore.patch({ hiding })
+        syncNotches(doc)
       },
-      toggleHidden: () => {
-        Pane.toggleAll(doc)
-      },
-      getDocked: () => dockBody(doc) !== null,
-      toggleDocked: () => {
-        Pane.toggleDock(doc)
-      },
-      ...valueActions(doc),
-      exportValues: () => Pane.exportValues(doc),
-      importValues: (data) => Pane.importValues(data, doc),
-      countOverrides: () => Pane.countOverrides(doc),
-      revealOverrides: () => {
-        Pane.revealOverrides(doc)
-      },
-      openSearch: () => searchFor(doc).open(),
-      font: {
-        get: () => Pane.font,
-        set: (v) => Pane.setFont(v, doc),
-      },
-      createPane: (options) => new Pane(options),
-      getTheme: () => globalChrome(doc).theme,
-      setTheme: (theme) => setGlobalChrome(doc, { theme }),
-      getStyle: () => globalChrome(doc).style,
-      setStyle: (style) => setGlobalChrome(doc, { style }),
-      getAccent: () => {
-        const first = panesIn(doc)[0]
-        return first ? resolvedAccent(first.element) : globalChrome(doc).accent
-      },
-      setAccent: (accent) => setGlobalChrome(doc, { accent }),
-      getNumbers: () => globalChrome(doc).numbers,
-      setNumbers: (numbers) => setGlobalChrome(doc, { numbers }),
-      hoverControls: hoverControlsToggle(doc),
-      fontSize: {
-        get: () => Pane.fontSize,
-        set: (v) => Pane.setFontSize(v, doc),
-      },
-      spacing: {
-        get: () => Pane.spacing,
-        set: (v) => Pane.setSpacing(v, doc),
-      },
-      hiding: {
-        get: () => readNotchState().hiding ?? true,
-        set: (hiding) => {
-          notchStore.patch({ hiding })
-          syncNotch(doc)
-        },
-      },
-      glass: {
-        get: () => Pane.glass,
-        set: (v) => Pane.setGlass(v, doc),
-      },
-      pinRounding: {
-        get: () => Pane.pinRounding,
-        set: (v) => Pane.setPinRounding(v, doc),
-      },
-    }),
+    },
+    glass: {
+      get: () => Pane.glass,
+      set: (v) => Pane.setGlass(v, doc),
+    },
+  })
+  notch.setScope(space.root, space.hiding)
+  notches.set(space, notch)
+}
+
+/** the panes a namespace's settings restyle live: its floating ones, plus inline ones in its root */
+function globalPanes(space: Namespace): Pane[] {
+  const { root } = space
+  if (!root) return panesOf(space)
+  const inline = trackedPanes(space.document).filter(
+    (p) => !floatingPanes.has(p) && root.contains(p.element),
   )
+  return [...panesOf(space), ...inline]
 }
 
 function resolveChrome(
@@ -835,42 +971,42 @@ function resolveChrome(
 }
 
 /**
- * The look the global settings panel shows: what it last broadcast, or the
+ * The look a namespace's settings panel shows: what it last broadcast, or its
  * primary pane's own chrome until something is set.
  */
-function globalChrome(doc: Document): PaneChrome {
-  return resolveChrome(readNotchState(), panesIn(doc)[0])
+function globalChrome(space: Namespace): PaneChrome {
+  return resolveChrome(chromeStore(space).get(), panesOf(space)[0])
 }
 
 /**
- * Broadcast part of the chrome to every pane in both views. Each pane saves it
- * as its own, so a later per-pane tweak still sticks, and the stored copy seeds
- * panes mounted after this.
+ * Broadcast part of the chrome to every pane in a namespace, in both views.
+ * Each pane saves it as its own, so a later per-pane tweak still sticks, and
+ * the stored copy seeds panes mounted after this.
  */
-function setGlobalChrome(doc: Document, patch: Partial<PaneChrome>): void {
-  notchStore.patch(patch)
-  writeDockState(patch)
+function setGlobalChrome(space: Namespace, patch: Partial<PaneChrome>): void {
+  chromeStore(space).patch(patch)
+  if (hasDock(space)) writeDockState(space, patch)
   batchPanes(() => {
-    for (const p of panesIn(doc)) p.adoptGlobalChrome(patch)
-    applyDockChrome(doc)
-    syncNotch(doc)
+    for (const p of globalPanes(space)) p.adoptGlobalChrome(patch)
+    if (hasDock(space)) applyDockChrome(space)
+    syncNotch(space)
   })
 }
 
-function syncNotch(doc: Document): void {
+function syncNotch(space: Namespace): void {
   if (batchDepth > 0) {
-    queuedNotchSyncs.add(doc)
+    queuedNotchSyncs.add(space)
     return
   }
-  pinBoards.get(doc)?.sync()
-  const notch = notches.get(doc)
+  pinBoards.get(space)?.sync()
+  const notch = notches.get(space)
   if (!notch) return
   // the notch re-declares the theme and size tokens, so it tracks the look
   // and scale the floating panes wear
   const el = notch.element
   const state = readNotchState()
-  applyChrome(el, resolveChrome(state, panesIn(doc)[0]))
-  el.classList.toggle('tiao-glass', state.glass ?? false)
+  applyChrome(el, globalChrome(space))
+  el.classList.toggle('tiao-glass', state.glass ?? DEFAULT_GLASS)
   const size = paneSizeFor(state.fontSize ?? 'small')
   const spacing = state.spacing ?? 's'
   el.classList.toggle('tiao-size-s', size === 's')
@@ -878,6 +1014,11 @@ function syncNotch(doc: Document): void {
   el.classList.toggle('tiao-spacing-m', spacing === 'm')
   el.classList.toggle('tiao-spacing-l', spacing === 'l')
   notch.sync()
+}
+
+/** the page-wide settings changed: every namespace's notch follows */
+function syncNotches(doc: Document): void {
+  for (const space of spaces.get(doc)?.values() ?? []) syncNotch(space)
 }
 
 function paneSizeFor(fontSize: PaneFontSize): PaneSize {
@@ -895,14 +1036,20 @@ function paneSizeFor(fontSize: PaneFontSize): PaneSize {
   }
 }
 
-/** tear the notch and dock down once the last floating pane is gone */
-function releaseNotch(doc: Document): void {
+/**
+ * Tear a namespace's notch down once its last floating pane is gone, and the
+ * document's shared machinery (dock, drawer, search, keys) once every one is.
+ */
+function releaseNotch(space: Namespace): void {
+  if (panesOf(space).length > 0) return
+  notches.get(space)?.dispose()
+  notches.delete(space)
+  notchWanted.delete(space)
+  if (!isDefault(space)) closeDock(space)
+  const doc = space.document
   if (panesIn(doc).length > 0) return
-  notches.get(doc)?.dispose()
-  notches.delete(doc)
-  notchWanted.delete(doc)
   releaseMobile(doc)
-  closeDock(doc)
+  closeDock(spaceFor(doc))
   releaseGlobalToggle(doc)
   searches.get(doc)?.dispose()
   searches.delete(doc)
@@ -976,47 +1123,64 @@ function resolvedAccent(el: HTMLElement): string {
   return computed || DEFAULT_ACCENT
 }
 
+/** whose sidebar holds `p` while it's docked: on a small screen the drawer takes every pane */
+function dockOf(p: Pane): Namespace {
+  const doc = p.namespace.document
+  return mobileWatches.get(doc)?.controls ? spaceFor(doc) : p.namespace
+}
+
+function dockedIn(space: Namespace): Pane[] {
+  return panesIn(space.document).filter((p) => p.docked && dockOf(p) === space)
+}
+
+/** collect a namespace's floating panes into its sidebar */
+function dockPanes(space: Namespace): void {
+  const { body } = ensureDock(createDockHost(space))
+  for (const p of panesOf(space)) p.dockInto(body)
+  applyDockChrome(space)
+}
+
 /**
  * The sidebar's shared chrome. Docked panes all render with it and keep their
  * own floating chrome aside, so the two views theme independently. Seeded from
- * the first pane the first time the sidebar opens.
+ * the namespace's first pane the first time the sidebar opens.
  */
-function dockChrome(doc: Document): PaneChrome {
-  return resolveChrome(readDockState(), panesIn(doc)[0])
+function dockChrome(space: Namespace): PaneChrome {
+  return resolveChrome(readDockState(space), panesOf(space)[0] ?? panesIn(space.document)[0])
 }
 
-function applyDockChrome(doc: Document): void {
-  const chrome = dockChrome(doc)
-  const root = dockRoot(doc)
+function applyDockChrome(space: Namespace): void {
+  const chrome = dockChrome(space)
+  const root = dockRoot(space)
   if (root) applyChrome(root, chrome)
-  for (const p of panesIn(doc)) {
-    if (p.docked) p.setChrome(chrome)
-  }
-  syncDrawerControls(doc)
-  syncNotch(doc)
+  for (const p of dockedIn(space)) p.setChrome(chrome)
+  if (isDefault(space)) syncDrawerControls(space.document)
+  syncNotch(space)
 }
 
-function createDockHost(doc: Document): DockHost {
+function createDockHost(space: Namespace): DockHost {
+  const doc = space.document
   const update = (patch: DockState) => {
-    writeDockState(patch)
-    applyDockChrome(doc)
+    writeDockState(space, patch)
+    applyDockChrome(space)
   }
   return {
+    scope: space,
     document: doc,
     filter: (query) => {
-      for (const p of panesIn(doc)) p.filter(query)
+      for (const p of dockedIn(space)) p.filter(query)
     },
     createPane: (options) => new Pane(options),
-    getTheme: () => dockChrome(doc).theme,
+    getTheme: () => dockChrome(space).theme,
     setTheme: (theme) => update({ theme }),
-    getStyle: () => dockChrome(doc).style,
+    getStyle: () => dockChrome(space).style,
     setStyle: (style) => update({ style }),
     getAccent: () => {
-      const root = dockRoot(doc)
-      return root ? resolvedAccent(root) : dockChrome(doc).accent
+      const root = dockRoot(space)
+      return root ? resolvedAccent(root) : dockChrome(space).accent
     },
     setAccent: (accent) => update({ accent }),
-    getNumbers: () => dockChrome(doc).numbers,
+    getNumbers: () => dockChrome(space).numbers,
     setNumbers: (numbers) => update({ numbers }),
     hoverControls: hoverControlsToggle(doc),
   }
@@ -1033,6 +1197,8 @@ export class Pane extends Container {
   private searchInput: HTMLInputElement
   private _expanded: boolean
   private _draggable: boolean
+  /** how far a dragged inline pane sits from where its container lays it out */
+  private inlineOffset = { x: 0, y: 0 }
   private _numbers = false
   /** preferred theme, which may be 'system'; the CSS class is the resolved look */
   private _theme: PaneTheme = 'dark'
@@ -1042,6 +1208,8 @@ export class Pane extends Container {
   private _column = 0
   private margin: number
   private readonly doc: Document
+  /** the tiao this pane belongs to: its notch, undo, chrome, and where it floats */
+  readonly namespace: Namespace
   /** created without a container: owns its own window position and joins the H toggle */
   private readonly floating: boolean
   /** the free position and theme parked while docked; non-null means docked */
@@ -1058,35 +1226,37 @@ export class Pane extends Container {
     return panes.get(id)
   }
 
-  /** whether floating panes are currently collected in the dock sidebar */
+  /** whether the window's floating panes are currently collected in the dock sidebar */
   static get docked(): boolean {
-    return dockBody(document) !== null
+    return dockBody(spaceFor(document)) !== null
   }
 
   /**
-   * Move every floating pane into an inline sidebar (page content reflows
-   * beside it) or back out to their free positions. Returns the new state.
+   * Move a namespace's floating panes (a Document means its window namespace)
+   * into a sidebar or back out to their free positions. The window's sidebar
+   * reflows the page beside it; a rooted namespace's docks inside its element.
+   * Returns the new state.
    */
-  static toggleDock(doc: Document = document): boolean {
+  static toggleDock(scope: Document | Namespace = document): boolean {
+    const space = toSpace(scope)
+    if (!hasDock(space)) return false
     // a small screen keeps every pane in the drawer; flip what a wide one restores
-    if (mobileWatches.get(doc)?.controls) {
-      const docked = !readDockState().docked
-      writeDockState({ docked })
+    if (mobileWatches.get(space.document)?.controls) {
+      const docked = !readDockState(space).docked
+      writeDockState(space, { docked })
       return docked
     }
     batchPanes(() => {
-      if (dockBody(doc)) {
-        for (const p of panesIn(doc)) p.undock()
-        closeDock(doc)
+      if (dockBody(space)) {
+        for (const p of panesOf(space)) p.undock()
+        closeDock(space)
       } else {
-        const { body } = ensureDock(createDockHost(doc))
-        for (const p of panesIn(doc)) p.dockInto(body)
-        applyDockChrome(doc)
+        dockPanes(space)
       }
-      writeDockState({ docked: dockBody(doc) !== null })
-      syncNotch(doc)
+      writeDockState(space, { docked: dockBody(space) !== null })
+      syncNotch(space)
     })
-    return dockBody(doc) !== null
+    return dockBody(space) !== null
   }
 
   /** how big floating panes currently draw */
@@ -1098,7 +1268,7 @@ export class Pane extends Container {
   static setFontSize(size: PaneFontSize, doc: Document = document): void {
     notchStore.patch({ fontSize: size })
     for (const p of panesIn(doc)) p.applyFontSize(size)
-    syncNotch(doc)
+    syncNotches(doc)
   }
 
   /** how much padding floating panes currently draw */
@@ -1110,32 +1280,76 @@ export class Pane extends Container {
   static setSpacing(spacing: PaneSpacing, doc: Document = document): void {
     notchStore.patch({ spacing })
     for (const p of panesIn(doc)) p.spacing = spacing
-    syncNotch(doc)
+    syncNotches(doc)
   }
 
   /** whether floating panes and the notch draw translucent and frosted */
   static get glass(): boolean {
-    return readNotchState().glass ?? false
+    return readNotchState().glass ?? DEFAULT_GLASS
   }
 
   /**
-   * Frost every floating pane and the notch, or draw them opaque (the default:
-   * the blur re-runs every frame the page underneath changes).
+   * Frost every floating pane and the notch (the default), or draw them opaque,
+   * which saves the blur that re-runs every frame the page underneath changes.
    */
   static setGlass(glass: boolean, doc: Document = document): void {
     notchStore.patch({ glass })
     for (const p of panesIn(doc)) p.element.classList.toggle('tiao-glass', glass)
     syncDrawerControls(doc)
-    syncNotch(doc)
+    syncNotches(doc)
   }
 
   /**
-   * Hide or show every floating pane in `doc`.
-   * If any are visible → hide all; otherwise show all.
+   * Root the namespace `name` in `element`: its panes float inside the element
+   * instead of over the window, anchored to the element's corners and clamped
+   * to it, so they scroll with the page; its notch rides the element's top edge
+   * and stays shown, or with `hiding` follows the Hiding setting and retreats
+   * until the pointer nears that edge; and its theme, style, accent, and
+   * numbering also reach the inline panes inside it. The element must be
+   * positioned (not `position: static`). Call it before mounting the
+   * namespace's panes, and the returned function after disposing them.
+   */
+  static namespace(
+    name: string,
+    {
+      root,
+      document: doc = document,
+      hiding = false,
+    }: { root: HTMLElement; document?: Document; hiding?: boolean },
+  ): () => void {
+    const space = spaceFor(doc, name)
+    space.root = root
+    space.hiding = hiding
+    space.observer?.disconnect()
+    space.observer =
+      typeof ResizeObserver === 'undefined'
+        ? null
+        : new ResizeObserver(() => {
+            batchPanes(() => {
+              for (const p of panesOf(space)) p.onViewportResize()
+            })
+          })
+    space.observer?.observe(root)
+    notches.get(space)?.setScope(root, hiding)
+    return () => {
+      if (space.root !== root) return
+      space.observer?.disconnect()
+      space.observer = null
+      space.root = null
+      space.hiding = false
+      notches.get(space)?.setScope(null, false)
+    }
+  }
+
+  /**
+   * Hide or show every floating pane in a namespace (a Document means its
+   * window namespace). If any are visible, hide all; otherwise show all.
    * Returns whether panes are now hidden.
    */
-  static toggleAll(doc: Document = document): boolean {
-    const list = panesIn(doc)
+  static toggleAll(scope: Document | Namespace = document): boolean {
+    const space = toSpace(scope)
+    const doc = space.document
+    const list = panesOf(space)
     if (list.length === 0) return false
     // on a small screen the closed drawer is the hidden state
     const controls = mobileWatches.get(doc)?.controls
@@ -1143,9 +1357,10 @@ export class Pane extends Container {
     const hide = list.some((p) => !p.hidden)
     batchPanes(() => {
       for (const p of list) p.hidden = hide
-      setDockVisible(doc, !hide)
-      notchStore.patch({ hidden: hide })
-      syncNotch(doc)
+      setDockVisible(space, !hide)
+      // the saved hidden flag belongs to the window
+      if (isDefault(space)) notchStore.patch({ hidden: hide })
+      syncNotch(space)
     })
     return hide
   }
@@ -1155,43 +1370,44 @@ export class Pane extends Container {
    * forget the persisted copies. Floating panes also snap back to the
    * position their code declared. Theme and dock state stay as they are.
    */
-  static resetValues(doc: Document = document): void {
+  static resetValues(scope: Document | Namespace = document): void {
+    const space = toSpace(scope)
     // one undo step brings every value back
-    historyFor(doc).batch(() => {
-      for (const p of trackedPanes(doc)) {
+    historyFor(space).batch(() => {
+      for (const p of trackedOf(space)) {
         walkBindings(p, (b) => b.reset())
         p.values?.clear()
         p.resetPosition()
       }
     })
-    packAnchored(doc)
+    packAnchored(space)
   }
 
-  /** whether there is a value edit to step back over in `doc` */
-  static canUndo(doc: Document = document): boolean {
-    return historyFor(doc).canUndo
+  /** whether there is a value edit to step back over in a namespace */
+  static canUndo(scope: Document | Namespace = document): boolean {
+    return historyFor(toSpace(scope)).canUndo
   }
 
-  static canRedo(doc: Document = document): boolean {
-    return historyFor(doc).canRedo
+  static canRedo(scope: Document | Namespace = document): boolean {
+    return historyFor(toSpace(scope)).canRedo
   }
 
   /**
    * Step back over the last value edit in `doc` (a global reset or an import
    * counts as one). The last HISTORY_LIMIT (10) edits are kept.
    */
-  static undo(doc: Document = document): void {
-    historyFor(doc).undo()
+  static undo(scope: Document | Namespace = document): void {
+    historyFor(toSpace(scope)).undo()
   }
 
-  static redo(doc: Document = document): void {
-    historyFor(doc).redo()
+  static redo(scope: Document | Namespace = document): void {
+    historyFor(toSpace(scope)).redo()
   }
 
   /** how many editable rows in `doc` differ from the default their code declared */
-  static countOverrides(doc: Document = document): number {
+  static countOverrides(scope: Document | Namespace = document): number {
     let count = 0
-    for (const p of trackedPanes(doc)) {
+    for (const p of trackedOf(toSpace(scope))) {
       walkBindings(p, (b) => {
         b.counted = b.overridden
         if (b.counted) count++
@@ -1205,21 +1421,21 @@ export class Pane extends Container {
    * whatever hides it: hidden or collapsed panes, folders, and tab pages.
    * Returns how many rows flashed.
    */
-  static revealOverrides(doc: Document = document): number {
+  static revealOverrides(scope: Document | Namespace = document): number {
+    const space = toSpace(scope)
     let total = 0
     let shown = false
     batchPanes(() => {
-      for (const p of trackedPanes(doc)) {
+      for (const p of trackedOf(space)) {
         const found: BindingApi<unknown>[] = []
         for (const child of p.children) revealOverridden(child, found)
         if (found.length === 0) continue
         total += found.length
         if (presentRows(p, found)) shown = true
       }
-      if (shown) {
-        setDockVisible(doc, true)
-        notchStore.patch({ hidden: false })
-      }
+      if (!shown) return
+      setDockVisible(space, true)
+      if (isDefault(space)) notchStore.patch({ hidden: false })
     })
     return total
   }
@@ -1234,7 +1450,7 @@ export class Pane extends Container {
     if (!pane) return false
     batchPanes(() => {
       if (!presentRows(pane, [binding])) return
-      setDockVisible(doc, true)
+      setDockVisible(dockOf(pane), true)
       notchStore.patch({ hidden: false })
     })
     return true
@@ -1247,7 +1463,14 @@ export class Pane extends Container {
 
   static setFont(font: PaneFont, doc: Document = document): void {
     notchStore.patch({ font })
-    applyFont(doc, font)
+    if (font !== 'geist') {
+      applyFont(doc, font)
+      return
+    }
+    // panes already on screen keep their face until Geist is in, rather than hide while it loads
+    void loadGeist(doc).then(() => {
+      if (Pane.font === 'geist') applyFont(doc, font)
+    })
   }
 
   /** whether rows show just their values until hovered */
@@ -1265,24 +1488,17 @@ export class Pane extends Container {
     applyHoverControls(doc, hoverControls)
   }
 
-  /** how round the pinned cards are */
-  static get pinRounding(): PinRounding {
-    return readNotchState().pinRounding ?? DEFAULT_PIN_ROUNDING
-  }
-
-  static setPinRounding(pinRounding: PinRounding, doc: Document = document): void {
-    notchStore.patch({ pinRounding })
-    applyPinRounding(doc, pinRounding)
-  }
-
   /**
    * Every value the id'd panes in `doc` persist, as `pane id -> row path ->
    * value` (the shape storage holds), ready for JSON and importValues.
    */
-  static exportValues(doc: Document = document): Record<string, Record<string, unknown>> {
+  static exportValues(
+    scope: Document | Namespace = document,
+  ): Record<string, Record<string, unknown>> {
+    const space = toSpace(scope)
     const out: Record<string, Record<string, unknown>> = {}
     for (const [id, p] of panes) {
-      if (p.element.ownerDocument !== doc) continue
+      if (p.namespace !== space) continue
       const values: Record<string, unknown> = {}
       walkBindings(p, (b) => {
         if (b.persistPath !== null) values[b.persistPath] = b.value.get()
@@ -1296,14 +1512,15 @@ export class Pane extends Container {
    * Apply exportValues output to the live panes in `doc`; rows whose value no
    * longer fits the shape the code declares are skipped. Returns how many landed.
    */
-  static importValues(data: unknown, doc: Document = document): number {
+  static importValues(data: unknown, scope: Document | Namespace = document): number {
+    const space = toSpace(scope)
     if (!isRecord(data)) return 0
     let applied = 0
     // one undo step takes the whole import back
-    historyFor(doc).batch(() => {
+    historyFor(space).batch(() => {
       for (const [id, values] of Object.entries(data)) {
         const p = panes.get(id)
-        if (!p || p.element.ownerDocument !== doc || !isRecord(values)) continue
+        if (!p || p.namespace !== space || !isRecord(values)) continue
         walkBindings(p, (b) => {
           const path = b.persistPath
           if (path === null || !sameShape(values[path], b.defaultValue)) return
@@ -1318,8 +1535,12 @@ export class Pane extends Container {
   constructor(options: PaneOptions = {}) {
     ensureBuiltins(globalRegistry)
     const doc = options.document ?? document
+    const space =
+      typeof options.namespace === 'object'
+        ? toSpace(options.namespace)
+        : spaceFor(doc, options.namespace)
     const registry = new PluginRegistry(globalRegistry)
-    const host: BladeHost = { document: doc, registry, pins: pinBoardFor(doc) }
+    const host: BladeHost = { document: doc, registry, pins: pinBoardFor(space) }
     const storageKey = paneStorageKey(options)
     if (storageKey) {
       host.values = createValueStore(storageKey)
@@ -1327,7 +1548,7 @@ export class Pane extends Container {
     }
     // the same panes trackedPanes() counts: floating or id'd, never a menu's own
     if (!options.container || options.id !== undefined) {
-      host.onSettle = (binding, from, to) => historyFor(doc).record(binding, from, to)
+      host.onSettle = (binding, from, to) => historyFor(space).record(binding, from, to)
     }
     super(host)
     this.values = host.values ?? null
@@ -1335,9 +1556,10 @@ export class Pane extends Container {
     this.options = options
     this.paneRegistry = registry
     this.doc = doc
+    this.namespace = space
     this._expanded = options.expanded ?? true
     this.floating = !options.container
-    this._draggable = this.floating && (options.draggable ?? true)
+    this._draggable = options.draggable ?? this.floating
     this._order = options.order ?? 0
     this.margin = options.margin ?? 8
 
@@ -1403,6 +1625,7 @@ export class Pane extends Container {
 
     if (this.floating) {
       this.element.classList.add('tiao-floating')
+      this.element.classList.toggle('tiao-rooted', space.root !== null)
       this._anchor = options.anchor ?? 'top-right'
     }
     if (options.width !== undefined) this.element.style.width = `${options.width}px`
@@ -1414,12 +1637,11 @@ export class Pane extends Container {
     const notchState = readNotchState()
     applyFont(doc, notchState.font ?? DEFAULT_FONT)
     applyHoverControls(doc, notchState.hoverControls ?? false)
-    applyPinRounding(doc, notchState.pinRounding ?? DEFAULT_PIN_ROUNDING)
     if (this.floating) this.applyFontSize(notchState.fontSize ?? 'small')
     else if (options.size) this.size = options.size
     if (this.floating) {
       this.spacing = notchState.spacing ?? 's'
-      this.element.classList.toggle('tiao-glass', notchState.glass ?? false)
+      this.element.classList.toggle('tiao-glass', notchState.glass ?? DEFAULT_GLASS)
     }
 
     // restore persisted state before first paint: this pane's own saved chrome
@@ -1430,16 +1652,17 @@ export class Pane extends Container {
       this.element.style.setProperty('--tiao-max-height', `${persisted.hMax}px`)
     }
     if (persisted.expanded !== undefined) this._expanded = persisted.expanded
-    this._theme = persisted.theme ?? notchState.theme ?? 'dark'
+    const spaceChrome = chromeStore(space).get()
+    this._theme = persisted.theme ?? spaceChrome.theme ?? 'dark'
     applyThemeClass(this.element, this._theme)
     applyStyleClass(
       this.element,
-      normalizeStyle(persisted.style ?? notchState.style ?? options.style),
+      normalizeStyle(persisted.style ?? spaceChrome.style ?? options.style),
     )
-    const accent = persisted.accent ?? notchState.accent
+    const accent = persisted.accent ?? spaceChrome.accent
     if (accent) this.applyTheme({ accent })
-    if (persisted.draggable !== undefined && this.floating) this._draggable = persisted.draggable
-    this._numbers = persisted.numbers ?? notchState.numbers ?? false
+    if (persisted.draggable !== undefined) this._draggable = persisted.draggable
+    this._numbers = persisted.numbers ?? spaceChrome.numbers ?? false
     if (this.floating) {
       if (persisted.x !== undefined && persisted.y !== undefined) {
         this.moveTo(persisted.x, persisted.y)
@@ -1450,7 +1673,9 @@ export class Pane extends Container {
     this.applyExpanded()
     this.applyDraggable()
     const mobile = this.floating && watchMobile(doc)
-    this.hidden = options.hidden ?? (this.floating && !mobile && (notchState.hidden ?? false))
+    this.hidden =
+      options.hidden ??
+      (this.floating && !mobile && isDefault(space) && (notchState.hidden ?? false))
 
     // collapse on any titlebar click except the action buttons (and not right after a drag)
     let suppressClick = false
@@ -1464,6 +1689,74 @@ export class Pane extends Container {
     }
     this.titlebar.addEventListener('click', onTitlebarClick)
     this.disposers.push(() => this.titlebar.removeEventListener('click', onTitlebarClick))
+
+    // floating panes move in the window; inline ones shift by `translate`, inside their container
+    let baseX = 0
+    let baseY = 0
+    let baseW = 0
+    let baseH = 0
+    let inlineBounds = { left: 0, right: 0, top: 0, bottom: 0 }
+    const canDrag = () => this._draggable && (!this.floating || this.movable)
+    this.disposers.push(
+      draggable(this.titlebar, {
+        // pointer capture would swallow the action buttons' clicks
+        filter: (e) =>
+          (this.floating || this._draggable) &&
+          !(e.target as Element | null)?.closest?.('.tiao-titlebar-btn'),
+        onStart: () => {
+          const rect = this.element.getBoundingClientRect()
+          suppressClick = false
+          if (this.floating) {
+            const origin = this.origin()
+            baseX = rect.left - origin.x
+            baseY = rect.top - origin.y
+            // size is captured once so each move avoids a forced layout read
+            baseW = rect.width
+            baseH = rect.height
+            return
+          }
+          baseX = this.inlineOffset.x
+          baseY = this.inlineOffset.y
+          // how far the pane can shift each way and still sit inside its container
+          const box = (options.container ?? this.element).getBoundingClientRect()
+          inlineBounds = {
+            left: box.left - rect.left + baseX,
+            right: box.right - rect.right + baseX,
+            top: box.top - rect.top + baseY,
+            bottom: box.bottom - rect.bottom + baseY,
+          }
+        },
+        onMove: (s) => {
+          if (!canDrag() || !s.moved) return
+          suppressClick = true
+          if (this.floating) {
+            this.setPosition(baseX + s.dx, baseY + s.dy, baseW, baseH)
+            return
+          }
+          const { left, right, top, bottom } = inlineBounds
+          this.inlineOffset = {
+            x: clamp(baseX + s.dx, left, Math.max(left, right)),
+            y: clamp(baseY + s.dy, top, Math.max(top, bottom)),
+          }
+          this.element.style.translate = `${this.inlineOffset.x}px ${this.inlineOffset.y}px`
+        },
+        onEnd: (s) => {
+          if (!canDrag() || !s.moved) return
+          // moved can become true on pointerup alone (no prior moved onMove)
+          suppressClick = true
+          if (this.floating) {
+            // persist the clamped position applied by moveTo, not the raw drag
+            const rect = this.element.getBoundingClientRect()
+            const origin = this.origin()
+            this.saveState({ x: rect.left - origin.x, y: rect.top - origin.y, anchor: undefined })
+          }
+          // clear if no click follows (pointerup outside the titlebar)
+          setTimeout(() => {
+            suppressClick = false
+          }, 0)
+        },
+      }),
+    )
 
     // search: icon toggles an input row under the titlebar; typing filters rows
     const onSearchToggle = () => {
@@ -1499,44 +1792,6 @@ export class Pane extends Container {
       bringToFront()
       this.element.addEventListener('pointerdown', bringToFront, true)
       this.disposers.push(() => this.element.removeEventListener('pointerdown', bringToFront, true))
-
-      let baseX = 0
-      let baseY = 0
-      let baseW = 0
-      let baseH = 0
-      this.disposers.push(
-        draggable(this.titlebar, {
-          // pointer capture would swallow the action buttons' clicks
-          filter: (e) => !(e.target as Element | null)?.closest?.('.tiao-titlebar-btn'),
-          onStart: () => {
-            const rect = this.element.getBoundingClientRect()
-            baseX = rect.left
-            baseY = rect.top
-            // size is captured once so each move avoids a forced layout read
-            baseW = rect.width
-            baseH = rect.height
-            suppressClick = false
-          },
-          onMove: (s) => {
-            if (!this.movable || !this._draggable || !s.moved) return
-            suppressClick = true
-            this.setPosition(baseX + s.dx, baseY + s.dy, baseW, baseH)
-          },
-          onEnd: (s) => {
-            if (!this.movable || !this._draggable || !s.moved) return
-            // moved can become true on pointerup alone (no prior moved onMove)
-            suppressClick = true
-            // persist the clamped position applied by moveTo, not the raw drag
-            const rect = this.element.getBoundingClientRect()
-            this.saveState({ x: rect.left, y: rect.top, anchor: undefined })
-            // clear if no click follows (pointerup outside the titlebar)
-            setTimeout(() => {
-              suppressClick = false
-            }, 0)
-          },
-        }),
-      )
-
       this.installResizeHandles()
       // free-positioned panes must stay inside the window when it shrinks
       watchViewport(doc)
@@ -1643,9 +1898,9 @@ export class Pane extends Container {
         if (ev.source === 'monitor') return
         // a drag frame only moves the count when it carries the row across its default
         if (ev.last === false && ev.target.overridden === ev.target.counted) return
-        scheduleValueSync(doc)
+        scheduleValueSync(space)
       }),
-      () => scheduleValueSync(doc),
+      () => scheduleValueSync(space),
     )
 
     if (options.toggleKey) {
@@ -1661,38 +1916,38 @@ export class Pane extends Container {
     if (this.floating) {
       floatingPanes.add(this)
       ensureGlobalToggle(doc)
-      if (options.notch !== false) notchWanted.add(doc)
+      if (options.notch !== false) notchWanted.add(space)
       if (mobile) {
         applyMobile(doc, true)
       } else if (options.notch !== false) {
         // a previously docked session re-opens the sidebar before the first mount
-        if (readDockState().docked) ensureDock(createDockHost(doc))
-        ensureNotch(doc)
+        if (hasDock(space) && readDockState(space).docked) ensureDock(createDockHost(space))
+        ensureNotch(space)
       }
       this.disposers.push(() => {
         floatingPanes.delete(this)
         const anchor = this._anchor
-        releaseNotch(doc)
-        syncNotch(doc)
-        if (anchor) packAnchored(doc, anchor)
+        releaseNotch(space)
+        syncNotch(space)
+        if (anchor) packAnchored(space, anchor)
       })
     }
 
-    const dock = this.floating ? dockBody(doc) : null
+    const dock = this.floating ? dockBody(dockOf(this)) : null
     if (dock) {
       this.dockInto(dock)
       // also themes the sidebar shell, which a restored dock has not seen yet
-      applyDockChrome(doc)
+      applyDockChrome(dockOf(this))
     } else {
-      ;(options.container ?? doc.body).append(this.element)
+      ;(options.container ?? space.root ?? doc.body).append(this.element)
     }
     // a hidden session folds the sidebar the same way toggleAll does
-    if (this.floating && this.hidden && !mobile) setDockVisible(doc, false)
+    if (this.floating && this.hidden && !mobile) setDockVisible(space, false)
     // a persisted free position may be off-screen on a smaller window
     this.clampToViewport()
-    if (this.floating && this._anchor && !this.docked) packAnchored(doc, this._anchor)
+    if (this.floating && this._anchor && !this.docked) packAnchored(space, this._anchor)
     if (this.floating) this.disposers.push(observePaneSize(this))
-    syncNotch(doc)
+    syncNotch(space)
 
     const id = options.id
     if (id) {
@@ -1739,8 +1994,8 @@ export class Pane extends Container {
   override set hidden(v: boolean) {
     if (super.hidden === v) return
     super.hidden = v
-    syncNotch(this.doc)
-    if (this._anchor) packAnchored(this.doc, this._anchor)
+    syncNotch(this.namespace)
+    if (this._anchor) packAnchored(this.namespace, this._anchor)
   }
 
   /** sidebar position, z-index style: lower sorts first, ties keep creation order */
@@ -1751,16 +2006,16 @@ export class Pane extends Container {
     if (this._order === v) return
     this._order = v
     this.element.dataset['tiaoOrder'] = String(v)
-    const body = this.docked ? dockBody(this.doc) : null
+    const body = this.docked ? dockBody(dockOf(this)) : null
     if (body) this.insertDocked(body)
-    else if (this._anchor) packAnchored(this.doc, this._anchor)
+    else if (this._anchor) packAnchored(this.namespace, this._anchor)
   }
 
   get draggable(): boolean {
     return this._draggable
   }
   set draggable(v: boolean) {
-    if (!this.floating || this._draggable === v) return
+    if (this._draggable === v) return
     this._draggable = v
     this.applyDraggable()
     this.saveState({ draggable: v })
@@ -1807,8 +2062,8 @@ export class Pane extends Container {
     const prev = this._anchor
     this._anchor = anchor
     this.saveState({ anchor, x: undefined, y: undefined })
-    packAnchored(this.doc, anchor)
-    if (prev && prev !== anchor) packAnchored(this.doc, prev)
+    packAnchored(this.namespace, anchor)
+    if (prev && prev !== anchor) packAnchored(this.namespace, prev)
   }
 
   get size(): PaneSize {
@@ -1907,16 +2162,16 @@ export class Pane extends Container {
     this._anchor = null
     this._stack = 0
     this._column = 0
-    const win = this.doc.defaultView
-    if (win && w) x = clamp(x, 0, Math.max(0, win.innerWidth - w))
-    if (win && h) y = clamp(y, 0, Math.max(0, win.innerHeight - h))
+    const box = spaceSize(this.namespace)
+    if (w) x = clamp(x, 0, Math.max(0, box.width - w))
+    if (h) y = clamp(y, 0, Math.max(0, box.height - h))
     const s = this.element.style
     s.left = `${x}px`
     s.top = `${y}px`
     s.right = 'auto'
     s.bottom = 'auto'
     s.transform = 'none'
-    if (prev) packAnchored(this.doc, prev)
+    if (prev) packAnchored(this.namespace, prev)
   }
 
   /** invisible strips along the left/right/bottom edges; dragging them resizes the pane */
@@ -1956,7 +2211,7 @@ export class Pane extends Container {
             const rect = this.element.getBoundingClientRect()
             baseW = rect.width
             baseH = rect.height
-            baseLeft = rect.left
+            baseLeft = rect.left - this.origin().x
           },
           onMove: (s) => {
             if (s.moved) apply(s.dx, s.dy, false)
@@ -1971,25 +2226,35 @@ export class Pane extends Container {
 
   /** internal: the shared ResizeObserver saw this pane change size */
   onSizeChange(): void {
-    if (this._anchor && this.movable && !this.hidden) packAnchored(this.doc, this._anchor)
+    if (this._anchor && this.movable && !this.hidden) packAnchored(this.namespace, this._anchor)
   }
 
   /** internal: the window resized (coalesced to one frame for every pane) */
   onViewportResize(): void {
-    if (this._anchor) packAnchored(this.doc, this._anchor)
+    if (this._anchor) packAnchored(this.namespace, this._anchor)
     else this.clampToViewport()
   }
 
-  /** re-clamp a free-positioned pane into the viewport (anchored panes track their edges) */
+  /** re-clamp a free-positioned pane into the box it floats in (anchored panes track their edges) */
   private clampToViewport(): void {
     if (!this.movable || this._anchor) return
-    const win = this.doc.defaultView
-    if (!win) return
     const rect = this.element.getBoundingClientRect()
     if (!rect.width) return
-    const x = clamp(rect.left, 0, Math.max(0, win.innerWidth - rect.width))
-    const y = clamp(rect.top, 0, Math.max(0, win.innerHeight - rect.height))
-    if (x !== rect.left || y !== rect.top) this.moveTo(x, y)
+    const origin = this.origin()
+    const left = rect.left - origin.x
+    const top = rect.top - origin.y
+    const box = spaceSize(this.namespace)
+    const x = clamp(left, 0, Math.max(0, box.width - rect.width))
+    const y = clamp(top, 0, Math.max(0, box.height - rect.height))
+    if (x !== left || y !== top) this.moveTo(x, y)
+  }
+
+  /** the top left of the box this pane floats in, in viewport coordinates */
+  private origin(): { x: number; y: number } {
+    const root = this.namespace.root
+    if (!root) return { x: 0, y: 0 }
+    const rect = root.getBoundingClientRect()
+    return { x: rect.left + root.clientLeft, y: rect.top + root.clientTop }
   }
 
   /** snap back to the anchor the constructor declared and forget a saved free position */
@@ -2021,14 +2286,14 @@ export class Pane extends Container {
     const col = this._column
     // centered axes are solved in whole pixels: translate(-50%) puts an odd
     // size on a half pixel, which blurs every icon on 1x displays
-    const win = this.doc.defaultView
+    const box = spaceSize(this.namespace)
     const centerX = () => {
       const width = size?.width ?? this.element.offsetWidth
-      return `${Math.round(((win?.innerWidth ?? 0) - width) / 2)}px`
+      return `${Math.round((box.width - width) / 2)}px`
     }
     // a lone pane centers itself; a packed one sits `stack` from the middle
     const centerY = () => {
-      const viewH = win?.innerHeight ?? 0
+      const viewH = box.height
       const height = size?.height ?? this.element.offsetHeight
       const top = stack === 0 ? (viewH - height) / 2 : viewH / 2 + stack
       return `${Math.round(top)}px`
@@ -2083,7 +2348,10 @@ export class Pane extends Container {
   }
 
   private applyDraggable(): void {
-    this.element.classList.toggle('tiao-draggable', this._draggable && this.movable)
+    this.element.classList.toggle(
+      'tiao-draggable',
+      this._draggable && (!this.floating || this.movable),
+    )
   }
 
   /** internal: the look currently applied to this pane */
@@ -2136,7 +2404,7 @@ export class Pane extends Container {
     this.element.classList.add('tiao-docked')
     this.applyDraggable()
     this.insertDocked(container)
-    if (this._anchor) packAnchored(this.doc, this._anchor)
+    if (this._anchor) packAnchored(this.namespace, this._anchor)
   }
 
   /**
@@ -2167,8 +2435,8 @@ export class Pane extends Container {
     for (const [prop, value] of Object.entries(free.styles)) {
       this.element.style.setProperty(prop, value)
     }
-    this.doc.body.append(this.element)
-    if (this._anchor) packAnchored(this.doc, this._anchor)
+    ;(this.namespace.root ?? this.doc.body).append(this.element)
+    if (this._anchor) packAnchored(this.namespace, this._anchor)
     else this.applyAnchor()
     this.applyDraggable()
     this.clampToViewport()

@@ -2,14 +2,22 @@ import type { BindingApi } from './blade'
 import { formatValue } from './controls/monitor'
 import { h, searchIcon, withDocument } from './dom'
 
-const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
+/** longest gap in ms between the two taps of T that open the search */
+const DOUBLE_TAP_MS = 400
 
-/** how the search shortcut reads in a tooltip on this platform */
-export const SEARCH_KEY_HINT = isMac ? '⌘K' : 'Ctrl K'
-
-/** ⌘K on Apple platforms, Ctrl+K elsewhere */
-export function isSearchShortcut(e: KeyboardEvent): boolean {
-  return (e.key === 'k' || e.key === 'K') && (isMac ? e.metaKey : e.ctrlKey) && !e.altKey
+/**
+ * A keydown test for the search shortcut, T tapped twice. It remembers the
+ * first tap, so each listener needs its own; any other key starts over.
+ */
+export function createSearchShortcut(): (e: KeyboardEvent) => boolean {
+  let lastTap = Number.NEGATIVE_INFINITY
+  return (e) => {
+    const isTap =
+      (e.key === 't' || e.key === 'T') && !e.metaKey && !e.ctrlKey && !e.altKey && !e.repeat
+    const isDouble = isTap && e.timeStamp - lastTap <= DOUBLE_TAP_MS
+    lastTap = isTap && !isDouble ? e.timeStamp : Number.NEGATIVE_INFINITY
+    return isDouble
+  }
 }
 
 /** most results drawn at once; a longer query narrows the rest */

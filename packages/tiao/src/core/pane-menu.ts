@@ -10,7 +10,6 @@ import type {
   PaneSpacing,
   PaneStyle,
   PaneTheme,
-  PinRounding,
 } from './pane'
 import { withoutPersisting } from './util'
 
@@ -46,13 +45,7 @@ export interface PaneMenuSpacing {
   set(v: PaneSpacing): void
 }
 
-/** how round the pinned cards are; only the notch offers it */
-export interface PaneMenuPinRounding {
-  get(): PinRounding
-  set(v: PinRounding): void
-}
-
-/** an on/off setting (hiding, glass, hover controls) */
+/** an on/off setting (hiding, glass, minimal mode) */
 export interface PaneMenuToggle {
   get(): boolean
   set(v: boolean): void
@@ -84,7 +77,6 @@ export interface PaneMenuHost {
   hiding?: PaneMenuToggle
   /** floating panes and the notch draw translucent and frosted */
   glass?: PaneMenuToggle
-  pinRounding?: PaneMenuPinRounding
   /** drop below the host instead of beside it (the notch bar is too narrow) */
   menuBelow?: boolean
   /** global settings: light / dark / system as icons, without the extra themes */
@@ -113,13 +105,6 @@ const FONT_OPTIONS: Record<string, PaneFont> = {
   Geist: 'geist',
   System: 'system',
   'ABC Areal': 'areal',
-}
-
-const PIN_ROUNDING_OPTIONS: Record<string, PinRounding> = {
-  'Fully Rounded': 'full',
-  Rounded: 'l',
-  'Slightly Rounded': 's',
-  Square: 'none',
 }
 
 /** quick accent swatches, loosely based on syntax-highlighting palettes */
@@ -203,7 +188,6 @@ function buildMenu(host: PaneMenuHost): { shell: HTMLElement; refresh: () => voi
     accent: host.getAccent(),
     numbers: host.getNumbers(),
     hoverControls: host.hoverControls.get(),
-    pinRounding: host.pinRounding?.get() ?? 'l',
   }
   const menuPane = host.createPane({ container: shell, menu: false, storage: false, size: 's' })
   host.onDispose(() => menuPane.dispose())
@@ -237,24 +221,10 @@ function buildMenu(host: PaneMenuHost): { shell: HTMLElement; refresh: () => voi
   const numbersBinding = menuPane.addBinding(settings, 'numbers', { label: 'Numbers' })
   onEdit(numbersBinding, (v) => host.setNumbers(v))
   const hoverControlsBinding = menuPane.addBinding(settings, 'hoverControls', {
-    label: 'Hover Controls',
+    label: 'Minimal mode',
   })
   onEdit(hoverControlsBinding, (v) => host.hoverControls.set(v))
   menuPane.addSeparator()
-
-  const { pinRounding } = host
-  if (pinRounding) {
-    const binding = menuPane.addBinding(settings, 'pinRounding', {
-      label: 'Pinned Style',
-      options: PIN_ROUNDING_OPTIONS,
-    })
-    onEdit(binding, (v) => pinRounding.set(v))
-    refreshers.push(() => {
-      settings.pinRounding = pinRounding.get()
-      binding.refresh()
-    })
-    menuPane.addSeparator()
-  }
 
   if (font) {
     const binding = menuPane.addBinding(settings, 'font', {
@@ -270,7 +240,7 @@ function buildMenu(host: PaneMenuHost): { shell: HTMLElement; refresh: () => voi
   if (fontSize) {
     const row = segmentedRow(
       host,
-      'Font Size',
+      'Font size',
       [
         { label: 'S', value: 'small', title: 'Small' },
         { label: 'M', value: 'normal', title: 'Normal' },

@@ -20,11 +20,9 @@ import {
   type PaneMenuFont,
   type PaneMenuFontSize,
   type PaneMenuHost,
-  type PaneMenuPinRounding,
   type PaneMenuSpacing,
   type PaneMenuToggle,
 } from './pane-menu'
-import { SEARCH_KEY_HINT } from './search'
 import { tooltip } from './tooltip'
 
 /** the notch menu drives one theme, style, and accent for every pane at once */
@@ -38,7 +36,6 @@ export interface NotchHost
     | 'spacing'
     | 'hiding'
     | 'glass'
-    | 'pinRounding'
     | 'font'
     | 'menuBelow'
     | 'onDispose'
@@ -49,9 +46,10 @@ export interface NotchHost
   spacing: PaneMenuSpacing
   hiding: PaneMenuToggle
   glass: PaneMenuToggle
-  pinRounding: PaneMenuPinRounding
   getHidden(): boolean
   toggleHidden(): void
+  /** whether the panes can dock to the sidebar, which only the window's can */
+  dockable: boolean
   getDocked(): boolean
   toggleDocked(): void
   /** restore every bound value and pane position to the default the code declared */
@@ -89,6 +87,12 @@ export interface Notch {
   sync(): void
   /** re-read the override count and undo/redo state (cheap; runs after value changes) */
   syncValues(): void
+  /**
+   * Ride the top of `scope` instead of the window (null for the window). There
+   * it stays shown, unless `hiding` lets it retreat like the window's until the
+   * pointer nears the scope's top edge.
+   */
+  setScope(scope: HTMLElement | null, hiding: boolean): void
   dispose(): void
 }
 
@@ -194,6 +198,7 @@ export function createNotch(host: NotchHost): Notch {
     moreBtn,
     moreMenu,
   } = chrome
+  if (!host.dockable) dockBtn.remove()
 
   const disposers: (() => void)[] = []
 
@@ -217,7 +222,6 @@ export function createNotch(host: NotchHost): Notch {
     spacing: host.spacing,
     hiding: host.hiding,
     glass: host.glass,
-    pinRounding: host.pinRounding,
     iconThemes: true,
     onDispose: (fn) => disposers.push(fn),
   })
@@ -231,7 +235,21 @@ export function createNotch(host: NotchHost): Notch {
     near = next
     element.classList.toggle('tiao-notch-near', next)
   }
-  const onMove = (e: PointerEvent) => setNear(e.clientY <= REVEAL_BAND)
+  let scope: HTMLElement | null = null
+  let scopeHides = false
+  const onMove = (e: PointerEvent) => {
+    if (!scope) {
+      setNear(e.clientY <= REVEAL_BAND)
+      return
+    }
+    // the band straddles the scope's top edge, over its width
+    const rect = scope.getBoundingClientRect()
+    setNear(
+      e.clientX >= rect.left &&
+        e.clientX <= rect.right &&
+        Math.abs(e.clientY - rect.top) <= REVEAL_BAND,
+    )
+  }
   // pointer left the window entirely, so no further move will retract the bar
   const onLeave = () => setNear(false)
   const stopWatching = () => {
@@ -295,8 +313,9 @@ export function createNotch(host: NotchHost): Notch {
       dockBtn.classList.toggle('tiao-notch-on', docked)
     }
 
-    // the retreat itself is CSS; this arms it and only then watches the pointer
-    const hiding = host.hiding.get()
+    // the retreat itself is CSS; this arms it and only then watches the pointer.
+    // It keeps the window's edge clear, so a notch on a scope element stays put unless it opted in
+    const hiding = host.hiding.get() && (!scope || scopeHides)
     if (hiding !== lastHiding) {
       lastHiding = hiding
       element.classList.toggle('tiao-notch-auto-hide', hiding)
@@ -367,7 +386,7 @@ export function createNotch(host: NotchHost): Notch {
   disposers.push(
     tooltip(hideBtn, () => (host.getHidden() ? 'Show panes (H)' : 'Hide panes (H)')),
     tooltip(dockBtn, () => (host.getDocked() ? 'Undock' : 'Dock to sidebar')),
-    tooltip(searchBtn, () => `Search (${SEARCH_KEY_HINT})`),
+    tooltip(searchBtn, () => 'Search (TT)'),
     tooltip(gear, () => 'Settings'),
     tooltip(moreBtn, () => 'More'),
     tooltip(undoBtn, () => 'Undo'),
@@ -383,6 +402,14 @@ export function createNotch(host: NotchHost): Notch {
     element,
     sync,
     syncValues,
+    setScope(next, hiding) {
+      scope = next
+      scopeHides = hiding
+      setNear(false)
+      element.classList.toggle('tiao-notch-scoped', next !== null)
+      ;(next ?? doc.body).append(element)
+      sync()
+    },
     dispose() {
       hideBtn.removeEventListener('click', onHide)
       dockBtn.removeEventListener('click', onDock)

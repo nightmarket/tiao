@@ -1,8 +1,8 @@
 import { draggable, gearIcon, h, searchIcon, withDocument } from './dom'
-import type { PaneStyle, PaneTheme } from './pane'
+import type { Namespace, PaneStyle, PaneTheme } from './pane'
 import { createPaneMenu, type PaneMenuHost } from './pane-menu'
 import { tooltip } from './tooltip'
-import { clamp, jsonStore } from './util'
+import { clamp, type JSONStore, jsonStore } from './util'
 
 /** page edge the sidebar sits against */
 export type DockSide = 'left' | 'right'
@@ -10,6 +10,8 @@ export type DockSide = 'left' | 'right'
 /** the sidebar menu drives the same settings a pane menu does, for every pane */
 export interface DockHost
   extends Omit<PaneMenuHost, 'element' | 'placement' | 'sides' | 'onDispose'> {
+  /** whose sidebar: the window's, beside the page, or a rooted namespace's, inside its element */
+  scope: Namespace
   /** filter every docked pane at once */
   filter(query: string): void
 }
@@ -39,14 +41,25 @@ const DRAWER_HEIGHT_VAR = 'var(--tiao-drawer-height)'
 /** id the drawer button points its aria-controls at */
 const DRAWER_ID = 'tiao-drawer'
 
-const store = jsonStore<DockState>('tiao:dock')
+const stores = new Map<string, JSONStore<DockState>>()
 
-export function readDockState(): DockState {
-  return store.get()
+/** the window's sidebar state, or a rooted namespace's own */
+function storeFor(scope: Namespace): JSONStore<DockState> {
+  const key = scope.root ? `tiao:dock:${scope.name}` : 'tiao:dock'
+  let store = stores.get(key)
+  if (!store) {
+    store = jsonStore<DockState>(key)
+    stores.set(key, store)
+  }
+  return store
 }
 
-export function writeDockState(patch: DockState): void {
-  store.patch(patch)
+export function readDockState(scope: Namespace): DockState {
+  return storeFor(scope).get()
+}
+
+export function writeDockState(scope: Namespace, patch: DockState): void {
+  storeFor(scope).patch(patch)
 }
 
 /** the sidebar element and the body its panes stack into */
@@ -68,22 +81,29 @@ interface DockEntry extends DockShell {
   disposers: (() => void)[]
 }
 
-const docks = new WeakMap<Document, DockEntry>()
+const docks = new WeakMap<Namespace, DockEntry>()
 
-/** sidebar shell for this document, or null while panes are floating */
-export function dockRoot(doc: Document): HTMLElement | null {
-  return docks.get(doc)?.root ?? null
+/** sidebar shell for this namespace, or null while its panes are floating */
+export function dockRoot(scope: Namespace): HTMLElement | null {
+  return docks.get(scope)?.root ?? null
 }
 
 /** element docked panes are stacked into */
-export function dockBody(doc: Document): HTMLElement | null {
-  return docks.get(doc)?.body ?? null
+export function dockBody(scope: Namespace): HTMLElement | null {
+  return docks.get(scope)?.body ?? null
 }
 
-/** Create the sidebar (once per document) and reflow the page beside it. */
+/** where the sidebar publishes its footprint: the namespace's root, or the page */
+const layoutHost = (scope: Namespace) => scope.root ?? scope.document.documentElement
+
+/**
+ * Create the sidebar (once per namespace). The window's reflows the page
+ * beside it; a rooted namespace's sits over the side of its element.
+ */
 export function ensureDock(host: DockHost): DockShell {
-  const doc = host.document
-  const existing = docks.get(doc)
+  const { scope } = host
+  const doc = scope.document
+  const existing = docks.get(scope)
   if (existing) return existing
 
   const chrome = withDocument(doc, () => {
@@ -119,7 +139,7 @@ export function ensureDock(host: DockHost): DockShell {
     open: false,
     disposers: [],
   }
-  docks.set(doc, entry)
+  docks.set(scope, entry)
 
   const { searchBtn, searchInput, searchbar, gear, handle } = chrome
   const setSearchOpen = (open: boolean) => {
@@ -170,10 +190,10 @@ export function ensureDock(host: DockHost): DockShell {
     setNumbers: host.setNumbers,
     hoverControls: host.hoverControls,
     sides: {
-      getSide: () => dockSide(),
+      getSide: () => dockSide(scope),
       setSide: (side) => {
-        writeDockState({ side })
-        applySide(doc, entry)
+        writeDockState(scope, { side })
+        applySide(scope, entry)
       },
     },
     onDispose: (fn) => entry.disposers.push(fn),
@@ -182,37 +202,41 @@ export function ensureDock(host: DockHost): DockShell {
   gear.addEventListener('click', onGearClick)
   entry.disposers.push(() => gear.removeEventListener('click', onGearClick))
 
-  installResize(doc, entry, handle)
-  installFixedInsets(doc, entry)
-
-  applyWidth(doc, readDockState().width)
-  doc.body.prepend(entry.root)
-  applySide(doc, entry)
+  installResize(scope, entry, handle)
+  applyWidth(scope, readDockState(scope).width)
+  if (scope.root) {
+    entry.root.classList.add('tiao-dock-rooted')
+    scope.root.append(entry.root)
+  } else {
+    installFixedInsets(doc, entry)
+    doc.body.prepend(entry.root)
+  }
+  applySide(scope, entry)
   return entry
 }
 
 /** Remove the sidebar and restore the page's original padding. */
-export function closeDock(doc: Document): void {
-  const entry = docks.get(doc)
+export function closeDock(scope: Namespace): void {
+  const entry = docks.get(scope)
   if (!entry) return
-  docks.delete(doc)
+  docks.delete(scope)
   for (const fn of entry.disposers) fn()
   entry.root.remove()
-  const root = doc.documentElement
+  const host = layoutHost(scope)
   for (const prop of ['--tiao-dock-width', '--tiao-dock-inset-start', '--tiao-dock-inset-end']) {
-    root.style.removeProperty(prop)
+    host.style.removeProperty(prop)
   }
-  root.classList.remove('tiao-docked')
-  restorePadding(doc, entry)
+  host.classList.remove('tiao-docked')
+  if (!scope.root) restorePadding(scope.document, entry)
 }
 
 /** Hide the sidebar (and its page offset) without losing the docked state. */
-export function setDockVisible(doc: Document, visible: boolean): void {
-  const entry = docks.get(doc)
+export function setDockVisible(scope: Namespace, visible: boolean): void {
+  const entry = docks.get(scope)
   if (!entry || entry.visible === visible) return
   entry.visible = visible
   entry.root.classList.toggle('tiao-hidden', !visible)
-  applyLayout(doc, entry)
+  applyLayout(scope, entry)
 }
 
 /**
@@ -220,8 +244,8 @@ export function setDockVisible(doc: Document, visible: boolean): void {
  * sidebar beside it. The drawer starts closed, so it neither covers nor pads
  * the page until it is opened.
  */
-export function setDockDrawer(doc: Document, drawer: boolean): void {
-  const entry = docks.get(doc)
+export function setDockDrawer(scope: Namespace, drawer: boolean): void {
+  const entry = docks.get(scope)
   if (!entry || entry.drawer === drawer) return
   entry.drawer = drawer
   entry.open = false
@@ -236,44 +260,47 @@ export function setDockDrawer(doc: Document, drawer: boolean): void {
   } else {
     for (const attr of ['id', 'role', 'aria-label']) root.removeAttribute(attr)
   }
-  applyLayout(doc, entry)
+  applyLayout(scope, entry)
 }
 
 /** Slide the drawer up, pushing the page up with it, or back down. */
-export function setDrawerOpen(doc: Document, open: boolean): void {
-  const entry = docks.get(doc)
+export function setDrawerOpen(scope: Namespace, open: boolean): void {
+  const entry = docks.get(scope)
   if (!entry?.drawer || entry.open === open) return
   entry.open = open
   entry.root.classList.toggle('tiao-open', open)
   entry.root.toggleAttribute('inert', !open)
-  applyLayout(doc, entry)
+  applyLayout(scope, entry)
 }
 
-function dockSide(): DockSide {
-  return readDockState().side ?? 'left'
+function dockSide(scope: Namespace): DockSide {
+  return readDockState(scope).side ?? 'left'
 }
 
-/** Move the sidebar to its page edge and offset the page from that side. */
-function applySide(doc: Document, entry: DockEntry): void {
-  entry.root.classList.toggle('tiao-dock-end', dockSide() === 'right')
-  applyLayout(doc, entry)
+/** Move the sidebar to its edge and offset what it sits beside from that side. */
+function applySide(scope: Namespace, entry: DockEntry): void {
+  entry.root.classList.toggle('tiao-dock-end', dockSide(scope) === 'right')
+  applyLayout(scope, entry)
 }
 
 /**
- * Reflow the page into what the sidebar leaves, then publish that footprint.
+ * Publish the sidebar's footprint, then reflow the page into what it leaves.
  * Body padding only moves elements in normal flow: fixed page chrome is laid
  * out against the viewport, so a navbar has to read the insets to step aside.
+ * A rooted namespace's sidebar covers the side of its element and leaves the
+ * page alone; its pinned cards read the insets to stay centered beside it.
  */
-function applyLayout(doc: Document, entry: DockEntry): void {
-  const root = doc.documentElement
-  const side = dockSide()
+function applyLayout(scope: Namespace, entry: DockEntry): void {
+  const host = layoutHost(scope)
+  const side = dockSide(scope)
   // the drawer sits under the page, so it leaves the sides alone
   const sidebar = entry.visible && !entry.drawer
-  root.style.setProperty('--tiao-dock-inset-start', sidebar && side === 'left' ? WIDTH_VAR : '0px')
-  root.style.setProperty('--tiao-dock-inset-end', sidebar && side === 'right' ? WIDTH_VAR : '0px')
-  root.classList.toggle('tiao-docked', sidebar)
-  if (sidebar || (entry.visible && entry.open)) applyPadding(doc, entry)
-  else restorePadding(doc, entry)
+  host.style.setProperty('--tiao-dock-inset-start', sidebar && side === 'left' ? WIDTH_VAR : '0px')
+  host.style.setProperty('--tiao-dock-inset-end', sidebar && side === 'right' ? WIDTH_VAR : '0px')
+  host.classList.toggle('tiao-docked', sidebar)
+  if (scope.root) return
+  if (sidebar || (entry.visible && entry.open)) applyPadding(scope, entry)
+  else restorePadding(scope.document, entry)
 }
 
 /** marks page chrome the sidebar would cover; the CSS rule does the insetting */
@@ -370,20 +397,20 @@ function installFixedInsets(doc: Document, entry: DockEntry): void {
 }
 
 /** Drag the sidebar's outer edge to resize it; the page padding tracks along. */
-function installResize(doc: Document, entry: DockEntry, handle: HTMLElement): void {
+function installResize(scope: Namespace, entry: DockEntry, handle: HTMLElement): void {
   let baseW = 0
   // the handle is on the page-facing edge, so a right-side dock grows leftward
   let grow = 1
   const apply = (dx: number, last: boolean) => {
     const width = clamp(baseW + dx * grow, MIN_WIDTH, MAX_WIDTH)
-    applyWidth(doc, width)
-    if (last) writeDockState({ width })
+    applyWidth(scope, width)
+    if (last) writeDockState(scope, { width })
   }
   entry.disposers.push(
     draggable(handle, {
       onStart: () => {
         baseW = entry.root.getBoundingClientRect().width
-        grow = dockSide() === 'right' ? -1 : 1
+        grow = dockSide(scope) === 'right' ? -1 : 1
       },
       onMove: (s) => {
         if (s.moved) apply(s.dx, false)
@@ -395,12 +422,13 @@ function installResize(doc: Document, entry: DockEntry, handle: HTMLElement): vo
   )
 }
 
-function applyWidth(doc: Document, width: number | undefined): void {
+function applyWidth(scope: Namespace, width: number | undefined): void {
   const w = clamp(width ?? DEFAULT_WIDTH, MIN_WIDTH, MAX_WIDTH)
-  doc.documentElement.style.setProperty('--tiao-dock-width', `${w}px`)
+  layoutHost(scope).style.setProperty('--tiao-dock-width', `${w}px`)
 }
 
-function applyPadding(doc: Document, entry: DockEntry): void {
+function applyPadding(scope: Namespace, entry: DockEntry): void {
+  const doc = scope.document
   restorePadding(doc, entry)
   const style = doc.body.style
   if (entry.drawer) {
@@ -409,7 +437,7 @@ function applyPadding(doc: Document, entry: DockEntry): void {
     style.setProperty('padding-block-end', DRAWER_HEIGHT_VAR)
     return
   }
-  const edge = dockSide() === 'right' ? 'end' : 'start'
+  const edge = dockSide(scope) === 'right' ? 'end' : 'start'
   style.setProperty(`padding-inline-${edge}`, `var(--tiao-dock-inset-${edge})`)
 }
 

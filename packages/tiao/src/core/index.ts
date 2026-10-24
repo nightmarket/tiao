@@ -44,6 +44,7 @@ export {
 export { HISTORY_LIMIT } from './history'
 export type {
   Anchor,
+  Namespace,
   PaneFont,
   PaneFontSize,
   PaneOptions,
@@ -69,6 +70,15 @@ export { globalRegistry, PluginRegistry, registerPlugin } from './plugin'
 export { injectCss, injectStyles } from './styles'
 export { onFpsSample, onInterval, onTick } from './ticker'
 export { tooltip } from './tooltip'
-export { clamp, decimalCount, formatNumber, mapRange, round2, roundN, snap } from './util'
+export {
+  clamp,
+  decimalCount,
+  formatNumber,
+  mapRange,
+  round2,
+  roundN,
+  setTiaoStorage,
+  snap,
+} from './util'
 export type { ValueListener, ValueMeta } from './value'
 export { Value } from './value'

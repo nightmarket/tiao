@@ -48,8 +48,12 @@
   --tiao-neutral-900: #171717;
   --tiao-neutral-950: #0a0a0a;
   --tiao-bg-solid: #ffffff;
-  /* the glass surface (global Glass setting); see .tiao-glass */
-  --tiao-bg: color-mix(in srgb, var(--tiao-bg-solid) 80%, transparent);
+  /* how opaque the glass is (global Glass setting; see .tiao-glass): a light
+     pane stays near white over a dark page, so its body reads lighter than its
+     header, and a pinned card frostier than a pane but still legible */
+  --tiao-glass-mix: 94%;
+  --tiao-pin-glass-mix: 86%;
+  --tiao-bg: color-mix(in srgb, var(--tiao-bg-solid) var(--tiao-glass-mix), transparent);
   --tiao-fg: var(--tiao-neutral-950);
   --tiao-fg-strong: var(--tiao-neutral-800);
   --tiao-fg-muted: var(--tiao-neutral-700);
@@ -58,7 +62,7 @@
   --tiao-fg-soft: var(--tiao-neutral-500);
   --tiao-fg-dim: color-mix(in srgb, var(--tiao-neutral-400), var(--tiao-neutral-500));
   --tiao-fg-faint: var(--tiao-neutral-400);
-  --tiao-titlebar-bg: rgba(15, 23, 42, 0.055);
+  --tiao-titlebar-bg: rgba(15, 23, 42, 0.085);
   --tiao-folder-caret: color-mix(in srgb, var(--tiao-fg) 32%, var(--tiao-bg-solid));
   --tiao-folder-caret-hover: color-mix(in srgb, var(--tiao-fg) 55%, var(--tiao-bg-solid));
   --tiao-depth-line: color-mix(in srgb, var(--tiao-fg) 6%, var(--tiao-bg-solid));
@@ -76,6 +80,9 @@
   /* the dark themes' yellow washes out on white; this keeps 3:1 for thin marks */
   --tiao-accent: #d97706;
   --tiao-accent-fg: #171717;
+  /* the accent as text on the pane: darkened toward the ink in light themes, so a
+     pale accent (a yellow, say) still reads */
+  --tiao-accent-ink: color-mix(in srgb, var(--tiao-accent) 60%, var(--tiao-fg));
   --tiao-border: rgba(15, 23, 42, 0.1);
   --tiao-graph-accent: #a3a3a3;
   --tiao-graph-fill-opacity: 0.28;
@@ -184,6 +191,18 @@
   --tiao-shadow-popup: 0 8px 32px rgba(0, 0, 0, 0.55), 0 0 0 1px var(--tiao-border);
   --tiao-shadow-sheet: 0 -8px 32px rgba(0, 0, 0, 0.55), 0 0 0 1px var(--tiao-border);
   --tiao-shadow-raised: 0 1px 3px rgba(0, 0, 0, 0.35);
+}
+
+/* every theme but the default light one is dark */
+:is(.tiao-pane, .tiao-notch, .tiao-dock, .tiao-drawer-button):is(
+    .tiao-theme-dark,
+    .tiao-theme-solarized,
+    .tiao-theme-nord,
+    .tiao-theme-catppuccin
+  ) {
+  --tiao-glass-mix: 80%;
+  --tiao-pin-glass-mix: 60%;
+  --tiao-accent-ink: var(--tiao-accent);
 }
 
 .tiao-pane.tiao-theme-solarized,
@@ -368,7 +387,7 @@
 }
 
 /*
- * Glass (global setting, off by default): a translucent, frosted surface for
+ * Glass (global setting, on by default): a translucent, frosted surface for
  * floating panes and the notch. Opaque is the default because the blur re-runs
  * every frame the canvas underneath changes.
  */
@@ -396,6 +415,10 @@
   box-sizing: border-box;
 }
 
+/* a namespace rooted in an element (Pane.namespace): its panes float inside it and scroll with it */
+.tiao-pane.tiao-floating.tiao-rooted {
+  position: absolute;
+}
 .tiao-pane.tiao-floating {
   position: fixed;
   z-index: 9999;
@@ -416,6 +439,12 @@
   :is(.tiao-pane, .tiao-notch, .tiao-dock, .tiao-drawer-button, .tiao-pins)
   :is(*, *::before, *::after) {
   transition: none !important;
+}
+
+/* drawn once Geist has loaded (see fonts.ts), never for a frame in the fallback face first */
+:root[data-tiao-font="geist"][data-tiao-font-loading]
+  :is(.tiao-pane, .tiao-notch, .tiao-dock, .tiao-drawer-button, .tiao-pins) {
+  visibility: hidden;
 }
 
 /*
@@ -454,6 +483,15 @@
   transition:
     opacity 0.16s ease,
     transform 0.16s ease;
+}
+/* a namespace rooted in an element (Pane.namespace): rides that element's top edge instead of the window's */
+.tiao-notch.tiao-notch-scoped {
+  position: absolute;
+}
+/* centered on what its sidebar leaves of the element, clear of the sidebar's own header */
+.tiao-docked > .tiao-notch.tiao-notch-scoped {
+  left: var(--tiao-dock-inset-start);
+  right: var(--tiao-dock-inset-end);
 }
 /*
  * armed to hide: fade + slide the bar up. tiao-notch-near comes from tracking
@@ -528,7 +566,7 @@
   padding: 0 8px 0 7px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--tiao-accent) 16%, transparent);
-  color: var(--tiao-accent);
+  color: var(--tiao-accent-ink);
   font-variant-numeric: tabular-nums;
   line-height: 1;
   white-space: nowrap;
@@ -545,7 +583,7 @@
 }
 .tiao-notch-changes:disabled {
   background: none;
-  color: var(--tiao-fg-faint);
+  color: var(--tiao-fg-dim);
   cursor: default;
 }
 .tiao-notch-changes:disabled .tiao-notch-changes-dot {
@@ -651,6 +689,10 @@
   width: 7px;
   cursor: ew-resize;
 }
+/* a rooted namespace's (Pane.namespace) sits over the side of its element instead of the page's */
+.tiao-dock.tiao-dock-rooted {
+  position: absolute;
+}
 /* anchored to the far edge instead: mirror the border and the drag strip */
 .tiao-dock.tiao-dock-end {
   inset-inline-start: auto;
@@ -676,6 +718,10 @@
 }
 .tiao-pane.tiao-docked + .tiao-pane.tiao-docked {
   border-top: 1px solid var(--tiao-border);
+}
+/* closes the list off from the empty sidebar below it */
+.tiao-pane.tiao-docked:last-child {
+  border-bottom: 1px solid var(--tiao-border);
 }
 /* both states, or the collapsed rule further down rounds the hover highlight */
 .tiao-pane.tiao-docked > .tiao-titlebar,
@@ -1285,16 +1331,12 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* changed from the default its code declared */
-.tiao-row-changed > .tiao-label::before {
-  content: "";
-  display: inline-block;
-  width: 4px;
-  height: 4px;
-  margin: 0 5px 1px 0;
-  border-radius: 50%;
-  background: var(--tiao-accent);
-  vertical-align: middle;
+/* changed from the default its code declared: a dot drawn as a background, so the label's first letter stays its first letter */
+.tiao-row-changed > .tiao-label {
+  padding-inline-start: 9px;
+  background:
+    radial-gradient(circle closest-side, var(--tiao-accent) 90%, transparent) no-repeat 0 50% / 4px
+    4px;
 }
 .tiao-control {
   flex: 1;
@@ -1320,8 +1362,9 @@
   padding: var(--tiao-folder-pad-y) 0;
   border-radius: var(--tiao-radius-sm);
 }
-/* more air between sections than between rows */
-.tiao-rack > .tiao-folder:not(:first-child) {
+/* more air between sections than between rows: after rows or an open
+   section, but not between collapsed headers, which stack like rows */
+.tiao-rack > :not(.tiao-folder:not(.tiao-expanded, .tiao-search-open)) + .tiao-folder {
   margin-top: calc(var(--tiao-folder-pad-y) * 2);
 }
 /* section highlight: inset on top/bottom so the header and last control
@@ -2170,16 +2213,14 @@
   left: auto;
   right: calc(100% + 6px);
 }
-/* the notch bar is too narrow to open beside: drop centered underneath it.
-   Centered by a fixed half-width margin, not translate(-50%), which would
-   land an odd width on a half pixel and blur it on 1x displays */
+/* the notch bar is too narrow to open beside: drop under its settings button,
+   the bar's last item, right edges aligned */
 .tiao-pane-menu.tiao-menu-below {
   top: calc(100% + 6px);
-  left: 50%;
-  right: auto;
+  left: auto;
+  right: 0;
   box-sizing: border-box;
   width: 176px;
-  margin-left: -88px;
 }
 /* no room beside a full-width drawer either: drop under its header, inside it */
 .tiao-dock-drawer > .tiao-pane-menu,
@@ -2598,29 +2639,21 @@ body:has(> .tiao-drawer-controls[data-tiao-corner^="bottom"]) > .tiao-pins {
 body:has(> .tiao-dock-drawer.tiao-open) > .tiao-pins {
   bottom: calc(var(--tiao-drawer-height) + 32px + var(--tiao-pins-lift));
 }
-/* larger and in the heading face rather than mono: labels lead, values follow.
-   Labels and values sit the row padding in from the card's edges in every
-   card, and a slider's track is the whole card */
+/* a rooted namespace's cards (Pane.namespace) sit at the bottom center of its element */
+.tiao-pins.tiao-pins-rooted {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 16px;
+}
+/* centered on what its sidebar leaves of the element */
+.tiao-docked > .tiao-pins.tiao-pins-rooted {
+  left: var(--tiao-dock-inset-start);
+  right: var(--tiao-dock-inset-end);
+}
 .tiao-pane.tiao-pin {
-  --tiao-font-mono: var(--tiao-font);
-  --tiao-font-mono-settings: normal;
-  --tiao-font-size: 15px;
-  --tiao-font-size-mono: 15px;
-  --tiao-row-height: 44px;
-  --tiao-row-pad-x: 16px;
-  --tiao-row-pad-y: 0px;
-  --tiao-handle-height: 20px;
-  --tiao-icon-size: 16px;
-  --tiao-gap: 12px;
-  /* the global Pinned > Rounding setting */
-  --tiao-pin-radius: 12px;
-  /* a toggle, swatch, or pad button at the end of the row sits concentric with
-     the card's corner: inset as far from the edge as from the top and bottom,
-     and rounded by the corner radius less that inset */
-  --tiao-pin-item: calc(var(--tiao-control-height) * 0.6);
-  --tiao-pin-item-inset: calc((var(--tiao-row-height) - var(--tiao-pin-item)) / 2);
-  --tiao-pin-item-radius: max(0px, var(--tiao-pin-radius) - var(--tiao-pin-item-inset));
-  width: min(320px, 100% - 32px);
+  --tiao-pin-radius: 10px;
+  width: min(272px, 100% - 32px);
   border-radius: var(--tiao-pin-radius);
   /* a pane's deep shadow would pool between stacked cards; these sit just above the page */
   box-shadow:
@@ -2628,21 +2661,46 @@ body:has(> .tiao-dock-drawer.tiao-open) > .tiao-pins {
     var(--tiao-shadow-raised);
   pointer-events: auto;
 }
-:root[data-tiao-pin-rounding="full"] .tiao-pane.tiao-pin {
-  --tiao-pin-radius: calc(var(--tiao-row-height) / 2);
+/* frostier than a pane, since a card floats over the scene on its own */
+.tiao-pane.tiao-pin.tiao-glass {
+  --tiao-bg: color-mix(in srgb, var(--tiao-bg-solid) var(--tiao-pin-glass-mix), transparent);
+  --tiao-backdrop-filter: blur(24px) saturate(1.6);
 }
-:root[data-tiao-pin-rounding="s"] .tiao-pane.tiao-pin {
-  --tiao-pin-radius: 6px;
-}
-:root[data-tiao-pin-rounding="none"] .tiao-pane.tiao-pin {
-  --tiao-pin-radius: 0px;
+/* larger and in the heading face rather than mono. Labels and values sit the
+   row padding in from the card's edges in every card, and a slider's track is
+   the whole card. Sized on the row, so the card's popups (a color picker's
+   fields) keep a pane's sizes */
+.tiao-pin > .tiao-row {
+  --tiao-font-mono: var(--tiao-font);
+  --tiao-font-mono-settings: normal;
+  --tiao-font-size: 14px;
+  --tiao-font-size-mono: 14px;
+  --tiao-row-height: 40px;
+  --tiao-control-height: calc(var(--tiao-row-height) - 2px);
+  --tiao-row-pad-x: 12px;
+  --tiao-row-pad-y: 0px;
+  --tiao-handle-height: 18px;
+  --tiao-icon-size: 14px;
+  --tiao-gap: 10px;
+  /* a toggle, swatch, or pad button at the end of the row sits concentric with
+     the card's corner: inset as far from the edge as from the top and bottom,
+     and rounded by the corner radius less that inset */
+  --tiao-pin-item: calc(var(--tiao-control-height) * 0.6);
+  --tiao-pin-item-inset: calc((var(--tiao-row-height) - var(--tiao-pin-item)) / 2);
+  --tiao-pin-item-radius: max(0px, var(--tiao-pin-radius) - var(--tiao-pin-item-inset));
+  font-size: var(--tiao-font-size);
 }
 .tiao-pin .tiao-row::before {
   display: none;
 }
 .tiao-pin .tiao-label,
-.tiao-slider-label {
-  color: var(--tiao-fg);
+.tiao-slider-label,
+.tiao-angle-label {
+  color: var(--tiao-fg-muted);
+}
+/* a card reads as a title, so its label starts with a capital */
+:is(.tiao-pin .tiao-label, .tiao-slider-label, .tiao-angle-label)::first-letter {
+  text-transform: uppercase;
 }
 .tiao-pane.tiao-pin :where(.tiao-num-input, .tiao-text-input, .tiao-select, .tiao-color-text) {
   color: var(--tiao-fg-soft);
@@ -2652,15 +2710,21 @@ body:has(> .tiao-dock-drawer.tiao-open) > .tiao-pins {
   background: transparent;
 }
 .tiao-pin
-  .tiao-row:has(:is(.tiao-check, .tiao-color-swatch, .tiao-point-pad-toggle, .tiao-angle-knob)) {
+  .tiao-row:not(.tiao-row-full):has(
+    :is(.tiao-check, .tiao-color-swatch, .tiao-point-pad-toggle, .tiao-angle-knob)
+  ) {
   padding-right: var(--tiao-pin-item-inset);
 }
 .tiao-pin :is(.tiao-check, .tiao-color-swatch, .tiao-point-pad-toggle, .tiao-angle-knob) {
   width: var(--tiao-pin-item);
   height: var(--tiao-pin-item);
 }
-.tiao-pin :is(.tiao-check, .tiao-color-swatch, .tiao-point-pad-toggle) {
+.tiao-pin :is(.tiao-check, .tiao-point-pad-toggle) {
   border-radius: var(--tiao-pin-item-radius);
+}
+/* a round swatch, the same size and inset as a pinned dial */
+.tiao-pin .tiao-color-swatch {
+  border-radius: 50%;
 }
 /* an outline rather than a filled chip, so the on state is the only fill */
 .tiao-pin .tiao-check {
@@ -2702,9 +2766,10 @@ body:has(> .tiao-dock-drawer.tiao-open) > .tiao-pins {
   border-radius: var(--tiao-pin-radius);
   background: none;
 }
-/* subtle at rest, stronger while the slider is in use */
+/* subtle at rest, stronger while the slider is in use; square where it ends, since the
+   track's rounding already clips where it starts */
 .tiao-pin .tiao-row-full .tiao-slider-fill {
-  border-radius: var(--tiao-pin-radius);
+  border-radius: 0;
   background: color-mix(in srgb, var(--tiao-fg) 7%, transparent);
   transition: background 0.12s ease;
 }
@@ -2717,6 +2782,28 @@ body:has(> .tiao-dock-drawer.tiao-open) > .tiao-pins {
 .tiao-pin .tiao-row-full .tiao-num-input {
   height: 100%;
   padding-right: var(--tiao-row-pad-x);
+}
+/* a pinned angle is the card: label, value, then the dial, dragged from anywhere */
+.tiao-pin .tiao-row-full .tiao-angle {
+  gap: 6px;
+  height: var(--tiao-row-height);
+  padding: 0 var(--tiao-pin-item-inset) 0 var(--tiao-row-pad-x);
+  cursor: ew-resize;
+}
+.tiao-angle-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* about as wide as "359.9°", so the label gets the rest */
+.tiao-pin .tiao-angle-field {
+  flex: none;
+  width: 4.5em;
+}
+.tiao-pin .tiao-angle-field .tiao-num-input {
+  text-align: right;
 }
 /* a pinned slider's label, at the left end of its track */
 .tiao-slider-label {
@@ -2879,6 +2966,13 @@ body:has(> .tiao-dock-drawer.tiao-open) > .tiao-pins {
     .tiao-row:not(:hover, .tiao-row-active, :has(:focus-visible))
     .tiao-select {
     padding-right: 6px;
+  }
+  /* a pinned dial keeps a faint disc, so it still reads as a dial */
+  :root
+    .tiao-pane.tiao-pin
+    .tiao-row:not(:hover, .tiao-row-active, :has(:focus-visible))
+    .tiao-angle-knob {
+    background: color-mix(in srgb, var(--tiao-fg) 9%, transparent);
   }
   /* a hidden track's readouts sit at rest; !important beats the inline
      transform that dodges them around the handle */

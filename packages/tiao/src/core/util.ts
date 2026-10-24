@@ -131,6 +131,21 @@ export function withoutPersisting(fn: () => void): void {
   }
 }
 
+let storageEnabled = true
+
+/**
+ * Keep every pane, notch, and sidebar out of localStorage, or let them back
+ * in. While it's off nothing saved is read and nothing is written: the page
+ * starts from what its code declares on every load, and what changes lives in
+ * memory until it reloads. Call it before mounting panes.
+ */
+export function setTiaoStorage(enabled: boolean): void {
+  storageEnabled = enabled
+}
+
+/** a store's last-seen raw value while storage is off; it matches nothing stored, so turning storage on re-reads */
+const OFF = Symbol('storage off')
+
 /** Persisted UI state, held as an object rather than re-parsed on every touch. */
 export interface JSONStore<T extends object> {
   get(): Readonly<Partial<T>>
@@ -146,13 +161,22 @@ export interface JSONStore<T extends object> {
  * clearing storage behind us, so cleared state is never resurrected.
  */
 export function jsonStore<T extends object>(key: string): JSONStore<T> {
-  let raw: string | null = null
+  let raw: string | null | typeof OFF = null
   let value: Partial<T> = {}
   /** previewed changes memory holds but storage has not seen yet */
   let pending = false
 
   /** re-parse only when storage no longer holds what we last saw */
   function sync(): Partial<T> {
+    if (!storageEnabled) {
+      // what was read before storage went off is dropped, so the page starts from its code
+      if (raw !== OFF) {
+        raw = OFF
+        value = {}
+        pending = false
+      }
+      return value
+    }
     const current = rawGet(key)
     if (current === raw) return value
     raw = current
@@ -182,6 +206,7 @@ export function jsonStore<T extends object>(key: string): JSONStore<T> {
           changed = true
         }
       }
+      if (!storageEnabled) return
       if (writesSuspended) {
         pending ||= changed
         return
@@ -194,9 +219,13 @@ export function jsonStore<T extends object>(key: string): JSONStore<T> {
       rawSet(key, raw)
     },
     clear() {
-      raw = null
       value = {}
       pending = false
+      if (!storageEnabled) {
+        raw = OFF
+        return
+      }
+      raw = null
       try {
         localStorage.removeItem(key)
       } catch {

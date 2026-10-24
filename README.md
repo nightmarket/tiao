@@ -2,9 +2,9 @@
 
 # tiao
 
-A themeable, draggable debug pane for tweaking parameters — tweakpane-style bindings with a modern look, a first-class React API, and a plug-and-play plugin system. Zero dependencies in core.
+A themeable, draggable debug pane for tweaking parameters, with a modern look, a first-class React API, and a plug-and-play plugin system. Zero dependencies in core.
 
-Built on ideas and code from [tweakpane](https://github.com/cocopon/tweakpane) by [cocopon](https://github.com/cocopon), [leva](https://github.com/pmndrs/leva) by [pmndrs](https://github.com/pmndrs), and [baku89](https://github.com/baku89).
+Built on ideas and code from [tweakpane](https://github.com/cocopon/tweakpane) by [cocopon](https://github.com/cocopon) and [leva](https://github.com/pmndrs/leva) by [pmndrs](https://github.com/pmndrs), and on ideas from [baku89](https://github.com/baku89). Their licenses are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## Install
 
@@ -12,15 +12,13 @@ Built on ideas and code from [tweakpane](https://github.com/cocopon/tweakpane) b
 npm install @nightmarket/tiao
 ```
 
-> **Note:** Published as `@nightmarket/tiao` under the Nightmarket npm org.
-
-One package. Import what you need via subpaths:
+Published on npm as [`@nightmarket/tiao`](https://www.npmjs.com/package/@nightmarket/tiao). One package. Import what you need via subpaths:
 
 | Import | What it is |
 | --- | --- |
 | `@nightmarket/tiao` | Production-safe `mountPane`; lazy in development and a no-op in production |
 | `@nightmarket/tiao/core` | Eager `Pane` API for panes that must exist in production |
-| `@nightmarket/tiao/react` | Leva-style hooks; UI lazy-loads and tree-shakes out of prod |
+| `@nightmarket/tiao/react` | Hooks that declare controls inline; UI lazy-loads and tree-shakes out of prod |
 | `@nightmarket/tiao/plugin-fps` | FPS graph blade |
 | `@nightmarket/tiao/plugin-bezier` | Cubic-bezier easing editor input |
 | `@nightmarket/tiao/plugin-radio-grid` | Segmented radio grid input |
@@ -87,7 +85,7 @@ Styles are injected automatically on first pane creation. To manage CSS yourself
 
 ### Persisted values
 
-Panes with an `id` remember every value you tweak under `tiao:<id>:values` and write it back into the bound object on the next mount, so a reload picks up where you left off. Each value is keyed by its folder path and label (falling back to the property key), so several `{ value }` uniforms in one folder keep their own saved copies. Anything missing (or saved in a shape the binding no longer accepts) falls back to the value the code declares. Monitors never persist, `{ persist: false }` opts a single binding out, and `storage: false` opts the whole pane out. The notch's reset button — `Pane.resetValues()` — puts every value back to its code default, snaps floating panes back to the position their code declared, and clears the saved copies.
+Panes with an `id` remember every value you tweak under `tiao:<id>:values` and write it back into the bound object on the next mount, so a reload picks up where you left off. Each value is keyed by its folder path and label (falling back to the property key), so several `{ value }` uniforms in one folder keep their own saved copies. Anything missing (or saved in a shape the binding no longer accepts) falls back to the value the code declares. Monitors never persist, `{ persist: false }` opts a single binding out, `storage: false` opts the whole pane out, and `setTiaoStorage(false)` (from any entry) keeps every pane, notch, and sidebar out of localStorage, so a page like a demo starts from its code on every load; call it before mounting panes. The notch's reset button — `Pane.resetValues()` — puts every value back to its code default, snaps floating panes back to the position their code declared, and clears the saved copies.
 
 Storage stays out of the way of the frame budget: each key is parsed once rather than on every read, writes that change nothing never happen, and a drag writes only the value it settles on — the frames in between are previews. Clearing `localStorage` (from devtools or the app) takes effect immediately; nothing cached is written back.
 
@@ -95,16 +93,17 @@ Storage stays out of the way of the frame budget: each key is parsed once rather
 
 - `anchor`: any corner, side center, or `'center'` (`'top-left'`, `'top-center'`, `'right-center'`, ...), or `container: element` for inline panes
 - Right-click an editable row for a small toolbar beside the pane: pin the row, or reset it to its code default.
-- A pinned row (`binding.pinned = true`) stays where it is and also gets a larger card in a stack at the bottom center of the page, in the heading face rather than mono; a slider card insets its label at the left of the track and keeps the value at the right. The card is a second view of the same value, so dragging either one moves both (and lands in undo), and it stays up while its pane is hidden or collapsed. Panes with an `id` remember their pins under `tiao:<id>:pins`.
-- Every settings menu has a Hover Controls switch (`Pane.setHoverControls()` / `Pane.hoverControls`, global and saved under `tiao:notch`): every row shows just its value until the pointer comes over it. Slider tracks, scrub grips, dropdown carets, and field backgrounds wait for the hover; ranges and vectors read as comma-separated lists (`20, 80`); text and dropdown values sit right-aligned, with color swatches, angle dials, and XY pad buttons after them. Screens that can't hover always show everything. Pinned cards always look this way, and the global settings' Pinned section sets how round they are (`Pane.setPinRounding()`: `'l'` by default, `'full'` pills, `'s'`, or `'none'`). Right-click a card for the same pin and reset actions as its row.
+- A pinned row (`binding.pinned = true`) stays where it is and also gets a larger card in a stack at the bottom center of the page (or of its namespace's root), in the heading face rather than mono; a slider card insets its label at the left of the track and keeps the value at the right, and an angle card turns as you drag anywhere across it. The card is a second view of the same value, so dragging either one moves both (and lands in undo), and it stays up while its pane is hidden or collapsed. Panes with an `id` remember their pins under `tiao:<id>:pins`.
+- Every settings menu has a Minimal mode switch (`Pane.setHoverControls()` / `Pane.hoverControls`, global and saved under `tiao:notch`): every row shows just its value until the pointer comes over it. Slider tracks, scrub grips, dropdown carets, and field backgrounds wait for the hover; ranges and vectors read as comma-separated lists (`20, 80`); text and dropdown values sit right-aligned, with color swatches, angle dials, and XY pad buttons after them. Screens that can't hover always show everything. Pinned cards always look this way. Right-click a card for the same pin and reset actions as its row.
 - Hover the title bar for a gear icon (or right-click the title bar) to open the Pane Settings panel: toggle dragging, switch themes (system, light, dark, solarized, nord, catppuccin), pick the accent color, and jump between the 9 anchor positions on a mini window that mirrors your viewport's aspect ratio. System follows `prefers-color-scheme` and updates when the OS theme changes.
 - The search icon in the title bar opens a filter row: rows are matched by label/title, folders holding a match are forced open, and a folder-title match keeps its whole subtree visible. `pane.filter(query)` / `pane.searchOpen` do the same programmatically
-- `draggable: true` (default for floating panes); drag position, anchor, and the draggable toggle persist to `localStorage` when the pane has an `id`
+- `draggable: true` (default for floating panes); drag position, anchor, and the draggable toggle persist to `localStorage` when the pane has an `id`. An inline pane that opts in moves by its title bar within its `container`, for as long as it is mounted
 - `toggleKey: '\`'` toggles that pane's visibility; `pane.hidden`, `pane.expanded` are settable
 - Press `H` to hide/show all floating panes (skipped while typing); `Pane.toggleAll()` does the same programmatically.
 - A small notch at the top edge of the window holds the global controls, after the tiao logo: hide/show every floating pane (same as `H`), dock/undock them into an inline sidebar the page lays out beside (`Pane.toggleDock()` / `Pane.docked`), search, undo/redo over the last 10 value edits (`Pane.undo()` / `Pane.redo()`; a drag, a global reset, or an import is one step), a "3 changed" pill counting the rows changed from their code defaults (`Pane.countOverrides()`) that, clicked, outlines each of them in the accent for two seconds, opening any hidden pane, collapsed folder, or tab page in the way (`Pane.revealOverrides()`), and a settings gear. Its ⋯ menu copies and imports every persisted value as JSON (`Pane.exportValues()` / `Pane.importValues()`) and resets every bound value and pane position to its code default (`Pane.resetValues()`). `notch: false` keeps a pane from mounting it.
+- Namespaces run more than one tiao on a page. `new Pane({ namespace: 'hero' })` joins a namespace with its own floating panes, notch, undo history, changed count, reset, import/export, and theme, style, accent, and numbering (saved under `tiao:notch:hero`). Search and the font, size, spacing, glass, and hover settings stay page-wide, and `H` hides the namespace under the pointer, else the window's. `Pane.namespace('hero', { root: element })` roots it in an element: its panes float inside the element, anchored to its corners and clamped to it, so they scroll with the page; its notch rides the element's top edge and stays shown (with `hiding: true` it follows the Hiding setting instead, retreating until the pointer nears that edge), and its pinned cards stack at the element's bottom center. The element must be positioned (not `position: static`). Call it before mounting the namespace's panes and the function it returns after disposing them. Its notch's dock button collects its panes into a sidebar inside the element, which covers that side of it instead of reflowing the page; the sidebar's state is its own (`tiao:dock:hero`), and its insets are set on the element, where its pinned cards and notch center on what's left. On small screens rooted panes join the window's drawer. The static actions (`Pane.toggleAll()`, `Pane.resetValues()`, `Pane.undo()`, `Pane.countOverrides()`, ...) take a namespace, or a document for its window namespace.
 - Rows changed from their code defaults carry an accent dot before their label.
-- ⌘K (Ctrl+K elsewhere), or the notch's search button, finds any row in any pane by its label, key, or the pane and section titles around it. Enter reveals the row, opening whatever hides it (`Pane.reveal(binding)`), and ⌘/Ctrl+Enter pins or unpins it.
+- Tapping `T` twice (skipped while typing), or the notch's search button, finds any row in any pane by its label, key, or the pane and section titles around it. Enter reveals the row, opening whatever hides it (`Pane.reveal(binding)`), and ⌘/Ctrl+Enter pins or unpins it.
 - The notch gear's Font dropdown picks the typeface for every pane (`Pane.setFont()` / `Pane.font`): `Geist` (the default), `System` (the platform stack), or `ABC Areal`. Geist and Geist Mono ship with tiao under the SIL Open Font License (`dist/Geist-OFL.txt`); their ~190 KB sit in a separate chunk that loads the first time a page uses them and register through the `FontFace` API under the names `tiao Geist` / `tiao Geist Mono`, so they never collide with a Geist your page declares (a CSP needs `font-src data:` for them). ABC Areal's one variable file supplies both faces: regular for titles, headings, and labels, and its mono (the `MONO` axis) for the values. It is a licensed Dinamo font, so tiao does not ship it; declare it on your page and the panes pick it up, otherwise they fall back to the system stack:
 
   ```css
@@ -115,7 +114,7 @@ Storage stays out of the way of the frame budget: each key is parsed once rather
     font-style: oblique 0deg 12deg;
   }
   ```
-- The notch gear opens the global settings panel: font size, either `Small` (each pane's own declared size, the default) or `Normal` (every floating pane at size `l`) via `Pane.setFontSize()` / `Pane.fontSize`; hiding, on by default, which makes the notch fully invisible until the pointer comes near the top edge anywhere across the window; glass, off by default, which turns floating panes and the notch translucent and frosted (`Pane.setGlass()` / `Pane.glass`) at the cost of a GPU blur every frame the page underneath changes; plus theme (light, dark, or system), style, accent, and numbering for every pane in both views. Each change is broadcast — floating panes, docked panes, and the sidebar all take it and save it as their own, so a later per-pane tweak still sticks, and panes mounted afterwards inherit it unless they have saved chrome of their own. All of it persists under `tiao:notch`.
+- The notch gear opens the global settings panel: font size, `Small` (the default), `Normal`, or `Large`, which draws every floating pane at size `s`, `m`, or `l` (`Pane.setFontSize()` / `Pane.fontSize`; inline panes keep their own `size`); spacing, `S` (the default), `M`, or `L` row padding for every floating pane (`Pane.setSpacing()` / `Pane.spacing`); hiding, on by default, which makes the notch fully invisible until the pointer comes near the top edge anywhere across the window; glass, on by default, which turns floating panes and the notch translucent and frosted (`Pane.setGlass()` / `Pane.glass`) at the cost of a GPU blur every frame the page underneath changes; plus theme (light, dark, or system), style, accent, and numbering for every pane in both views. Each change is broadcast — floating panes, docked panes, and the sidebar all take it and save it as their own, so a later per-pane tweak still sticks, and panes mounted afterwards inherit it unless they have saved chrome of their own. All of it persists under `tiao:notch`.
 - Docked panes stack flush and square in the sidebar and hand their chrome over to it: one header search filters every pane at once, one settings menu sets theme, style, accent, and numbering for all of them, and anchors the sidebar left or right. Its outer edge drags to resize (width in `--tiao-dock-width`, default `300px`). All of it is separate state under `tiao:dock` — each pane keeps its floating theme and numbering and gets them back on undock.
 - `order: 99` sets where a pane sits in the sidebar (and in a shared-anchor pack), z-index style: lower sorts first, the default is `0`, and panes sharing a value keep their creation order. Panes created while the sidebar is open slot into place rather than landing at the end, and `pane.order` re-sorts a live pane. The export pane defaults to `99` so it stays out of the way at the bottom.
 - The sidebar pads `<body>` to reflow the page, which only moves elements in normal flow. Fixed page chrome is laid out against the viewport, so the sidebar insets it directly: any `position: fixed` element that spans the viewport edge to edge (a navbar, a bottom bar) is inset to the remaining width for as long as the panes stay docked, including ones the page mounts later. A corner toast, a centered modal, and anything narrower is left alone, and `data-tiao-no-inset` opts a single element out. Nothing is written to your inline styles — undocking removes the marker and the page is exactly as it was.
@@ -322,7 +321,7 @@ Anchored top-right by default: filled graphs for FPS, CPU, GPU, and JS heap (wit
 
 ```sh
 pnpm install
-pnpm dev          # playground at localhost:5173 (HMR over package sources)
+pnpm dev          # docs and examples at localhost:5173 (HMR over package sources)
 pnpm build        # build the @nightmarket/tiao package for publish
 pnpm test         # vitest
 pnpm typecheck
@@ -331,6 +330,10 @@ pnpm typecheck
 The playground Vite config aliases `@nightmarket/tiao` / `@nightmarket/tiao/*` to `packages/tiao/src/`, so edits hot-reload without running `pnpm build`.
 
 ### Publishing
+
+Bump `version` in `packages/tiao/package.json` and push to `main`. The [Publish workflow](.github/workflows/publish.yml) runs the tests and typecheck, then publishes that version to npm through trusted publishing, so no npm token is stored. It skips versions already on npm, and can also be run by hand from the Actions tab.
+
+To publish from a local machine instead:
 
 ```sh
 pnpm install

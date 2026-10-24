@@ -1,5 +1,7 @@
 declare const process: { env: Record<string, string | undefined> }
 
+export { setTiaoStorage } from './core/util'
+
 let enabledOverride: boolean | null = null
 
 /** Globally enable/disable tiao (primarily useful for tests and custom tooling). */

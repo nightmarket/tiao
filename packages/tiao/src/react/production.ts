@@ -14,7 +14,7 @@ import type { ControlsResult, Schema, TabsItem, UseControlsOptions } from './typ
  * entry, which is what shipped before this file existed.
  */
 
-export { setTiaoEnabled } from './config'
+export { setTiaoEnabled, setTiaoStorage } from './config'
 export { DEFAULT_PANE_ID } from './controls'
 export { ControlStore } from './store'
 export type {

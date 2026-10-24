@@ -1,1 +1,1 @@
-export { isTiaoEnabled, setTiaoEnabled } from '../config'
+export { isTiaoEnabled, setTiaoEnabled, setTiaoStorage } from '../config'
