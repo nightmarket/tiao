@@ -40,6 +40,7 @@ import {
   smoothstep,
   uniform,
   varying,
+  varyingProperty,
   vec2,
   vec3,
   vec4,
@@ -157,10 +158,10 @@ const patchNormal = (n: Node<'vec3'>, h: Node<'float'>) => {
   return select(dot(normal, n).lessThan(0), normal.negate(), normal)
 }
 
-/** the first step toward the light, how much each step outreaches the last, and how many: out to about 2 km, finely enough that a ridge's shade doesn't step */
+/** the first step toward the light, how much each step outreaches the last, and how many: out to about 1.6 km */
 const SHADOW_START = meters(24)
-const SHADOW_GROWTH = 1.28
-const SHADOW_STEPS = 18
+const SHADOW_GROWTH = 1.46
+const SHADOW_STEPS = 12
 /** how hard the light cuts off past a ridge: the cotangent of the penumbra's angle */
 const SHADOW_HARDNESS = 20
 /** how far off the surface the march starts, so a cliff doesn't shade itself where the light runs up it */
@@ -178,7 +179,8 @@ const sunlitOver = (heightAt: (q: Node<'vec3'>) => Node<'float'>) =>
     Loop(SHADOW_STEPS, () => {
       const q = p.add(toLight.mul(t)).toVar()
       const r = length(q).toVar()
-      If(r.greaterThan(TALLEST + 1), () => {
+      // past the tallest mesa nothing more can shade it, and fully shaded it stays so
+      If(r.greaterThan(TALLEST + 1).or(lit.lessThanEqual(0)), () => {
         Break()
       })
       lit.assign(
@@ -209,9 +211,30 @@ const sunSide = (n: Node<'vec3'>, sunlit: Node<'float'>) =>
   smoothstep(0, 0.06, dot(n, mesa.light)).mul(smoothstep(0.35, 0.65, sunlit))
 
 /**
+ * `local`, a vertex's position in its mesh, as a position node that also
+ * marches the air between it and the eye. The faces carry that air, since it
+ * changes over far more than a face, rather than every pixel marching it.
+ */
+const seenFrom = (local: Node<'vec3'>) => {
+  const seen = {
+    transmit: varyingProperty('vec3', 'v_airTransmit'),
+    scatter: varyingProperty('vec3', 'v_airScatter'),
+  }
+  const position = Fn(() => {
+    const toEye = cameraPosition.sub(modelWorldMatrix.mul(vec4(local, 1)).xyz).toVar()
+    const dist = length(toEye).max(1e-5).toVar()
+    const along = air.along(cameraPosition, toEye.div(dist).negate(), dist)
+    seen.transmit.assign(along.transmit)
+    seen.scatter.assign(along.scatter)
+    return local
+  })()
+  return { position, seen }
+}
+
+/**
  * A face's color: flat in the sun or moon, and in the shade lit by the sky,
  * brighter where it faces up. `rim` brightens the silhouette on the lit side,
- * the way rock catches the light at its edges. Then the air in between.
+ * the way rock catches the light at its edges. Then `seen`, the air in between.
  */
 const lit = (
   albedo: Node<'vec3'>,
@@ -219,10 +242,9 @@ const lit = (
   world: Node<'vec3'>,
   direct: Node<'float'>,
   rim: Node<'float'>,
+  seen: ReturnType<typeof seenFrom>['seen'],
 ) => {
-  const toEye = cameraPosition.sub(world).toVar()
-  const dist = length(toEye).max(1e-5)
-  const view = toEye.div(dist)
+  const view = normalize(cameraPosition.sub(world))
   const shade = sky.ambient.mul(dot(n, normalize(world)).mul(0.4).add(1.2))
   const edge = smoothstep(0.55, 0.85, float(1).sub(max(dot(n, view), 0)))
     .mul(direct.mul(0.75).add(0.25))
@@ -230,7 +252,7 @@ const lit = (
   const color = albedo
     .mul(sky.lightColor.mul(direct).add(shade))
     .add(sky.lightColor.mul(edge.mul(0.3)))
-  return air.throughAir(cameraPosition, view.negate(), dist, color)
+  return color.mul(seen.transmit).add(seen.scatter)
 }
 
 /** sedimentary bands up the cliffs, meters apart */
@@ -307,7 +329,8 @@ export function createLand(): Mesh<BufferGeometry, MeshBasicNodeMaterial> {
   const material = new MeshBasicNodeMaterial()
   const land = patchAt(positionGeometry).toVar()
   const surface = positionGeometry.mul(land.x.add(1)).toVar()
-  material.positionNode = surface
+  const { position: placed, seen } = seenFrom(surface)
+  material.positionNode = placed
   const height = varying(land.x)
   const rock = varying(land.y)
   const ground = varying(turnX(surface, mesa.snap.negate()))
@@ -331,7 +354,7 @@ export function createLand(): Mesh<BufferGeometry, MeshBasicNodeMaterial> {
     const direct = sunSide(n, sunlit).toVar()
     const sand = mesa.sand.mul(mix(0.88, 1.04, smoothstep(0, DUNE_HEIGHT, height)))
     const layered = mesa.rock.mul(strataAt(ground, height, steep, direct))
-    return vec4(lit(mix(sand, layered, stone), n, world, direct, stone), 1)
+    return vec4(lit(mix(sand, layered, stone), n, world, direct, stone, seen), 1)
   })()
   return new Mesh(patchGeometry(), material)
 }
@@ -365,11 +388,14 @@ export function createBoulders(): Mesh<InstancedBufferGeometry, MeshBasicNodeMat
     .toVar()
   const local = positionGeometry.mul(shape)
   const base = up.mul(ground.x.add(1)).toVar()
-  material.positionNode = base
-    .sub(up.mul(shape.y.mul(0.35)))
-    .add(side.mul(local.x))
-    .add(up.mul(local.y))
-    .add(cross(side, up).mul(local.z))
+  const { position, seen } = seenFrom(
+    base
+      .sub(up.mul(shape.y.mul(0.35)))
+      .add(side.mul(local.x))
+      .add(up.mul(local.y))
+      .add(cross(side, up).mul(local.z)),
+  )
+  material.positionNode = position
   // the same for the whole boulder, from the ground it sits on
   const sunlit = varying(
     sunlitOver((q) => landAt(q).x)(base.add(up.mul(SHADOW_OFFSET)), localLight()),
@@ -377,7 +403,7 @@ export function createBoulders(): Mesh<InstancedBufferGeometry, MeshBasicNodeMat
   material.colorNode = Fn(() => {
     const albedo = mix(mesa.rock, vec3(0.62, 0.56, 0.62), 0.45)
     const n = facet(positionWorld).toVar()
-    return vec4(lit(albedo, n, positionWorld, sunSide(n, sunlit), float(1)), 1)
+    return vec4(lit(albedo, n, positionWorld, sunSide(n, sunlit), float(1), seen), 1)
   })()
   const mesh = new Mesh(geometry, material)
   // placed in the shader, so the geometry's bounds say nothing about where it is

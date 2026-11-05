@@ -22,6 +22,6 @@ export default defineConfig({
   dts: true,
   clean: true,
   splitting: true,
-  external: ['react', 'mediabunny'],
+  external: ['react', 'mediabunny', 'motion'],
   loader: { '.css': 'text', '.woff2': 'dataurl' },
 })

@@ -101,7 +101,8 @@
     "access": "public"
   },
   "dependencies": {
-    "mediabunny": "^1.6.1"
+    "mediabunny": "^1.6.1",
+    "motion": "^12.43.0"
   },
   "peerDependencies": {
     "react": ">=18"

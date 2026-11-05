@@ -8,6 +8,7 @@
  */
 import {
   asin,
+  atan,
   cameraPosition,
   clamp,
   cos,
@@ -39,7 +40,15 @@ import {
   vec3,
   vec4,
 } from 'three/tsl'
-import { Color, HalfFloatType, type Node, RenderTarget, Vector2, Vector3 } from 'three/webgpu'
+import {
+  Color,
+  HalfFloatType,
+  type Node,
+  RenderTarget,
+  RepeatWrapping,
+  Vector2,
+  Vector3,
+} from 'three/webgpu'
 import { createAir, turnX } from './atmosphere'
 import { fbm3, hash12, hash13 } from './noise'
 
@@ -85,8 +94,44 @@ const airUniforms = { sun: sky.sun, density: sky.density, haze: sky.haze, depth:
 /** the air the desert sees, lit by the sun */
 export const air = createAir(airUniforms)
 
-/** the same air for the sky, whose rays run far enough to need finer steps; it draws at a fraction of the resolution */
+/** the same air for the sky, whose rays run far enough to need finer steps; it marches only into `airTable` */
 const skyAir = createAir({ ...airUniforms, steps: 32 })
+
+/**
+ * The sky's air by direction from the camera, marched each frame into a small
+ * table the sky reads, since it changes slowly across the sky: around in x, and
+ * up from the limb in y, squared so the rows crowd toward the horizon where it
+ * changes fastest. The top half holds the light the air scatters toward the
+ * camera, the bottom how much of what lies past it shows through.
+ */
+const AIR_TABLE = { around: 192, up: 96 }
+export const airTable = new RenderTarget(AIR_TABLE.around, AIR_TABLE.up * 2, {
+  type: HalfFloatType,
+  depthBuffer: false,
+})
+airTable.texture.wrapS = RepeatWrapping
+const LIMB_TO_ZENITH = sky.dip.add(Math.PI / 2)
+
+/** fills `airTable` */
+export const airTableNode = Fn(() => {
+  // from the first row's center to the last's, so the sky reads the limb and the zenith exactly
+  const s = clamp(
+    fract(screenUV.y.mul(2))
+      .mul(AIR_TABLE.up)
+      .sub(0.5)
+      .div(AIR_TABLE.up - 1),
+    0,
+    1,
+  )
+  const elevation = s.mul(s).mul(LIMB_TO_ZENITH).sub(sky.dip).toVar()
+  const around = screenUV.x
+    .sub(0.5)
+    .mul(2 * Math.PI)
+    .toVar()
+  const rd = vec3(sin(around).mul(cos(elevation)), sin(elevation), cos(around).mul(cos(elevation)))
+  const seen = skyAir.along(cameraPosition, rd, float(1e4))
+  return vec4(select(screenUV.y.lessThan(0.5), seen.scatter, seen.transmit), 1)
+})()
 
 /**
  * The sky and clouds, drawn before the desert: rgb is their light, and alpha
@@ -105,7 +150,7 @@ const CLOUD_TOP = CLOUD_BASE + 600
 const CLOUD_FAR = 13000
 /** the deepest a ray marches into the shell */
 const CLOUD_REACH = 3000
-const CLOUD_STEPS = 18
+const CLOUD_STEPS = 14
 const LIGHT_STEPS = 3
 const LIGHT_STEP = 70
 /** extinction per meter at full density */
@@ -219,7 +264,7 @@ const throughClouds = Fn(([rd, behind]: [Node<'vec3'>, Node<'vec3'>]) => {
   return result
 })
 
-/** the atmosphere from the camera with the sun's and moon's glow, then the clouds; for `skyTarget` */
+/** the atmosphere from the camera, from `airTable`, with the sun's and moon's glow, then the clouds; for `skyTarget` */
 export const skyNode = Fn(() => {
   const dir = positionWorldDirection
   // rays under the limb look along it instead, so the target holds its color there
@@ -229,7 +274,18 @@ export const skyNode = Fn(() => {
   const glow = vec3(1, 0.95, 0.85)
     .mul(pow(max(dot(rd, sky.sun), 0), 900).mul(1.5))
     .add(vec3(0.45, 0.55, 0.75).mul(pow(max(dot(rd, sky.moon), 0), 120).mul(0.08)))
-  const col = skyAir.throughAir(cameraPosition, rd, float(1e4), glow).toVar()
+  const row = sqrt(elevation.add(sky.dip).div(LIMB_TO_ZENITH))
+    .mul(AIR_TABLE.up - 1)
+    .add(0.5)
+    .div(AIR_TABLE.up * 2)
+    .toVar()
+  const around = atan(level.x, level.y)
+    .div(2 * Math.PI)
+    .add(0.5)
+    .toVar()
+  const scatter = texture(airTable.texture, vec2(around, row)).rgb
+  const transmit = texture(airTable.texture, vec2(around, row.add(0.5))).rgb
+  const col = glow.mul(transmit).add(scatter).toVar()
   // the night sky's own faint glow, brightest low down
   col.addAssign(sky.ambient.mul(float(1).sub(rd.y).mul(0.8).add(0.2)))
   return throughClouds(rd, col)

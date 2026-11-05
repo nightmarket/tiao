@@ -710,6 +710,10 @@ describe('Pane registry and chrome', () => {
 
     notchMenuTab('Font size', 'M').click()
     expect(pane.size).toBe('m')
+    // the strip's one pill slides to the picked tab
+    const strip = notchMenuTab('Font size', 'M').parentElement!
+    expect(strip.style.getPropertyValue('--tiao-tab-count')).toBe('3')
+    expect(strip.style.getPropertyValue('--tiao-tab-index')).toBe('1')
     // the global size covers floating panes; inline ones keep their own
     expect(inline.size).toBe('m')
     expect(JSON.parse(localStorage.getItem('tiao:notch')!).fontSize).toBe('normal')
@@ -1207,7 +1211,7 @@ describe('Pane registry and chrome', () => {
     const dock = document.querySelector('.tiao-notch-dock') as HTMLButtonElement
     dock.click()
     // the width var keeps it live, so a resize drag needs no extra bookkeeping
-    expect(inset('start')).toBe('var(--tiao-dock-width, 300px)')
+    expect(inset('start')).toBe('calc(var(--tiao-dock-width, 300px) + var(--tiao-dock-gap) * 2)')
     expect(inset('end')).toBe('0px')
     expect(docked()).toBe(true)
 
@@ -1216,13 +1220,13 @@ describe('Pane registry and chrome', () => {
     const cells = document.querySelectorAll('.tiao-dock .tiao-anchor-sides .tiao-anchor-cell')
     ;(cells[1] as HTMLButtonElement).click()
     expect(inset('start')).toBe('0px')
-    expect(inset('end')).toBe('var(--tiao-dock-width, 300px)')
+    expect(inset('end')).toBe('calc(var(--tiao-dock-width, 300px) + var(--tiao-dock-gap) * 2)')
 
     Pane.toggleAll()
     expect(inset('end')).toBe('0px')
     expect(docked()).toBe(false)
     Pane.toggleAll()
-    expect(inset('end')).toBe('var(--tiao-dock-width, 300px)')
+    expect(inset('end')).toBe('calc(var(--tiao-dock-width, 300px) + var(--tiao-dock-gap) * 2)')
 
     dock.click()
     expect(inset('start')).toBe('')
@@ -1313,6 +1317,10 @@ describe('Pane registry and chrome', () => {
 
     const pane = new Pane()
     expect(document.querySelector('style[data-tiao]')).toBeNull()
+    // the motion springs its transitions run on still come from JS
+    expect(document.querySelector('style[data-tiao-springs]')?.textContent).toMatch(
+      /--tiao-spring-collapse: \d+ms linear\(/,
+    )
 
     pane.dispose()
     stylesheet.remove()
@@ -3232,7 +3240,12 @@ describe('Pane registry and chrome', () => {
     expect(input.value).toBe(
       speed.element.querySelector<HTMLInputElement>('.tiao-num-input')!.value,
     )
-    expect((card.querySelector('.tiao-slider-num') as HTMLElement).style.transform).toBe('')
+    expect(
+      (card.querySelector('.tiao-slider-num') as HTMLElement).style.getPropertyValue(
+        '--tiao-readout-shift',
+      ),
+    ).toBe('')
+    expect(card.querySelectorAll('.tiao-slider-ticks > .tiao-slider-tick')).toHaveLength(3)
 
     // other controls keep their label beside the control, newest at the bottom
     mode.pinned = true
@@ -3599,7 +3612,7 @@ describe('small screens', () => {
     expect(drawer().hasAttribute('inert')).toBe(false)
     expect(drawer().hasAttribute('role')).toBe(false)
     expect(pane.docked).toBe(true)
-    expect(inset()).toBe('var(--tiao-dock-width, 300px)')
+    expect(inset()).toBe('calc(var(--tiao-dock-width, 300px) + var(--tiao-dock-gap) * 2)')
     expect(document.documentElement.style.getPropertyValue('--tiao-dock-width')).toBe('360px')
     expect(document.body.style.getPropertyValue('padding-inline-end')).toBe(
       'var(--tiao-dock-inset-end)',
@@ -4017,6 +4030,15 @@ describe('slider readout dodging', () => {
     expect(readoutOffset(geo, 40, text, 'start', false)).toEqual({ dodged: false, shift: 0 })
     const narrow = { ...geo, trackWidth: 30 }
     expect(readoutOffset(narrow, 100, text, 'end', false)).toEqual({ dodged: false, shift: 0 })
+  })
+
+  it('keeps a start readout clear of the fill end, as a pinned label does', () => {
+    // text spans 6..30; bar 35..37 is 5px clear
+    expect(readoutOffset(geo, 21, text, 'start', false, 'end')).toEqual({ dodged: false, shift: 0 })
+    // bar 33..35: 3px clear, so the label hops right and starts 4px after it
+    expect(readoutOffset(geo, 20, text, 'start', false, 'end')).toEqual({ dodged: true, shift: 33 })
+    // empty, the bar rests at its inset and the label just after it
+    expect(readoutOffset(geo, 0, text, 'start', true, 'end')).toEqual({ dodged: true, shift: 5 })
   })
 })
 

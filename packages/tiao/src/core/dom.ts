@@ -324,6 +324,17 @@ export function adoptTokens(el: HTMLElement, from: Element, tokens: readonly str
   }
 }
 
+/** Mark the picked button of a `.tiao-tab-nav` strip and slide its pill there; -1 picks none. */
+export function selectTab(nav: HTMLElement, buttons: readonly HTMLElement[], index: number): void {
+  nav.style.setProperty('--tiao-tab-count', String(buttons.length))
+  nav.style.setProperty('--tiao-tab-index', String(index))
+  nav.classList.toggle('tiao-tab-none', index < 0)
+  buttons.forEach((btn, i) => {
+    btn.classList.toggle('tiao-selected', i === index)
+    btn.setAttribute('aria-selected', String(i === index))
+  })
+}
+
 /** Collapse a text selection without moving focus. */
 export function collapseSelection(input: HTMLInputElement): void {
   const end = input.selectionEnd ?? input.value.length

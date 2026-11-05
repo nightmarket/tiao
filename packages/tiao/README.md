@@ -2,6 +2,8 @@
 
 # tiao
 
+[![npm](https://img.shields.io/npm/v/@nightmarket/tiao)](https://www.npmjs.com/package/@nightmarket/tiao)
+
 A themeable, draggable debug pane with a vanilla TypeScript API, React hooks,
 performance and export panes, and optional input plugins.
 

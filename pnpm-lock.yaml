@@ -69,6 +69,9 @@ importers:
       mediabunny:
         specifier: ^1.6.1
         version: 1.50.7
+      motion:
+        specifier: ^12.43.0
+        version: 12.43.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
     devDependencies:
       '@types/react':
         specifier: ^18.3.18

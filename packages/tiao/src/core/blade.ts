@@ -1,4 +1,4 @@
-import { h, icon, longPress, withDocument } from './dom'
+import { h, icon, longPress, selectTab, withDocument } from './dom'
 import { Emitter } from './emitter'
 import type { PinBoard } from './pins'
 import type {
@@ -940,12 +940,13 @@ export class TabPageApi extends Container {
 export class TabApi extends Item {
   readonly element: HTMLElement
   readonly pages: TabPageApi[]
+  private nav = h('div', 'tiao-tab-nav')
   private buttons: HTMLButtonElement[] = []
   private _selectedIndex = 0
 
   constructor(host: BladeHost, params: { pages: { title: string }[] }) {
     super()
-    const nav = h('div', 'tiao-tab-nav')
+    const nav = this.nav
     nav.setAttribute('role', 'tablist')
     this.pages = params.pages.map((p, i) => {
       const page = new TabPageApi(host, p.title)
@@ -999,10 +1000,7 @@ export class TabApi extends Item {
     this.pages.forEach((p, i) => {
       p.element.classList.toggle('tiao-selected', i === this._selectedIndex)
     })
-    this.buttons.forEach((b, i) => {
-      b.classList.toggle('tiao-selected', i === this._selectedIndex)
-      b.setAttribute('aria-selected', String(i === this._selectedIndex))
-    })
+    selectTab(this.nav, this.buttons, this._selectedIndex)
   }
 
   override dispose(): void {

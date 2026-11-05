@@ -2,7 +2,9 @@
 
 # tiao
 
-A themeable, draggable debug pane for tweaking parameters, with a modern look, a first-class React API, and a plug-and-play plugin system. Zero dependencies in core.
+[![npm](https://img.shields.io/npm/v/@nightmarket/tiao)](https://www.npmjs.com/package/@nightmarket/tiao)
+
+A themeable, draggable debug pane for tweaking parameters, with a modern look, a first-class React API, and a plug-and-play plugin system.
 
 Built on ideas and code from [tweakpane](https://github.com/cocopon/tweakpane) by [cocopon](https://github.com/cocopon) and [leva](https://github.com/pmndrs/leva) by [pmndrs](https://github.com/pmndrs), and on ideas from [baku89](https://github.com/baku89). Their licenses are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 

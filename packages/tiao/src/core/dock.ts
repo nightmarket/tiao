@@ -33,7 +33,7 @@ const MAX_WIDTH = 640
 const DEFAULT_WIDTH = 300
 
 /** live width, so a resize drag flows into the insets without extra work */
-const WIDTH_VAR = `var(--tiao-dock-width, ${DEFAULT_WIDTH}px)`
+const WIDTH_VAR = `calc(var(--tiao-dock-width, ${DEFAULT_WIDTH}px) + var(--tiao-dock-gap) * 2)`
 
 /** the drawer's height, which the page is padded by while it is open */
 const DRAWER_HEIGHT_VAR = 'var(--tiao-drawer-height)'

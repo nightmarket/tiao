@@ -178,44 +178,54 @@ export function createAir(u: AirUniforms) {
   }
 
   /**
-   * What reaches the eye along ro + rd * [0, far]: `behind`, dimmed by the air
-   * in the way, plus the sunlight that air scatters toward the eye.
+   * The air along ro + rd * [0, far]: how much of what lies past it shows
+   * through, and the sunlight it scatters toward ro. Builds into the function
+   * it is called from.
    */
-  const throughAir = Fn(
-    ([ro, rd, far, behind]: [Node<'vec3'>, Node<'vec3'>, Node<'float'>, Node<'vec3'>]) => {
-      const result = vec3(behind).toVar()
-      const shell = sphereHit(ro, rd, top).toVar()
-      const t0 = max(shell.x, 0).toVar()
-      const t1 = min(shell.y, far).toVar()
-      If(shell.y.greaterThan(0).and(t1.greaterThan(t0)), () => {
-        const ds = t1.sub(t0).div(steps).toVar()
-        const view = vec3(0).toVar()
-        const sumR = vec3(0).toVar()
-        const sumM = vec3(0).toVar()
-        Loop(steps, ({ i }) => {
-          const p = ro.add(rd.mul(t0.add(float(i).add(0.5).mul(ds)))).toVar()
-          const d = densityOver(p, ds).toVar()
-          view.addAssign(d)
-          const sunHeight = dot(p, u.sun).div(length(p)).toVar()
-          const twilight = smoothstep(-0.35, -0.02, sunHeight).mul(smoothstep(0.3, 0.05, sunHeight))
-          const lit = exp(extinction(view.add(sunDepth(p))).negate())
-            .mul(sunOverStep(p, rd.mul(ds)))
-            .add(exp(extinction(view).negate()).mul(twilight.mul(MULTIPLE)))
-            .toVar()
-          sumR.addAssign(lit.mul(d.x))
-          sumM.addAssign(lit.mul(d.y))
-        })
-        const mu = dot(rd, u.sun).toVar()
-        const air = sumR
+  const along = (ro: Node<'vec3'>, rd: Node<'vec3'>, far: Node<'float'>) => {
+    const transmit = vec3(1).toVar()
+    const scatter = vec3(0).toVar()
+    const shell = sphereHit(ro, rd, top).toVar()
+    const t0 = max(shell.x, 0).toVar()
+    const t1 = min(shell.y, far).toVar()
+    If(shell.y.greaterThan(0).and(t1.greaterThan(t0)), () => {
+      const ds = t1.sub(t0).div(steps).toVar()
+      const view = vec3(0).toVar()
+      const sumR = vec3(0).toVar()
+      const sumM = vec3(0).toVar()
+      Loop(steps, ({ i }) => {
+        const p = ro.add(rd.mul(t0.add(float(i).add(0.5).mul(ds)))).toVar()
+        const d = densityOver(p, ds).toVar()
+        view.addAssign(d)
+        const sunHeight = dot(p, u.sun).div(length(p)).toVar()
+        const twilight = smoothstep(-0.35, -0.02, sunHeight).mul(smoothstep(0.3, 0.05, sunHeight))
+        const lit = exp(extinction(view.add(sunDepth(p))).negate())
+          .mul(sunOverStep(p, rd.mul(ds)))
+          .add(exp(extinction(view).negate()).mul(twilight.mul(MULTIPLE)))
+          .toVar()
+        sumR.addAssign(lit.mul(d.x))
+        sumM.addAssign(lit.mul(d.y))
+      })
+      const mu = dot(rd, u.sun).toVar()
+      transmit.assign(exp(extinction(view).negate()))
+      scatter.assign(
+        sumR
           .mul(RAYLEIGH)
           .mul(u.density.mul(rayleighPhase(mu)))
           .add(sumM.mul(u.haze.mul(miePhase(mu)).mul(MIE_SCATTER)))
-          .mul(SUN_INTENSITY)
-        result.assign(behind.mul(exp(extinction(view).negate())).add(air))
-      })
-      return result
+          .mul(SUN_INTENSITY),
+      )
+    })
+    return { transmit, scatter }
+  }
+
+  /** what reaches ro from `behind` at far along rd: dimmed by the air in the way, plus the sunlight it scatters */
+  const throughAir = Fn(
+    ([ro, rd, far, behind]: [Node<'vec3'>, Node<'vec3'>, Node<'float'>, Node<'vec3'>]) => {
+      const seen = along(ro, rd, far)
+      return behind.mul(seen.transmit).add(seen.scatter)
     },
   )
 
-  return { throughAir }
+  return { along, throughAir }
 }

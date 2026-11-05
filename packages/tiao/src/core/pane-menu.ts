@@ -1,6 +1,6 @@
 import type { BindingApi } from './blade'
 import type { DockSide } from './dock'
-import { h, monitorIcon, moonIcon, sunIcon, withDocument } from './dom'
+import { h, monitorIcon, moonIcon, selectTab, sunIcon, withDocument } from './dom'
 import type {
   Anchor,
   Pane,
@@ -109,6 +109,7 @@ const FONT_OPTIONS: Record<string, PaneFont> = {
 
 /** quick accent swatches, loosely based on syntax-highlighting palettes */
 const ACCENT_PALETTE = [
+  '#ffffff',
   '#f87171',
   '#fb923c',
   '#facc15',
@@ -431,14 +432,14 @@ function segmentedRow<T extends string>(
 ): { row: HTMLElement; render: () => void } {
   const nav = h('div', 'tiao-tab-nav')
   nav.setAttribute('role', 'tablist')
-  const buttons = new Map<T, HTMLButtonElement>()
+  const buttons: HTMLButtonElement[] = []
   const render = () => {
     const current = value.get()
-    for (const [v, btn] of buttons) {
-      const on = v === current
-      btn.classList.toggle('tiao-selected', on)
-      btn.setAttribute('aria-selected', String(on))
-    }
+    selectTab(
+      nav,
+      buttons,
+      options.findIndex((opt) => opt.value === current),
+    )
   }
   for (const opt of options) {
     const btn = h('button', 'tiao-tab-button', opt.icon ?? opt.label)
@@ -457,7 +458,7 @@ function segmentedRow<T extends string>(
     }
     btn.addEventListener('click', onClick)
     host.onDispose(() => btn.removeEventListener('click', onClick))
-    buttons.set(opt.value, btn)
+    buttons.push(btn)
     nav.append(btn)
   }
   const row = h('div', 'tiao-row', h('div', 'tiao-label', label), h('div', 'tiao-control', nav))

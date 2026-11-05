@@ -93,7 +93,7 @@ function createIntervalRow(ctx: PluginContext<IntervalValue>): PluginView {
       el,
       track,
       readout: scrub.element,
-      input: scrub.input,
+      text: scrub.input,
       side,
       onDispose: ctx.onDispose,
     })

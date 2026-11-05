@@ -36,7 +36,7 @@ import { createPinBoard, type PinBoard } from './pins'
 import { globalRegistry, PluginRegistry, type TiaoPlugin } from './plugin'
 import { openRowToolbar } from './row-toolbar'
 import { createSearch, createSearchShortcut, type Search, type SearchEntry } from './search'
-import { injectStyles } from './styles'
+import { injectStyles, SPRINGS } from './styles'
 import { tooltip } from './tooltip'
 import { clamp, isRecord, type JSONStore, jsonStore } from './util'
 import { createValueStore, sameShape, type ValueStore } from './values'
@@ -214,8 +214,8 @@ const MAX_HEIGHT = 2000
 /** gap between co-anchored floating panes; matches the default window inset */
 const PACK_GAP = 8
 
-/** .tiao-folder-body's grid-template-rows transition */
-const FOLDER_EXPAND_MS = 180
+/** until .tiao-folder-body's grid-template-rows spring has visually landed */
+const FOLDER_EXPAND_MS = SPRINGS.collapse[0] * 1000
 
 const panes = new Map<string, Pane>()
 

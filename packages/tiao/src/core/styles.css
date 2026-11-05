@@ -28,6 +28,8 @@
   /* the docked sidebar's footprint, for fixed page chrome body padding can't reach */
   --tiao-dock-inset-start: 0px;
   --tiao-dock-inset-end: 0px;
+  /* the sidebar floats this far off the viewport edges */
+  --tiao-dock-gap: 8px;
   /* the small-screen drawer, and how far it pushes the page up while open */
   --tiao-drawer-height: min(max(50dvh, 240px), 85dvh);
 }
@@ -642,16 +644,16 @@
 /* ---- dock: panes collected in a sidebar the page lays out beside ---- */
 .tiao-dock {
   position: fixed;
-  top: 0;
-  bottom: 0;
-  inset-inline-start: 0;
+  top: var(--tiao-dock-gap);
+  bottom: var(--tiao-dock-gap);
+  inset-inline-start: var(--tiao-dock-gap);
   z-index: 9998;
   display: flex;
   flex-direction: column;
   width: var(--tiao-dock-width, 300px);
-  border-radius: 0;
-  border-inline-end: 1px solid var(--tiao-border);
-  box-shadow: none;
+  border-radius: var(--tiao-radius);
+  border: 1px solid var(--tiao-border);
+  box-shadow: var(--tiao-shadow-raised);
 }
 /* the sidebar's own chrome: one search + settings for every pane inside */
 .tiao-dock-header {
@@ -662,6 +664,7 @@
   height: var(--tiao-titlebar-height);
   background: var(--tiao-titlebar-bg);
   border-bottom: 1px solid var(--tiao-border);
+  border-radius: var(--tiao-radius) var(--tiao-radius) 0 0;
 }
 .tiao-dock-header .tiao-titlebar-btn {
   opacity: 1;
@@ -680,6 +683,7 @@
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: none;
+  border-radius: 0 0 var(--tiao-radius) var(--tiao-radius);
 }
 /* invisible strip along the sidebar's page-facing edge; dragging it resizes */
 .tiao-dock-resize {
@@ -693,12 +697,10 @@
 .tiao-dock.tiao-dock-rooted {
   position: absolute;
 }
-/* anchored to the far edge instead: mirror the border and the drag strip */
+/* anchored to the far edge instead: mirror the drag strip */
 .tiao-dock.tiao-dock-end {
   inset-inline-start: auto;
-  inset-inline-end: 0;
-  border-inline-end: none;
-  border-inline-start: 1px solid var(--tiao-border);
+  inset-inline-end: var(--tiao-dock-gap);
 }
 .tiao-dock.tiao-dock-end > .tiao-dock-resize {
   inset-inline-end: auto;
@@ -1124,7 +1126,7 @@
 .tiao-titlebar .tiao-icon-chevron {
   color: var(--tiao-folder-caret);
   transition:
-    transform 0.18s ease,
+    transform var(--tiao-spring-collapse, 0.18s ease),
     color 0.12s ease;
 }
 .tiao-titlebar:hover .tiao-icon-chevron {
@@ -1204,7 +1206,7 @@
 .tiao-folder-body {
   display: grid;
   grid-template-rows: 1fr;
-  transition: grid-template-rows 0.18s ease;
+  transition: grid-template-rows var(--tiao-spring-collapse, 0.18s ease);
 }
 .tiao-pane:not(.tiao-expanded) > .tiao-pane-body,
 .tiao-folder:not(.tiao-expanded) > .tiao-folder-body {
@@ -1222,7 +1224,7 @@
 .tiao-pane:not(.tiao-expanded) > .tiao-pane-body > .tiao-pane-clip,
 .tiao-folder:not(.tiao-expanded) > .tiao-folder-body > .tiao-folder-clip {
   content-visibility: hidden;
-  transition: content-visibility 0.18s allow-discrete;
+  transition: content-visibility var(--tiao-spring-collapse, 0.18s) allow-discrete;
 }
 .tiao-pane > .tiao-pane-body > .tiao-pane-clip {
   max-height: calc(var(--tiao-max-height) - var(--tiao-titlebar-height));
@@ -1331,12 +1333,21 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* changed from the default its code declared: a dot drawn as a background, so the label's first letter stays its first letter */
+/* changed from the default its code declared: a dot drawn as a background, so the label's first
+   letter stays its first letter. It grows out of its own center (2px in) as the label makes room */
+.tiao-row > .tiao-label {
+  background:
+    radial-gradient(circle closest-side, var(--tiao-accent) 90%, transparent) no-repeat 2px 50% / 0
+    0;
+  transition:
+    padding-inline-start var(--tiao-spring-changed, 0.2s ease),
+    background-position var(--tiao-spring-changed, 0.2s ease),
+    background-size var(--tiao-spring-changed, 0.2s ease);
+}
 .tiao-row-changed > .tiao-label {
   padding-inline-start: 9px;
-  background:
-    radial-gradient(circle closest-side, var(--tiao-accent) 90%, transparent) no-repeat 0 50% / 4px
-    4px;
+  background-position: 0 50%;
+  background-size: 4px 4px;
 }
 .tiao-control {
   flex: 1;
@@ -1422,7 +1433,7 @@
 .tiao-folder-header .tiao-icon-chevron {
   color: var(--tiao-folder-caret);
   transition:
-    transform 0.18s ease,
+    transform var(--tiao-spring-collapse, 0.18s ease),
     color 0.12s ease;
 }
 .tiao-folder:hover > .tiao-folder-header .tiao-icon-chevron {
@@ -1524,26 +1535,48 @@
 
 /* ---- tabs ---- */
 .tiao-tab-nav {
+  --tiao-tab-pad: 2px;
+  position: relative;
   display: flex;
-  gap: 2px;
-  padding: 2px;
+  gap: var(--tiao-tab-pad);
+  padding: var(--tiao-tab-pad);
   background: var(--tiao-surface);
   border-radius: var(--tiao-radius-sm);
   /* match row content inset so the strip lines up with sliders/inputs */
   margin: 3px var(--tiao-row-pad-x) 2px;
 }
+/* one pill slides to the picked tab. Tabs share the strip evenly, so its size
+   and place follow from --tiao-tab-count and --tiao-tab-index (selectTab) */
+.tiao-tab-nav::before {
+  content: "";
+  position: absolute;
+  top: var(--tiao-tab-pad);
+  bottom: var(--tiao-tab-pad);
+  left: var(--tiao-tab-pad);
+  width: calc((100% - var(--tiao-tab-pad) * (var(--tiao-tab-count) + 1)) / var(--tiao-tab-count));
+  translate: calc(var(--tiao-tab-index) * (100% + var(--tiao-tab-pad)));
+  border-radius: calc(var(--tiao-radius-sm) - var(--tiao-tab-pad));
+  background: var(--tiao-bg-solid);
+  transition: translate var(--tiao-spring-select, 0.2s ease);
+  pointer-events: none;
+}
+.tiao-tab-nav.tiao-tab-none::before {
+  display: none;
+}
 .tiao-control > .tiao-tab-nav {
   margin: 0;
   width: 100%;
 }
+/* positioned, so the label paints over the pill */
 .tiao-tab-button {
+  position: relative;
   flex: 1;
   min-width: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   height: var(--tiao-row-height);
-  border-radius: calc(var(--tiao-radius-sm) - 2px);
+  border-radius: calc(var(--tiao-radius-sm) - var(--tiao-tab-pad));
   color: var(--tiao-fg-dim);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1553,11 +1586,8 @@
 .tiao-tab-button:hover {
   color: var(--tiao-fg-soft);
 }
-/* a pick lands at once; only hovering eases */
 .tiao-tab-button.tiao-selected {
-  background: var(--tiao-bg-solid);
   color: var(--tiao-fg-strong);
-  transition: none;
 }
 .tiao-tab-page {
   display: none;
@@ -1704,6 +1734,26 @@
   :is(.tiao-slider-num, .tiao-interval-min, .tiao-interval-max)
   .tiao-num-input:read-write {
   pointer-events: auto;
+}
+/* readouts keep clear of their handlebar (dodgeReadout in slider.ts): riding
+   it by --tiao-readout-shift, sliding across it on a hop offset motion springs
+   to zero, and easing out to it from rest as a quiet row reveals its track */
+@property --tiao-readout-offset {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+@property --tiao-readout-reveal {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 1;
+}
+.tiao-number > :is(.tiao-slider-num, .tiao-slider-label, .tiao-interval-min, .tiao-interval-max) {
+  translate: calc(
+    (var(--tiao-readout-shift, 0px) + var(--tiao-readout-offset, 0px)) *
+    var(--tiao-readout-reveal, 1)
+  );
+  transition: --tiao-readout-reveal var(--tiao-spring-dodge, 0.2s ease);
 }
 .tiao-number .tiao-slider-num,
 .tiao-number .tiao-interval-max {
@@ -2747,7 +2797,7 @@ body:has(> .tiao-dock-drawer.tiao-open) > .tiao-pins {
 }
 .tiao-pin .tiao-slider {
   --tiao-handle-size: 3px;
-  --tiao-handle-inset: 8px;
+  --tiao-handle-inset: 7px;
 }
 /* in the accent at rest too, which a pane's handlebars only wear while hovered */
 .tiao-pane.tiao-pin .tiao-slider-handles::after,
@@ -2762,9 +2812,34 @@ body:has(> .tiao-dock-drawer.tiao-open) > .tiao-pins {
 .tiao-pin .tiao-row-full .tiao-number {
   height: var(--tiao-row-height);
 }
+/* the handlebar sits as far in from the card's top and bottom as from its ends */
 .tiao-pin .tiao-row-full .tiao-slider {
+  --tiao-handle-height: calc(var(--tiao-row-height) - var(--tiao-handle-inset) * 2);
   border-radius: var(--tiao-pin-radius);
   background: none;
+}
+/* a pinned slider's quarter marks (number.ts), under the fill and shown with the handle */
+.tiao-slider-ticks {
+  --tiao-tick-width: 2px;
+  --tiao-tick-length: 10px;
+  --tiao-tick-color: color-mix(in srgb, var(--tiao-fg) 18%, transparent);
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+  pointer-events: none;
+}
+.tiao-row:is(:hover, .tiao-row-active, :has(:focus-visible)) .tiao-slider-ticks {
+  opacity: 1;
+}
+.tiao-slider-tick {
+  position: absolute;
+  top: 50%;
+  width: var(--tiao-tick-width);
+  height: var(--tiao-tick-length);
+  margin: calc(var(--tiao-tick-length) / -2) 0 0 calc(var(--tiao-tick-width) / -2);
+  border-radius: calc(var(--tiao-tick-width) / 2);
+  background: var(--tiao-tick-color);
 }
 /* subtle at rest, stronger while the slider is in use; square where it ends, since the
    track's rounding already clips where it starts */
@@ -2974,13 +3049,12 @@ body:has(> .tiao-dock-drawer.tiao-open) > .tiao-pins {
     .tiao-angle-knob {
     background: color-mix(in srgb, var(--tiao-fg) 9%, transparent);
   }
-  /* a hidden track's readouts sit at rest; !important beats the inline
-     transform that dodges them around the handle */
+  /* a hidden track's readouts sit at rest */
   :is(:root[data-tiao-hover-controls] .tiao-pane, .tiao-pane.tiao-pin)
     .tiao-row:not(:hover, .tiao-row-active, :has(:focus-visible))
     .tiao-number
-    > :is(.tiao-slider-num, .tiao-interval-min, .tiao-interval-max) {
-    transform: none !important;
+    > :is(.tiao-slider-num, .tiao-slider-label, .tiao-interval-min, .tiao-interval-max) {
+    --tiao-readout-reveal: 0;
   }
 }
 /* a list needs fields as wide as their text; without that they keep their layout */

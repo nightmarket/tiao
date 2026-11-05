@@ -4,6 +4,9 @@ import { clamp, mapRange, nudge, snap } from '../util'
 import { createScrubber } from './scrubber'
 import { bindSliderTrack, createSliderTrack, dodgeReadout, setSliderFillRange } from './slider'
 
+/** where a pinned slider marks its track, in percent of the range */
+const PINNED_TICKS = [25, 50, 75]
+
 /**
  * Number input (tweakpane-style). With min & max it renders a full-width fill
  * slider with the value field overlaid on the right; otherwise a scrubber field.
@@ -46,23 +49,47 @@ function createSliderRow(ctx: PluginContext<number>, min: number, max: number): 
   scrub.element.classList.add('tiao-slider-num')
   const el = h('div', 'tiao-number', track, scrub.element)
 
-  // pinned, the label sits inside the track and the value stays put at the right
-  const featured = ctx.featured ?? false
-  if (featured) el.append(h('span', 'tiao-slider-label', ctx.label))
-  const dodge = featured
-    ? null
-    : dodgeReadout({
+  const dodges = [
+    dodgeReadout({
+      el,
+      track,
+      readout: scrub.element,
+      text: scrub.input,
+      side: 'end',
+      onDispose: ctx.onDispose,
+    }),
+  ]
+  // pinned, the label sits inside the track at the left, and keeps clear of the handle too
+  if (ctx.featured) {
+    track.prepend(
+      h(
+        'div',
+        'tiao-slider-ticks',
+        ...PINNED_TICKS.map((pct) => {
+          const tick = h('span', 'tiao-slider-tick')
+          tick.style.left = `${pct}%`
+          return tick
+        }),
+      ),
+    )
+    const label = h('span', 'tiao-slider-label', ctx.label)
+    el.append(label)
+    dodges.push(
+      dodgeReadout({
         el,
         track,
-        readout: scrub.element,
-        input: scrub.input,
-        side: 'end',
+        readout: label,
+        text: label,
+        side: 'start',
+        handle: 'end',
         onDispose: ctx.onDispose,
-      })
+      }),
+    )
+  }
   const render = (v: number) => {
     const pct = clamp(mapRange(v, min, max, 0, 100), 0, 100)
     setSliderFillRange(track, 0, pct)
-    dodge?.(pct)
+    for (const dodge of dodges) dodge(pct)
   }
   render(value.get())
   ctx.onDispose(value.subscribe(render))
@@ -85,7 +112,7 @@ function createSliderRow(ctx: PluginContext<number>, min: number, max: number): 
 
   return {
     element: el,
-    full: featured,
+    full: ctx.featured ?? false,
     activate: scrub.activate,
     beginScrub: (e) => {
       const base = value.get()

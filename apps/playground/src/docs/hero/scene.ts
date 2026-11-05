@@ -16,7 +16,15 @@ import { createDayLight, lightAt, sunAt } from './cycle'
 import { earth, planetMaterial, spaceNode } from './earth'
 import { lensGrade } from './grade'
 import { createBoulders, createLand, mesa, ROW } from './mesa'
-import { RADIUS_METERS, sky, skyBackground, skyNode, skyTarget } from './sky'
+import {
+  airTable,
+  airTableNode,
+  RADIUS_METERS,
+  sky,
+  skyBackground,
+  skyNode,
+  skyTarget,
+} from './sky'
 
 export type HeroScene = 'mesa' | 'earth'
 
@@ -106,7 +114,7 @@ export interface HeroParams {
 }
 
 /** sharper than this costs fill rate the soft scenes don't show */
-const MAX_DPR = 1.5
+const MAX_DPR = 1.25
 
 /** segments around and down the planet; enough for the land to break the limb */
 const PLANET_SEGMENTS = [320, 160] as const
@@ -164,7 +172,6 @@ function overLimb(out: Vector3, level: Vector3, dip: number): Vector3 {
  */
 export function startHero(canvas: HTMLCanvasElement, params: HeroParams): () => void {
   const renderer = new WebGPURenderer({ canvas, antialias: false })
-  Reflect.set(window, '__hero', params) // DEBUG
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, MAX_DPR))
 
   const camera = new PerspectiveCamera(90, 1, 0.01, 12)
@@ -182,6 +189,8 @@ export function startHero(canvas: HTMLCanvasElement, params: HeroParams): () => 
   const mesaCamera = new PerspectiveCamera(80, 1, 0.0004, 4)
   const land = createLand()
   const boulders = createBoulders()
+  const airScene = new Scene()
+  airScene.backgroundNode = airTableNode
   const skyScene = new Scene()
   skyScene.backgroundNode = skyNode
   const mesaScene = new Scene()
@@ -319,7 +328,9 @@ export function startHero(canvas: HTMLCanvasElement, params: HeroParams): () => 
     boulders.rotation.x = flight
     pose(mesaCamera, radii, p.tilt, p.fov)
     onScreen(sky.sun.value, mesaCamera, sky.sunUv.value)
-    // the sky and clouds into their target, then the desert over them
+    // the sky's air into its table, the sky and clouds into their target, then the desert over them
+    renderer.setRenderTarget(airTable)
+    renderer.render(airScene, mesaCamera)
     renderer.setRenderTarget(skyTarget)
     renderer.render(skyScene, mesaCamera)
     renderer.setRenderTarget(null)
@@ -377,6 +388,7 @@ export function startHero(canvas: HTMLCanvasElement, params: HeroParams): () => 
     earthPipeline.dispose()
     mesaPipeline.dispose()
     skyTarget.dispose()
+    airTable.dispose()
     for (const mesh of [land, boulders]) {
       mesh.geometry.dispose()
       mesh.material.dispose()
