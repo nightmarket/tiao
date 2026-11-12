@@ -1,6 +1,7 @@
 import { Pane } from '@nightmarket/tiao/core'
 import { createPerfPane } from '@nightmarket/tiao/perf-pane'
 import { useEffect, useRef } from 'react'
+import { FULLSCREEN_CANVAS } from '../canvas'
 import { startThreeScene } from './scene'
 
 /**
@@ -36,5 +37,5 @@ export function ThreePerfExample() {
     }
   }, [])
 
-  return <canvas ref={canvasRef} style={{ width: '100vw', height: '100vh', display: 'block' }} />
+  return <canvas ref={canvasRef} {...FULLSCREEN_CANVAS} />
 }

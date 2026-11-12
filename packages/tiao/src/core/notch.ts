@@ -20,7 +20,6 @@ import {
   type PaneMenuFont,
   type PaneMenuFontSize,
   type PaneMenuHost,
-  type PaneMenuSpacing,
   type PaneMenuToggle,
 } from './pane-menu'
 import { tooltip } from './tooltip'
@@ -33,7 +32,6 @@ export interface NotchHost
     | 'placement'
     | 'sides'
     | 'fontSize'
-    | 'spacing'
     | 'hiding'
     | 'glass'
     | 'font'
@@ -43,7 +41,6 @@ export interface NotchHost
   /** these are global, so they live here rather than in a pane's menu */
   font: PaneMenuFont
   fontSize: PaneMenuFontSize
-  spacing: PaneMenuSpacing
   hiding: PaneMenuToggle
   glass: PaneMenuToggle
   getHidden(): boolean
@@ -216,10 +213,9 @@ export function createNotch(host: NotchHost): Notch {
     setAccent: host.setAccent,
     getNumbers: host.getNumbers,
     setNumbers: host.setNumbers,
-    hoverControls: host.hoverControls,
+    mode: host.mode,
     font: host.font,
     fontSize: host.fontSize,
-    spacing: host.spacing,
     hiding: host.hiding,
     glass: host.glass,
     iconThemes: true,

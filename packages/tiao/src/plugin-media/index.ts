@@ -206,13 +206,12 @@ const CSS = `
 .tiao-media {
   display: flex;
   align-items: stretch;
-  gap: 6px;
+  gap: var(--tiao-gap);
   width: 100%;
   min-width: 0;
 }
-/* same depth-aware split as core rows so the zone spans the full control column */
+/* keeps the core label's depth-aware split, so the zone fills just the control column */
 .tiao-media > .tiao-label {
-  flex: 0 0 calc(50% - (var(--tiao-depth, 0) + 1) * var(--tiao-indent) / 2);
   align-self: center;
 }
 .tiao-media-zone {
@@ -220,20 +219,18 @@ const CSS = `
   flex: 1;
   min-width: 0;
   height: 48px;
-  border: 1px dashed var(--tiao-border);
   border-radius: var(--tiao-radius-sm);
   background: var(--tiao-surface);
   overflow: hidden;
   cursor: pointer;
-  transition: background 0.12s ease, border-color 0.12s ease;
+  transition: background 0.12s ease;
 }
-.tiao-media-zone:hover,
-.tiao-media-zone.tiao-media-over {
+.tiao-media-zone:hover {
   background: var(--tiao-surface-hover);
-  border-color: var(--tiao-accent);
 }
-.tiao-media-zone.tiao-media-loaded {
-  border-style: solid;
+/* a file held over the zone tints it, so the drop target reads without a stroke */
+.tiao-media-zone.tiao-media-over {
+  background: color-mix(in srgb, var(--tiao-accent) 14%, var(--tiao-surface));
 }
 .tiao-media-input {
   display: none;

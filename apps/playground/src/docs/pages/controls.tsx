@@ -184,7 +184,8 @@ tabs.pages[1].addBinding({ tint: '#7dd3fc' }, 'tint')`,
       tabs.pages[0]!.addBinding({ speed: 1 }, 'speed', { min: 0, max: 4 })
       tabs.pages[1]!.addBinding({ tint: '#7dd3fc' }, 'tint')
     },
-    about: 'Pages of rows in one spot.',
+    about:
+      'A folder headed by its page titles: pick one to show its rows, or pick the open one to fold the group. expanded: false starts it folded.',
   },
   {
     name: 'Monitor',

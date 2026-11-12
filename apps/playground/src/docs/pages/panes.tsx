@@ -17,10 +17,12 @@ const NOTCH: Row[] = [
 const SETTINGS: Row[] = [
   ['Hiding', 'The notch hides until the pointer nears the top. On by default'],
   ['Numbers', 'Numbers every folder title: 1, 1.1, 2'],
-  ['Minimal mode', 'Rows show only their value until hovered'],
+  [
+    'Mode',
+    'Default; Minimal, where rows show only their value until hovered; or Full Width, where every row is a card with its label inside, like a pinned one',
+  ],
   ['Font', 'Geist (bundled), system, or ABC Areal from your page'],
-  ['Font size', 'Small, medium, or large'],
-  ['Spacing', 'Row padding, small to large'],
+  ['Font size', 'Small, medium, or large; padding and gaps grow with it'],
   ['Theme', 'Light, dark, or system'],
   ['Style', 'Bouba is soft and round; Kiki is sharp and flat'],
   ['Glass', 'Frosted panes and notch. On by default, and costs a blur per frame'],
@@ -29,9 +31,8 @@ const SETTINGS: Row[] = [
 
 const SETTINGS_CODE = `Pane.setFont('system') // 'geist' | 'system' | 'areal'
 Pane.setFontSize('normal') // 'small' | 'normal' | 'large'
-Pane.setSpacing('m')
 Pane.setGlass(false)
-Pane.setHoverControls(true)`
+Pane.setMode('full-width') // 'default' | 'minimal' | 'full-width'`
 
 const SIDEBAR_CODE = `Pane.toggleDock() // or the notch's dock button; Pane.docked says which
 new Pane({ title: 'Export', order: 99 }) // lower sorts first in the sidebar`

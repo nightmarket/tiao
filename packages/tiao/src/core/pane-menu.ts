@@ -6,8 +6,8 @@ import type {
   Pane,
   PaneFont,
   PaneFontSize,
+  PaneMode,
   PaneOptions,
-  PaneSpacing,
   PaneStyle,
   PaneTheme,
 } from './pane'
@@ -39,13 +39,13 @@ export interface PaneMenuFontSize {
   set(v: PaneFontSize): void
 }
 
-/** how much padding every pane draws; only the notch offers it */
-export interface PaneMenuSpacing {
-  get(): PaneSpacing
-  set(v: PaneSpacing): void
+/** how every pane draws its rows; one setting for all of them */
+export interface PaneMenuMode {
+  get(): PaneMode
+  set(v: PaneMode): void
 }
 
-/** an on/off setting (hiding, glass, minimal mode) */
+/** an on/off setting (hiding, glass) */
 export interface PaneMenuToggle {
   get(): boolean
   set(v: boolean): void
@@ -64,15 +64,13 @@ export interface PaneMenuHost {
   setAccent(accent: string): void
   getNumbers(): boolean
   setNumbers(v: boolean): void
-  /** rows show just their values until hovered; one setting for every pane */
-  hoverControls: PaneMenuToggle
+  mode: PaneMenuMode
   /** omitted for menus that control a group of panes, e.g. the dock sidebar */
   placement?: PaneMenuPlacement
   /** the dock's stand-in for the pane anchor grid */
   sides?: PaneMenuSides
   font?: PaneMenuFont
   fontSize?: PaneMenuFontSize
-  spacing?: PaneMenuSpacing
   /** the notch vanishes until the pointer comes near the top edge */
   hiding?: PaneMenuToggle
   /** floating panes and the notch draw translucent and frosted */
@@ -105,6 +103,12 @@ const FONT_OPTIONS: Record<string, PaneFont> = {
   Geist: 'geist',
   System: 'system',
   'ABC Areal': 'areal',
+}
+
+const MODE_OPTIONS: Record<string, PaneMode> = {
+  Default: 'default',
+  Minimal: 'minimal',
+  'Full Width': 'full-width',
 }
 
 /** quick accent swatches, loosely based on syntax-highlighting palettes */
@@ -180,7 +184,7 @@ function buildMenu(host: PaneMenuHost): { shell: HTMLElement; refresh: () => voi
   host.element.append(shell)
 
   const placement = host.placement
-  const { font, fontSize, spacing, hiding, glass } = host
+  const { font, fontSize, hiding, glass } = host
   const settings = {
     draggable: placement?.getDraggable() ?? false,
     hiding: hiding?.get() ?? false,
@@ -188,9 +192,9 @@ function buildMenu(host: PaneMenuHost): { shell: HTMLElement; refresh: () => voi
     theme: host.getTheme(),
     accent: host.getAccent(),
     numbers: host.getNumbers(),
-    hoverControls: host.hoverControls.get(),
+    mode: host.mode.get(),
   }
-  const menuPane = host.createPane({ container: shell, menu: false, storage: false, size: 's' })
+  const menuPane = host.createPane({ container: shell, menu: false, storage: false })
   host.onDispose(() => menuPane.dispose())
 
   // the embedded pane re-declares the theme variables, so its chrome has to
@@ -221,10 +225,11 @@ function buildMenu(host: PaneMenuHost): { shell: HTMLElement; refresh: () => voi
   }
   const numbersBinding = menuPane.addBinding(settings, 'numbers', { label: 'Numbers' })
   onEdit(numbersBinding, (v) => host.setNumbers(v))
-  const hoverControlsBinding = menuPane.addBinding(settings, 'hoverControls', {
-    label: 'Minimal mode',
+  const modeBinding = menuPane.addBinding(settings, 'mode', {
+    label: 'Mode',
+    options: MODE_OPTIONS,
   })
-  onEdit(hoverControlsBinding, (v) => host.hoverControls.set(v))
+  onEdit(modeBinding, (v) => host.mode.set(v))
   menuPane.addSeparator()
 
   if (font) {
@@ -255,24 +260,6 @@ function buildMenu(host: PaneMenuHost): { shell: HTMLElement; refresh: () => voi
     menuPane.rack.append(row.row)
     refreshers.push(row.render)
   }
-  if (spacing) {
-    const row = segmentedRow(
-      host,
-      'Spacing',
-      [
-        { label: 'S', value: 's', title: 'Small' },
-        { label: 'M', value: 'm', title: 'Medium' },
-        { label: 'L', value: 'l', title: 'Large' },
-      ],
-      {
-        get: () => spacing.get(),
-        set: (v) => spacing.set(v),
-      },
-    )
-    menuPane.rack.append(row.row)
-    refreshers.push(row.render)
-  }
-
   let refreshTheme: () => void
   if (host.iconThemes) {
     const row = segmentedRow(
@@ -404,11 +391,11 @@ function buildMenu(host: PaneMenuHost): { shell: HTMLElement; refresh: () => voi
     settings.theme = host.getTheme()
     settings.accent = host.getAccent()
     settings.numbers = host.getNumbers()
-    settings.hoverControls = host.hoverControls.get()
+    settings.mode = host.mode.get()
     refreshTheme()
     accentBinding.refresh()
     numbersBinding.refresh()
-    hoverControlsBinding.refresh()
+    modeBinding.refresh()
     for (const fn of refreshers) fn()
     syncChrome()
   }

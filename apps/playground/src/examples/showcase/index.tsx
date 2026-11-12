@@ -6,6 +6,7 @@ import type { MediaValue } from '@nightmarket/tiao/plugin-media'
 import type { ThumbEntry } from '@nightmarket/tiao/plugin-thumbnails'
 import { buttonGroup, monitor, tabs, useControls } from '@nightmarket/tiao/react'
 import { useEffect, useRef } from 'react'
+import { FULLSCREEN_CANVAS } from '../canvas'
 
 /** Decorative looping gradient so export/FPS have frames — not a scene to debug. */
 function startBackdrop(canvas: HTMLCanvasElement): () => void {
@@ -442,5 +443,5 @@ export function ShowcaseExample() {
     }
   }, [])
 
-  return <canvas ref={canvasRef} style={{ width: '100vw', height: '100vh', display: 'block' }} />
+  return <canvas ref={canvasRef} {...FULLSCREEN_CANVAS} />
 }

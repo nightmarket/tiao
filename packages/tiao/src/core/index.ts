@@ -47,9 +47,9 @@ export type {
   Namespace,
   PaneFont,
   PaneFontSize,
+  PaneMode,
   PaneOptions,
   PaneSize,
-  PaneSpacing,
   PaneStyle,
   PaneTheme,
 } from './pane'

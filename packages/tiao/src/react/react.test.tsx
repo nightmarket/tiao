@@ -288,7 +288,7 @@ describe('useControls', () => {
     expect(api!.note).toBe('hi')
 
     const pane = Pane.get('tabs')!
-    expect(pane.element.querySelectorAll('.tiao-tab-button')).toHaveLength(2)
+    expect(pane.element.querySelectorAll('.tiao-tab-title')).toHaveLength(2)
     expect(pane.element.querySelectorAll('.tiao-tab-page')).toHaveLength(2)
   })
 
@@ -312,7 +312,7 @@ describe('useControls', () => {
     expect(api!.size).toBe(4)
 
     const pane = Pane.get('tabs-direct')!
-    expect(pane.element.querySelectorAll('.tiao-tab-button')).toHaveLength(2)
+    expect(pane.element.querySelectorAll('.tiao-tab-title')).toHaveLength(2)
   })
 
   it('folder showIf is owned by its first registration and cleared on unmount', async () => {

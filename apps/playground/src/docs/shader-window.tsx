@@ -92,13 +92,13 @@ interface HeroPane {
   pane: Pane
   /** disposes the pane and the clock that keeps its time row current */
   dispose(): void
-  sunTab: HTMLElement
+  sunFolder: HTMLElement
   time: BindingApi<number>
   azimuth: BindingApi<number>
 }
 
 /**
- * A tour of the controls: thumbnails, tabs, folders nested in folders,
+ * A tour of the controls: thumbnails, folders nested in folders,
  * sliders, dials, switches, colors, and a graph.
  */
 function mountHeroPane(params: HeroParams): HeroPane {
@@ -118,27 +118,18 @@ function mountHeroPane(params: HeroParams): HeroPane {
   addFpsGraph(pane)
 
   const { mesa, earth } = params
-  const mesaTabs = pane.addTab({
-    pages: [
-      { title: 'Flight' },
-      { title: 'Sun' },
-      { title: 'Sky' },
-      { title: 'Land' },
-      { title: 'Lens' },
-    ],
-    showIf: () => params.scene === 'mesa',
-  })
-  const flight = mesaTabs.pages[0]!
+  const onMesa = { showIf: () => params.scene === 'mesa' }
+  const flight = pane.addFolder({ title: 'Flight', ...onMesa })
   flight.addBinding(mesa, 'speed', { min: 0, max: 6, step: 0.01 })
   flight.addBinding(mesa, 'altitude', { ...ALTITUDE, step: 1 })
   flight.addBinding(mesa, 'tilt', { min: -10, max: 30, step: 0.5 })
   flight.addBinding(mesa, 'fov', { min: 40, max: 110, step: 1 })
-  const day = mesaTabs.pages[1]!
+  const day = pane.addFolder({ title: 'Sun', expanded: false, ...onMesa })
   const time = day.addBinding(mesa, 'time', { ...DAY, step: 0.01, format: clock })
   const azimuth = day.addBinding(mesa, 'azimuth', { view: 'angle', step: 0.1 })
   day.addBinding(mesa, 'play')
   day.addBinding(mesa, 'day', { label: 'day length', min: 10, max: 600, step: 1 })
-  const weather = mesaTabs.pages[2]!
+  const weather = pane.addFolder({ title: 'Sky', expanded: false, ...onMesa })
   const clouds = weather.addFolder({ title: 'Clouds' })
   clouds.addBinding(mesa, 'coverage', { min: 0, max: 1, step: 0.01 })
   clouds.addBinding(mesa, 'clouds', { label: 'thickness', min: 0, max: 3, step: 0.01 })
@@ -146,23 +137,20 @@ function mountHeroPane(params: HeroParams): HeroPane {
   mesaAir.addBinding(mesa, 'density', { min: 0, max: 3, step: 0.01 })
   mesaAir.addBinding(mesa, 'haze', { min: 0, max: 4, step: 0.01 })
   weather.addBinding(mesa, 'wind', { min: 0, max: 3, step: 0.01 })
-  const desert = mesaTabs.pages[3]!
+  const desert = pane.addFolder({ title: 'Land', expanded: false, ...onMesa })
   desert.addBinding(mesa, 'mesas', { min: 0, max: 1, step: 0.01 })
   desert.addBinding(mesa, 'dunes', { min: 0, max: 3, step: 0.01 })
   const tints = desert.addFolder({ title: 'Colors', expanded: false })
   tints.addBinding(mesa, 'sand')
   tints.addBinding(mesa, 'rock')
-  const mesaLens = mesaTabs.pages[4]!
+  const mesaLens = pane.addFolder({ title: 'Lens', expanded: false, ...onMesa })
   mesaLens.addBinding(mesa, 'flare', { min: 0, max: 2, step: 0.01 })
   mesaLens.addBinding(mesa, 'bloom', { min: 0, max: 2, step: 0.01 })
   mesaLens.addBinding(mesa, 'exposure', { min: 0.1, max: 2, step: 0.01 })
   mesaLens.addBinding(mesa, 'grain', { min: 0, max: 0.2, step: 0.005 })
 
-  const earthTabs = pane.addTab({
-    pages: [{ title: 'Orbit' }, { title: 'Sun' }, { title: 'Ground' }, { title: 'Lens' }],
-    showIf: () => params.scene === 'earth',
-  })
-  const orbit = earthTabs.pages[0]!
+  const onEarth = { showIf: () => params.scene === 'earth' }
+  const orbit = pane.addFolder({ title: 'Orbit', ...onEarth })
   orbit.addBinding(earth, 'speed', { min: 0, max: 10, step: 0.1 })
   orbit.addBinding(earth, 'altitude', { min: 0.04, max: 0.4, step: 0.005 })
   orbit.addBinding(earth, 'tilt', { min: 0, max: 45, step: 0.5 })
@@ -171,7 +159,7 @@ function mountHeroPane(params: HeroParams): HeroPane {
   surface.addBinding(earth, 'morph', { min: 0, max: 0.1, step: 0.005 })
   surface.addBinding(earth, 'wobble', { min: 0, max: 1, step: 0.01 })
 
-  const sun = earthTabs.pages[1]!
+  const sun = pane.addFolder({ title: 'Sun', expanded: false, ...onEarth })
   const angle = sun.addFolder({ title: 'Angle' })
   angle.addBinding(earth, 'elevation', { ...ELEVATION, step: 0.1 })
   angle.addBinding(earth, 'azimuth', { view: 'angle', step: 0.1 })
@@ -180,7 +168,7 @@ function mountHeroPane(params: HeroParams): HeroPane {
   air.addBinding(earth, 'density', { min: 0, max: 3, step: 0.01 })
   air.addBinding(earth, 'haze', { min: 0, max: 4, step: 0.01 })
 
-  const ground = earthTabs.pages[2]!
+  const ground = pane.addFolder({ title: 'Ground', expanded: false, ...onEarth })
   const land = ground.addFolder({ title: 'Land' })
   land.addBinding(earth, 'sea', { min: 0.3, max: 0.7, step: 0.005 })
   land.addBinding(earth, 'land', { label: 'scale', min: 0.5, max: 6, step: 0.05 })
@@ -190,7 +178,7 @@ function mountHeroPane(params: HeroParams): HeroPane {
   colors.addBinding(earth, 'ground')
   ground.addBinding(earth, 'clouds', { min: 0, max: 1, step: 0.01 })
 
-  const lens = earthTabs.pages[3]!
+  const lens = pane.addFolder({ title: 'Lens', expanded: false, ...onEarth })
   const flare = lens.addFolder({ title: 'Flare' })
   flare.addBinding(earth, 'flare', { label: 'strength', min: 0, max: 2, step: 0.01 })
   flare.addBinding(earth, 'drift', { min: 0, max: 2, step: 0.01 })
@@ -220,14 +208,13 @@ function mountHeroPane(params: HeroParams): HeroPane {
   const stopClock = onInterval(() => {
     if (params.scene === 'mesa' && mesa.play) time.refresh()
   }, 120)
-  const sunTab = mesaTabs.element.querySelectorAll<HTMLElement>('.tiao-tab-button')[1]!
   return {
     pane,
     dispose: () => {
       stopClock()
       pane.dispose()
     },
-    sunTab,
+    sunFolder: day.element.querySelector<HTMLElement>('.tiao-folder-title')!,
     time,
     azimuth,
   }
@@ -257,7 +244,7 @@ export function ShaderWindow() {
     if (touring) mesa.time = TOUR_DAWN
     const release = Pane.namespace('hero', { root: viewRef.current! })
     const stop = startHero(canvasRef.current!, params)
-    const { pane, dispose, sunTab, time, azimuth } = mountHeroPane(params)
+    const { pane, dispose, sunFolder, time, azimuth } = mountHeroPane(params)
     let stopTour: (() => void) | null = null
     if (touring) {
       const view = viewRef.current!
@@ -265,7 +252,7 @@ export function ShaderWindow() {
         frame: frameRef.current!,
         cursor: cursorRef.current!,
         reachable: () => !pane.hidden && pane.expanded && view.contains(pane.element),
-        tab: sunTab,
+        folder: sunFolder,
         slider: {
           track: time.element.querySelector<HTMLElement>('.tiao-slider')!,
           range: DAY,

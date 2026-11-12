@@ -31,7 +31,7 @@ import { createDrawerControls, type DrawerControls } from './drawer-controls'
 import { loadGeist } from './fonts'
 import { ValueHistory } from './history'
 import { createNotch, type Notch, type NotchHost } from './notch'
-import { createPaneMenu, type PaneMenuToggle } from './pane-menu'
+import { createPaneMenu, type PaneMenuMode } from './pane-menu'
 import { createPinBoard, type PinBoard } from './pins'
 import { globalRegistry, PluginRegistry, type TiaoPlugin } from './plugin'
 import { openRowToolbar } from './row-toolbar'
@@ -39,6 +39,7 @@ import { createSearch, createSearchShortcut, type Search, type SearchEntry } fro
 import { injectStyles, SPRINGS } from './styles'
 import { tooltip } from './tooltip'
 import { clamp, isRecord, type JSONStore, jsonStore } from './util'
+import { Value } from './value'
 import { createValueStore, sameShape, type ValueStore } from './values'
 
 export type Anchor =
@@ -80,7 +81,7 @@ export interface PaneOptions {
   maxHeight?: number
   /** CSS custom property overrides, e.g. { '--tiao-accent': '#f0f' } */
   theme?: Record<string, string>
-  /** overall scale: fonts, control heights, spacing, and width (default 'm') */
+  /** overall scale: fonts, control heights, spacing, and width (default 's') */
   size?: PaneSize
   /** surface style: bouba (rounded, soft shadow) or kiki (sharp, hairline) */
   style?: PaneStyle
@@ -174,10 +175,8 @@ function normalizeStyle(v: string | undefined | null): PaneStyle {
   return 'bouba' // includes 'default', 'bouba', missing
 }
 
+/** overall scale; row padding, gaps, and insets grow with it */
 export type PaneSize = 's' | 'm' | 'l'
-
-/** row padding around controls; S is the default this library ships */
-export type PaneSpacing = 's' | 'm' | 'l'
 
 /**
  * How big every floating pane draws, set once for all of them from the notch.
@@ -193,6 +192,14 @@ export type PaneFontSize = 'small' | 'normal' | 'large'
  * to the system stack.
  */
 export type PaneFont = 'geist' | 'system' | 'areal'
+
+/**
+ * How every pane draws its rows, set from any settings menu. `minimal` shows
+ * just their values until hovered; `full-width` draws them the way pinned
+ * cards do, which also has sliders and dials take the whole row with their
+ * label inside.
+ */
+export type PaneMode = 'default' | 'minimal' | 'full-width'
 
 const DEFAULT_FONT: PaneFont = 'geist'
 
@@ -274,8 +281,8 @@ const DEFAULT_NAMESPACE = 'default'
  * window. Any other can be rooted in an element (Pane.namespace): its panes
  * then float inside that element, anchored to its corners and scrolling with
  * it, and its notch and pinned cards ride the element's top and bottom edges.
- * Search and the page-wide settings (font, size, spacing, glass, hover
- * controls) are shared by every namespace in a document.
+ * Search and the page-wide settings (font, size, glass, mode) are
+ * shared by every namespace in a document.
  */
 export interface Namespace {
   readonly name: string
@@ -534,7 +541,6 @@ function valueActions(space: Namespace): Pick<NotchHost, 'history' | 'reset'> {
 interface NotchState {
   font?: PaneFont | undefined
   fontSize?: PaneFontSize | undefined
-  spacing?: PaneSpacing | undefined
   /** the notch vanishes until the pointer comes near the top edge */
   hiding?: boolean | undefined
   /** every floating pane is hidden (H / the notch eye); restored on remount */
@@ -545,8 +551,7 @@ interface NotchState {
   style?: PaneStyle | undefined
   accent?: string | undefined
   numbers?: boolean | undefined
-  /** rows show just their values until hovered */
-  hoverControls?: boolean | undefined
+  mode?: PaneMode | undefined
 }
 
 const notchStore = jsonStore<NotchState>('tiao:notch')
@@ -583,15 +588,30 @@ function applyFont(doc: Document, font: PaneFont): void {
   if (font === 'geist') void loadGeist(doc)
 }
 
-/** on the root element like the font, so the panes, the sidebar, and the drawer all follow it */
-function applyHoverControls(doc: Document, on: boolean): void {
-  doc.documentElement.toggleAttribute('data-tiao-hover-controls', on)
+/** each document's rows rebuild through this when full width turns on or off */
+const fullWidths = new WeakMap<Document, Value<boolean>>()
+
+function fullWidthOf(doc: Document): Value<boolean> {
+  let fullWidth = fullWidths.get(doc)
+  if (!fullWidth) {
+    fullWidth = new Value(readNotchState().mode === 'full-width')
+    fullWidths.set(doc, fullWidth)
+  }
+  return fullWidth
 }
 
-function hoverControlsToggle(doc: Document): PaneMenuToggle {
+/** on the root element like the font, so the panes, the sidebar, and the drawer all follow it */
+function applyMode(doc: Document, mode: PaneMode): void {
+  const root = doc.documentElement
+  if (mode === 'default') delete root.dataset['tiaoMode']
+  else root.dataset['tiaoMode'] = mode
+  fullWidthOf(doc).set(mode === 'full-width')
+}
+
+function modeSetting(doc: Document): PaneMenuMode {
   return {
-    get: () => Pane.hoverControls,
-    set: (v) => Pane.setHoverControls(v, doc),
+    get: () => Pane.mode,
+    set: (v) => Pane.setMode(v, doc),
   }
 }
 
@@ -918,14 +938,10 @@ function ensureNotch(space: Namespace): void {
     setAccent: (accent) => setGlobalChrome(space, { accent }),
     getNumbers: () => globalChrome(space).numbers,
     setNumbers: (numbers) => setGlobalChrome(space, { numbers }),
-    hoverControls: hoverControlsToggle(doc),
+    mode: modeSetting(doc),
     fontSize: {
       get: () => Pane.fontSize,
       set: (v) => Pane.setFontSize(v, doc),
-    },
-    spacing: {
-      get: () => Pane.spacing,
-      set: (v) => Pane.setSpacing(v, doc),
     },
     hiding: {
       get: () => readNotchState().hiding ?? true,
@@ -1008,11 +1024,8 @@ function syncNotch(space: Namespace): void {
   applyChrome(el, globalChrome(space))
   el.classList.toggle('tiao-glass', state.glass ?? DEFAULT_GLASS)
   const size = paneSizeFor(state.fontSize ?? 'small')
-  const spacing = state.spacing ?? 's'
   el.classList.toggle('tiao-size-s', size === 's')
   el.classList.toggle('tiao-size-l', size === 'l')
-  el.classList.toggle('tiao-spacing-m', spacing === 'm')
-  el.classList.toggle('tiao-spacing-l', spacing === 'l')
   notch.sync()
 }
 
@@ -1182,7 +1195,7 @@ function createDockHost(space: Namespace): DockHost {
     setAccent: (accent) => update({ accent }),
     getNumbers: () => dockChrome(space).numbers,
     setNumbers: (numbers) => update({ numbers }),
-    hoverControls: hoverControlsToggle(doc),
+    mode: modeSetting(doc),
   }
 }
 
@@ -1268,18 +1281,6 @@ export class Pane extends Container {
   static setFontSize(size: PaneFontSize, doc: Document = document): void {
     notchStore.patch({ fontSize: size })
     for (const p of panesIn(doc)) p.applyFontSize(size)
-    syncNotches(doc)
-  }
-
-  /** how much padding floating panes currently draw */
-  static get spacing(): PaneSpacing {
-    return readNotchState().spacing ?? 's'
-  }
-
-  /** Draw every floating pane at `spacing`; 's' is the default padding. */
-  static setSpacing(spacing: PaneSpacing, doc: Document = document): void {
-    notchStore.patch({ spacing })
-    for (const p of panesIn(doc)) p.spacing = spacing
     syncNotches(doc)
   }
 
@@ -1473,19 +1474,21 @@ export class Pane extends Container {
     })
   }
 
-  /** whether rows show just their values until hovered */
-  static get hoverControls(): boolean {
-    return readNotchState().hoverControls ?? false
+  /** how every pane draws its rows */
+  static get mode(): PaneMode {
+    return readNotchState().mode ?? 'default'
   }
 
   /**
-   * Show every row as just its value until the pointer comes over it, when
-   * slider tracks, scrub grips, dropdown carets, and field backgrounds return.
-   * Screens that can't hover always show them.
+   * Draw every pane's rows in `mode`. `minimal` shows each row as just its
+   * value until the pointer comes over it, when slider tracks, scrub grips,
+   * dropdown carets, and field backgrounds return; screens that can't hover
+   * always show them. `full-width` draws rows the way pinned cards do: as
+   * quiet as minimal, with sliders and dials taking the whole row.
    */
-  static setHoverControls(hoverControls: boolean, doc: Document = document): void {
-    notchStore.patch({ hoverControls })
-    applyHoverControls(doc, hoverControls)
+  static setMode(mode: PaneMode, doc: Document = document): void {
+    notchStore.patch({ mode })
+    applyMode(doc, mode)
   }
 
   /**
@@ -1540,7 +1543,12 @@ export class Pane extends Container {
         ? toSpace(options.namespace)
         : spaceFor(doc, options.namespace)
     const registry = new PluginRegistry(globalRegistry)
-    const host: BladeHost = { document: doc, registry, pins: pinBoardFor(space) }
+    const host: BladeHost = {
+      document: doc,
+      registry,
+      pins: pinBoardFor(space),
+      fullWidth: fullWidthOf(doc),
+    }
     const storageKey = paneStorageKey(options)
     if (storageKey) {
       host.values = createValueStore(storageKey)
@@ -1636,11 +1644,10 @@ export class Pane extends Container {
     // the global font size covers floating panes; inline ones keep their own
     const notchState = readNotchState()
     applyFont(doc, notchState.font ?? DEFAULT_FONT)
-    applyHoverControls(doc, notchState.hoverControls ?? false)
+    applyMode(doc, notchState.mode ?? 'default')
     if (this.floating) this.applyFontSize(notchState.fontSize ?? 'small')
-    else if (options.size) this.size = options.size
+    else this.size = options.size ?? 's'
     if (this.floating) {
-      this.spacing = notchState.spacing ?? 's'
       this.element.classList.toggle('tiao-glass', notchState.glass ?? DEFAULT_GLASS)
     }
 
@@ -1819,7 +1826,7 @@ export class Pane extends Container {
         setNumbers: (v) => {
           this.numbers = v
         },
-        hoverControls: hoverControlsToggle(doc),
+        mode: modeSetting(doc),
         placement: {
           getDraggable: () => this._draggable,
           setDraggable: (v) => {
@@ -2074,16 +2081,6 @@ export class Pane extends Container {
   set size(v: PaneSize) {
     this.element.classList.remove('tiao-size-s', 'tiao-size-l')
     if (v !== 'm') this.element.classList.add(`tiao-size-${v}`)
-  }
-
-  get spacing(): PaneSpacing {
-    if (this.element.classList.contains('tiao-spacing-m')) return 'm'
-    if (this.element.classList.contains('tiao-spacing-l')) return 'l'
-    return 's'
-  }
-  set spacing(v: PaneSpacing) {
-    this.element.classList.remove('tiao-spacing-m', 'tiao-spacing-l')
-    if (v !== 's') this.element.classList.add(`tiao-spacing-${v}`)
   }
 
   get theme(): PaneTheme {

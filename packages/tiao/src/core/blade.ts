@@ -1,3 +1,5 @@
+import { spring } from 'motion'
+import { animate } from 'motion/mini'
 import { h, icon, longPress, selectTab, withDocument } from './dom'
 import { Emitter } from './emitter'
 import type { PinBoard } from './pins'
@@ -10,6 +12,7 @@ import type {
   PluginView,
   VisibilityOptions,
 } from './plugin'
+import { SPRINGS } from './styles'
 import { onInterval } from './ticker'
 import type { JSONStore } from './util'
 import { Value } from './value'
@@ -29,6 +32,8 @@ export interface BladeHost {
   onSettle?: SettleListener
   /** the page's pinned values; absent where rows can't be featured */
   pins?: PinBoard
+  /** rows lay out the way pinned cards draw them (Pane.mode 'full-width') */
+  fullWidth?: Value<boolean>
   /** which rows are pinned, by storage path; absent for panes without an id or storage */
   pinStore?: JSONStore<Record<string, boolean>>
 }
@@ -252,7 +257,7 @@ export abstract class Container extends Item {
     return api
   }
 
-  addTab(params: { pages: { title: string }[] } & VisibilityOptions): TabApi {
+  addTab(params: { pages: { title: string }[]; expanded?: boolean } & VisibilityOptions): TabApi {
     const { showIf, hidden, disabled, ...tabParams } = params
     const api = withDocument(this.host.document, () => new TabApi(this.host, tabParams))
     this.attach(api)
@@ -285,7 +290,7 @@ export abstract class Container extends Item {
       this.children.push(item)
       this.rack.append(item.element)
     }
-    if (item instanceof FolderApi) item.updateDepth()
+    updateItemDepth(item)
     this.notifyStructure()
   }
 
@@ -389,11 +394,10 @@ export function revealOverridden(item: Item, found: BindingApi<unknown>[]): bool
   }
   if (item instanceof TabApi) {
     const hits = item.pages.map((page) => revealOverridden(page, found))
-    if (!hits[item.selectedIndex]) {
-      const first = hits.indexOf(true)
-      if (first >= 0) item.selectedIndex = first
-    }
-    return hits.includes(true)
+    if (!hits.includes(true)) return false
+    if (!hits[item.selectedIndex]) item.selectedIndex = hits.indexOf(true)
+    item.expanded = true
+    return true
   }
   if (item instanceof Container) {
     let any = false
@@ -414,6 +418,7 @@ export function revealItem(item: Item, target: Item): boolean {
     const page = item.pages.findIndex((p) => revealItem(p, target))
     if (page < 0) return false
     item.selectedIndex = page
+    item.expanded = true
     return true
   }
   if (!(item instanceof Container) || !item.children.some((c) => revealItem(c, target))) {
@@ -465,6 +470,10 @@ export class BindingApi<T> extends Item {
   private labelEl: HTMLElement | null = null
   private labelText: string
   private readonly plugin: InputPlugin<unknown> | MonitorPlugin<unknown>
+  /** whether the row's view is laid out the way a pinned card draws it */
+  private featured = false
+  /** cleanup for the row's current view, run when it is rebuilt or the binding goes */
+  private viewDisposers: (() => void)[] = []
 
   constructor(
     private readonly host: BladeHost,
@@ -491,63 +500,18 @@ export class BindingApi<T> extends Item {
     }
     this.plugin = plugin
 
-    const view = plugin.create({
-      document: host.document,
-      value: this.value as Value<unknown>,
-      options,
-      label,
-      onDispose: (fn) => this.disposers.push(fn),
-    })
-
-    if (view.full) {
-      this.element = h('div', 'tiao-row tiao-row-full', view.element)
-    } else {
-      this.labelEl = h('div', 'tiao-label', label)
-      this.element = h('div', 'tiao-row', this.labelEl, h('div', 'tiao-control', view.element))
-    }
+    this.element = h('div', 'tiao-row')
     rowBindings.set(this.element, this as BindingApi<unknown>)
-
-    // clicking the row outside the concrete control activates it (focus input, open picker, ...);
-    // long-pressing the label starts a scrub/drag when the plugin supports it
-    if ((view.activate || view.beginScrub) && !view.full) {
-      this.element.classList.add('tiao-row-activate')
-      let suppressClick = false
-      if (view.beginScrub) {
-        this.disposers.push(
-          longPress(this.element, {
-            filter: (e) => {
-              // a finger held on a label in the drawer is a tap (or a scroll), never a scrub
-              if (this.element.closest('.tiao-dock-drawer')) return false
-              const t = e.target as Node | null
-              return !(t && view.element.contains(t))
-            },
-            onLongPress: (e) => {
-              suppressClick = true
-              e.preventDefault()
-              view.beginScrub?.(e)
-            },
-            onTap: () => {
-              suppressClick = false
-            },
-          }),
-        )
-      }
-      if (view.activate) {
-        const onRowClick = (e: MouseEvent) => {
-          if (suppressClick) {
-            suppressClick = false
-            return
-          }
-          const target = e.target as Node | null
-          if (target && view.element.contains(target)) return
-          // this click just deselected this row's input; don't immediately focus it again
-          if (clickFollowsPointerBlur(this.element)) return
-          view.activate?.()
-        }
-        this.element.addEventListener('click', onRowClick)
-        this.disposers.push(() => this.element.removeEventListener('click', onRowClick))
-      }
+    const { fullWidth } = host
+    this.mountView(fullWidth?.get() ?? false)
+    if (fullWidth && plugin.featurable) {
+      this.disposers.push(
+        fullWidth.subscribe((featured) => {
+          withDocument(host.document, () => this.mountView(featured))
+        }),
+      )
     }
+    this.disposers.push(() => this.unmountView())
 
     if (!this.monitor) {
       this.disposers.push(
@@ -599,6 +563,78 @@ export class BindingApi<T> extends Item {
   set label(v: string) {
     this.labelText = v
     if (this.labelEl) this.labelEl.textContent = v
+    // a featured view draws the label itself
+    else if (this.featured) withDocument(this.host.document, () => this.mountView(true))
+  }
+
+  /** build the plugin's view into the row, replacing the one it had */
+  private mountView(featured: boolean): void {
+    this.unmountView()
+    this.featured = featured
+    const view = this.plugin.create({
+      document: this.host.document,
+      value: this.value as Value<unknown>,
+      options: this.options,
+      label: this.labelText,
+      featured,
+      onDispose: (fn) => this.viewDisposers.push(fn),
+    })
+    const row = this.element
+    row.classList.toggle('tiao-row-full', view.full === true)
+    if (view.full) {
+      this.labelEl = null
+      row.replaceChildren(view.element)
+    } else {
+      this.labelEl = h('div', 'tiao-label', this.labelText)
+      row.replaceChildren(this.labelEl, h('div', 'tiao-control', view.element))
+    }
+
+    // clicking the row outside the concrete control activates it (focus input, open picker, ...);
+    // long-pressing the label starts a scrub/drag when the plugin supports it
+    const activates = (view.activate || view.beginScrub) && !view.full
+    row.classList.toggle('tiao-row-activate', Boolean(activates))
+    if (!activates) return
+    let suppressClick = false
+    if (view.beginScrub) {
+      this.viewDisposers.push(
+        longPress(row, {
+          filter: (e) => {
+            // a finger held on a label in the drawer is a tap (or a scroll), never a scrub
+            if (row.closest('.tiao-dock-drawer')) return false
+            const t = e.target as Node | null
+            return !(t && view.element.contains(t))
+          },
+          onLongPress: (e) => {
+            suppressClick = true
+            e.preventDefault()
+            view.beginScrub?.(e)
+          },
+          onTap: () => {
+            suppressClick = false
+          },
+        }),
+      )
+    }
+    if (view.activate) {
+      const onRowClick = (e: MouseEvent) => {
+        if (suppressClick) {
+          suppressClick = false
+          return
+        }
+        const target = e.target as Node | null
+        if (target && view.element.contains(target)) return
+        // this click just deselected this row's input; don't immediately focus it again
+        if (clickFollowsPointerBlur(row)) return
+        view.activate?.()
+      }
+      row.addEventListener('click', onRowClick)
+      this.viewDisposers.push(() => row.removeEventListener('click', onRowClick))
+    }
+  }
+
+  private unmountView(): void {
+    for (const fn of this.viewDisposers) fn()
+    this.viewDisposers = []
   }
 
   protected override searchText(): string {
@@ -826,13 +862,9 @@ export class FolderApi extends Container {
       h('span', 'tiao-folder-heading', h('span', 'tiao-folder-title', params.title)),
     )
     this.headerEl.type = 'button'
-    // the depth line doubles as a collapse control (keyboard users have the header)
-    const lineEl = h('button', 'tiao-folder-line')
-    lineEl.type = 'button'
-    lineEl.tabIndex = -1
-    lineEl.setAttribute('aria-hidden', 'true')
-    this.bodyEl = h('div', 'tiao-folder-body', h('div', 'tiao-folder-clip', this.rack), lineEl)
-    this.element = h('div', 'tiao-folder', this.headerEl, this.bodyEl)
+    const frame = folderFrame(this.headerEl, this.rack)
+    this.bodyEl = frame.body
+    this.element = frame.element
     if (params.color) {
       this.element.classList.add('tiao-folder-colored')
       this.element.style.setProperty('--tiao-folder-color', params.color)
@@ -840,15 +872,11 @@ export class FolderApi extends Container {
     this.applyExpanded()
 
     if (this.collapsible) {
-      const onClick = () => {
-        this.expanded = !this.expanded
-      }
-      this.headerEl.addEventListener('click', onClick)
-      lineEl.addEventListener('click', onClick)
-      this.disposers.push(() => {
-        this.headerEl.removeEventListener('click', onClick)
-        lineEl.removeEventListener('click', onClick)
-      })
+      this.disposers.push(
+        onToggle([this.headerEl, frame.line], () => {
+          this.expanded = !this.expanded
+        }),
+      )
     } else {
       this.element.classList.add('tiao-folder-static')
       this.headerEl.tabIndex = -1
@@ -891,32 +919,58 @@ export class FolderApi extends Container {
     return this.title
   }
 
-  /** internal: exposes the folder nesting depth to CSS so control columns
-      stay aligned across indent levels (see .tiao-label) */
-  updateDepth(): void {
-    let depth = 1
-    for (let p = this.parent; p; p = p.parent) {
-      if (p instanceof FolderApi) depth++
-    }
-    this.rack.style.setProperty('--tiao-depth', String(depth))
-    for (const child of this.children) {
-      if (child instanceof FolderApi) child.updateDepth()
-    }
-  }
-
   private applyExpanded(): void {
     this.element.classList.toggle('tiao-expanded', this._expanded)
     this.headerEl.setAttribute('aria-expanded', String(this._expanded))
     this.syncContentAccess()
   }
 
-  /** Collapse hides nested controls from the tab order; search-forced-open
-   * folders stay reachable. Matches disclosure-widget a11y (no auto-expand). */
   syncContentAccess(): void {
-    const open = this._expanded || this.element.classList.contains('tiao-search-open')
-    this.bodyEl.toggleAttribute('inert', !open)
-    this.bodyEl.setAttribute('aria-hidden', String(!open))
+    syncBodyAccess(this.element, this.bodyEl, this._expanded)
   }
+}
+
+/** a folder's header, clipped body, and the depth line beside it; tab groups share it */
+function folderFrame(header: HTMLElement, ...content: HTMLElement[]) {
+  // the depth line doubles as a collapse control (keyboard users have the header)
+  const line = h('button', 'tiao-folder-line')
+  line.type = 'button'
+  line.tabIndex = -1
+  line.setAttribute('aria-hidden', 'true')
+  const clip = h('div', 'tiao-folder-clip', ...content)
+  const body = h('div', 'tiao-folder-body', clip, line)
+  return { element: h('div', 'tiao-folder', header, body), body, clip, line }
+}
+
+function onToggle(targets: HTMLElement[], fn: (ev: MouseEvent) => void): () => void {
+  for (const el of targets) el.addEventListener('click', fn)
+  return () => {
+    for (const el of targets) el.removeEventListener('click', fn)
+  }
+}
+
+/** Collapse hides nested controls from the tab order; search-forced-open
+ * bodies stay reachable. Matches disclosure-widget a11y (no auto-expand). */
+function syncBodyAccess(element: HTMLElement, body: HTMLElement, expanded: boolean): void {
+  const open = expanded || element.classList.contains('tiao-search-open')
+  body.toggleAttribute('inert', !open)
+  body.setAttribute('aria-hidden', String(!open))
+}
+
+/** Exposes nesting depth to CSS so control columns stay aligned across
+ * indent levels (see .tiao-label). Folders and tab pages each indent once. */
+function updateDepth(container: Container): void {
+  let depth = 0
+  for (let c: Container | null = container; c; c = c.parent) {
+    if (c instanceof FolderApi || c instanceof TabPageApi) depth++
+  }
+  container.rack.style.setProperty('--tiao-depth', String(depth))
+  for (const child of container.children) updateItemDepth(child)
+}
+
+function updateItemDepth(item: Item): void {
+  if (item instanceof FolderApi) updateDepth(item)
+  else if (item instanceof TabApi) for (const page of item.pages) updateDepth(page)
 }
 
 export class TabPageApi extends Container {
@@ -928,8 +982,8 @@ export class TabPageApi extends Container {
     readonly title: string,
   ) {
     super(host)
-    this.rack = h('div', 'tiao-rack')
-    this.element = h('div', 'tiao-tab-page', this.rack)
+    this.rack = h('div', 'tiao-rack tiao-tab-page')
+    this.element = this.rack
   }
 
   protected override searchText(): string {
@@ -937,34 +991,70 @@ export class TabPageApi extends Container {
   }
 }
 
+const COLLAPSE_SPRING = {
+  type: spring,
+  visualDuration: SPRINGS.collapse[0],
+  bounce: SPRINGS.collapse[1],
+}
+
+/**
+ * A folder whose heading is its page titles: the picked one reads as the
+ * title, and its page fills the body. Picking the open page's title folds the
+ * group like a folder's header would.
+ */
 export class TabApi extends Item {
   readonly element: HTMLElement
   readonly pages: TabPageApi[]
-  private nav = h('div', 'tiao-tab-nav')
+  private nav = h('div', 'tiao-tab-titles')
+  private caret = h('button', 'tiao-tab-caret', icon('chevron'))
+  private body: HTMLElement
+  private clip: HTMLElement
   private buttons: HTMLButtonElement[] = []
   private _selectedIndex = 0
+  private _expanded: boolean
+  private resize: ReturnType<typeof animate> | null = null
 
-  constructor(host: BladeHost, params: { pages: { title: string }[] }) {
+  constructor(host: BladeHost, params: { pages: { title: string }[]; expanded?: boolean }) {
     super()
+    this._expanded = params.expanded ?? true
     const nav = this.nav
     nav.setAttribute('role', 'tablist')
+    this.caret.type = 'button'
+    this.caret.setAttribute('aria-label', 'Toggle pages')
     this.pages = params.pages.map((p, i) => {
       const page = new TabPageApi(host, p.title)
       page.parent = null
-      const btn = h('button', 'tiao-tab-button', p.title)
+      const btn = h('button', 'tiao-tab-title', p.title)
       btn.type = 'button'
       btn.setAttribute('role', 'tab')
-      const onClick = () => {
-        this.selectedIndex = i
-      }
-      btn.addEventListener('click', onClick)
-      this.disposers.push(() => btn.removeEventListener('click', onClick))
+      this.disposers.push(
+        onToggle([btn], () => {
+          if (i === this._selectedIndex) this.expanded = !this._expanded
+          else {
+            this.selectedIndex = i
+            this.expanded = true
+          }
+        }),
+      )
       this.buttons.push(btn)
       nav.append(btn)
       return page
     })
-    this.element = h('div', 'tiao-tab', nav, ...this.pages.map((p) => p.element))
+    const header = h('div', 'tiao-folder-header tiao-tab-header', this.caret, nav)
+    const frame = folderFrame(header, ...this.pages.map((p) => p.element))
+    this.element = frame.element
+    this.element.classList.add('tiao-tab')
+    this.body = frame.body
+    this.clip = frame.clip
+    this.disposers.push(
+      onToggle([header, frame.line], (ev) => {
+        if (ev.target instanceof Node && nav.contains(ev.target)) return
+        this.expanded = !this._expanded
+      }),
+      () => this.resize?.stop(),
+    )
     this.applySelection()
+    this.applyExpanded()
   }
 
   /** tab pages bubble through the tab's parent container */
@@ -980,19 +1070,39 @@ export class TabApi extends Item {
     return this._selectedIndex
   }
   set selectedIndex(i: number) {
+    if (i === this._selectedIndex) return
+    this.resize?.stop()
+    const clip = this.clip
+    const from = clip.offsetHeight
+    clip.style.removeProperty('height')
     this._selectedIndex = i
     this.applySelection()
+    const to = clip.offsetHeight
+    if (!this._expanded || from === to) return
+    this.resize = animate(clip, { height: [`${from}px`, `${to}px`] }, COLLAPSE_SPRING)
+    this.resize.finished.then(() => clip.style.removeProperty('height'))
+  }
+
+  get expanded(): boolean {
+    return this._expanded
+  }
+  set expanded(v: boolean) {
+    if (this._expanded === v) return
+    this._expanded = v
+    this.applyExpanded()
   }
 
   refresh(): void {
     for (const p of this.pages) p.refresh()
   }
 
-  /** the tab strip stays visible while any page holds a match */
+  /** the titles stay visible while any page holds a match, and open to show it */
   override applySearch(query: string): boolean {
     let match = false
     for (const p of this.pages) if (p.applySearch(query)) match = true
     this.element.classList.toggle('tiao-search-miss', !match)
+    this.element.classList.toggle('tiao-search-open', query !== '' && match)
+    syncBodyAccess(this.element, this.body, this._expanded)
     return match
   }
 
@@ -1001,6 +1111,12 @@ export class TabApi extends Item {
       p.element.classList.toggle('tiao-selected', i === this._selectedIndex)
     })
     selectTab(this.nav, this.buttons, this._selectedIndex)
+  }
+
+  private applyExpanded(): void {
+    this.element.classList.toggle('tiao-expanded', this._expanded)
+    this.caret.setAttribute('aria-expanded', String(this._expanded))
+    syncBodyAccess(this.element, this.body, this._expanded)
   }
 
   override dispose(): void {

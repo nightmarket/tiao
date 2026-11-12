@@ -188,7 +188,7 @@ export function ensureDock(host: DockHost): DockShell {
     setAccent: host.setAccent,
     getNumbers: host.getNumbers,
     setNumbers: host.setNumbers,
-    hoverControls: host.hoverControls,
+    mode: host.mode,
     sides: {
       getSide: () => dockSide(scope),
       setSide: (side) => {

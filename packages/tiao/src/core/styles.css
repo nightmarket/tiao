@@ -139,15 +139,15 @@
   --tiao-gutter: 2px;
   /* rack inset so hover pills clear the pane edge; titlebar caret adds this
      to row-pad-x so it lines up with depth-0 folder carets */
-  --tiao-rack-pad-x: 3px;
+  --tiao-rack-pad-x: 4px;
   /* one gap for row hover x-outset and folder-hover inset */
-  --tiao-hover-pad: 3px;
+  --tiao-hover-pad: 4px;
   --tiao-row-pad-x: var(--tiao-hover-pad);
   /* header pad + caret + gap, so the next level's label lands on this title */
   --tiao-indent: calc(var(--tiao-row-pad-x) + var(--tiao-icon-size) + var(--tiao-tree-pad));
-  --tiao-row-pad-y: 2px;
-  --tiao-rack-pad-y: 2px;
-  --tiao-folder-pad-y: 3px;
+  --tiao-row-pad-y: 3px;
+  --tiao-rack-pad-y: 3px;
+  --tiao-folder-pad-y: 4px;
   --tiao-max-height: 500px;
   --tiao-radius: 7px;
   --tiao-radius-sm: 4px;
@@ -330,7 +330,8 @@
   --tiao-shadow-raised: 0 1px 3px rgba(17, 17, 27, 0.4);
 }
 
-/* the notch follows the global font size and spacing too */
+/* the notch follows the global font size too. Padding, gaps, and insets step
+   with the type and control heights, so a larger pane keeps its proportions */
 :is(.tiao-pane, .tiao-notch).tiao-size-s {
   --tiao-font-size: 10px;
   --tiao-font-size-mono: 9px;
@@ -342,6 +343,11 @@
   --tiao-icon-size: 10px;
   --tiao-width: 240px;
   --tiao-radius: 6px;
+  --tiao-rack-pad-x: 3px;
+  --tiao-hover-pad: 3px;
+  --tiao-row-pad-y: 2px;
+  --tiao-rack-pad-y: 2px;
+  --tiao-folder-pad-y: 3px;
 }
 
 :is(.tiao-pane, .tiao-notch).tiao-size-l {
@@ -355,24 +361,11 @@
   --tiao-icon-size: 14px;
   --tiao-width: 320px;
   --tiao-radius: 8px;
-}
-
-:is(.tiao-pane, .tiao-notch).tiao-spacing-m {
-  --tiao-row-pad-y: 3px;
+  --tiao-rack-pad-x: 5px;
+  --tiao-hover-pad: 5px;
+  --tiao-row-pad-y: 4px;
   --tiao-rack-pad-y: 4px;
   --tiao-folder-pad-y: 5px;
-  --tiao-hover-pad: 4px;
-  --tiao-gap: 8px;
-  --tiao-tree-pad: 8px;
-}
-
-:is(.tiao-pane, .tiao-notch).tiao-spacing-l {
-  --tiao-row-pad-y: 5px;
-  --tiao-rack-pad-y: 6px;
-  --tiao-folder-pad-y: 7px;
-  --tiao-hover-pad: 5px;
-  --tiao-gap: 10px;
-  --tiao-tree-pad: 10px;
 }
 
 .tiao-pane.tiao-style-kiki,
@@ -788,7 +781,7 @@
 .tiao-dock-drawer .tiao-row:has(.tiao-anchor-sides) {
   display: none;
 }
-/* touch-sized panes: the tokens the size and spacing classes set, so every
+/* touch-sized panes: the tokens the size classes set, so every
    control (sliders' tracks included) grows together; titles match the header */
 .tiao-dock-drawer .tiao-pane.tiao-docked {
   --tiao-font-size: 13px;
@@ -1072,20 +1065,11 @@
   width: 100%;
   height: var(--tiao-titlebar-height);
   background: var(--tiao-titlebar-bg);
-  border-bottom: 1px solid var(--tiao-border);
   border-radius: var(--tiao-radius) var(--tiao-radius) 0 0;
-  /* border fades in after the body expand is underway so it doesn't pop early */
-  transition:
-    background 0.12s ease,
-    border-bottom-color 0.2s ease 0.12s;
+  transition: background 0.12s ease;
 }
 .tiao-pane:not(.tiao-expanded) > .tiao-titlebar {
   border-radius: var(--tiao-radius);
-  border-bottom-color: transparent;
-  /* collapse: drop the border promptly, no delay */
-  transition:
-    background 0.12s ease,
-    border-bottom-color 0.1s ease;
 }
 .tiao-titlebar:hover {
   background: var(--tiao-hover-strong);
@@ -1212,9 +1196,12 @@
 .tiao-folder:not(.tiao-expanded) > .tiao-folder-body {
   grid-template-rows: 0fr;
 }
+/* min-width too: as grid items they'd otherwise grow to their widest unbreakable
+   text once a docked pane's clip stops being a scroll container */
 .tiao-pane-clip,
 .tiao-folder-clip {
   overflow: hidden;
+  min-width: 0;
   min-height: 0;
 }
 /* a collapsed body skips layout, paint and hit testing for everything inside it,
@@ -1323,12 +1310,20 @@
   cursor: pointer;
 }
 .tiao-label {
-  /* labelled rows give the label 55% so control columns align across rows.
-     each folder level indents the row by --tiao-indent; 55% of the narrower
-     row absorbs 0.55 of it, and the label gives up the other 0.45 per level,
-     which keeps control columns identical across nesting depths.
+  /* labelled rows split in two even columns: the control takes the right half
+     of a top-level row, so it lines up with the second of two tabs, and keeps
+     that width at every depth. Each folder level narrows the row by its rack's
+     indent (--tiao-indent less --tiao-row-pad-x); half of that comes off the
+     label's 50%, and the label gives up the other half and the gap itself.
      --tiao-depth is set on folder racks from JS. */
-  flex: 0 0 calc(55% - (var(--tiao-depth, 0) * 0.45 + 0.5) * var(--tiao-indent));
+  flex: 0 0
+    calc(
+      50% -
+      var(--tiao-gap) -
+      var(--tiao-depth, 0) *
+      (var(--tiao-indent) - var(--tiao-row-pad-x)) /
+      2
+    );
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1533,41 +1528,79 @@
   padding: 0 0 var(--tiao-row-pad-y) calc(var(--tiao-indent) - var(--tiao-row-pad-x));
 }
 
-/* ---- tabs ---- */
+/* ---- tab groups: a folder headed by its page titles ---- */
+.tiao-tab-header {
+  cursor: pointer;
+}
+.tiao-tab-caret {
+  display: flex;
+  flex: none;
+}
+/* each title's padding is half the space between titles, so hit areas meet
+   and the strip's negative margin keeps the first title on the heading's line */
+.tiao-tab-titles {
+  display: flex;
+  min-width: 0;
+  height: 100%;
+  overflow-x: auto;
+  margin-inline: calc(var(--tiao-gap) * -0.75);
+}
+.tiao-tab-title {
+  flex: none;
+  padding: 0 calc(var(--tiao-gap) * 0.75);
+  border-radius: var(--tiao-radius-sm);
+  color: var(--tiao-fg-dim);
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  transition: color 0.12s ease;
+}
+.tiao-tab-title:hover {
+  color: var(--tiao-fg-soft);
+}
+.tiao-tab-title.tiao-selected {
+  color: var(--tiao-fg-strong);
+}
+/* inside, so the strip's scroll clip can't cut it */
+.tiao-tab-title:focus-visible {
+  outline-offset: -1.5px;
+}
+.tiao-tab-page:not(.tiao-selected) {
+  display: none;
+}
+
+/* ---- segmented controls ---- */
+/* one segmented pill, like a button group: tabs sit a gutter apart with their
+   own small corners, and the strip clips its ends round, so the first tab
+   rounds fully on the left and the last on the right */
 .tiao-tab-nav {
-  --tiao-tab-pad: 2px;
   position: relative;
   display: flex;
-  gap: var(--tiao-tab-pad);
-  padding: var(--tiao-tab-pad);
-  background: var(--tiao-surface);
-  border-radius: var(--tiao-radius-sm);
-  /* match row content inset so the strip lines up with sliders/inputs */
-  margin: 3px var(--tiao-row-pad-x) 2px;
+  gap: var(--tiao-gutter);
+  width: 100%;
+  overflow: hidden;
+  border-radius: calc(var(--tiao-row-height) / 2);
 }
-/* one pill slides to the picked tab. Tabs share the strip evenly, so its size
-   and place follow from --tiao-tab-count and --tiao-tab-index (selectTab) */
+/* one highlight slides to the picked tab. Tabs share the strip evenly, so its
+   size and place follow from --tiao-tab-count and --tiao-tab-index (selectTab) */
 .tiao-tab-nav::before {
   content: "";
   position: absolute;
-  top: var(--tiao-tab-pad);
-  bottom: var(--tiao-tab-pad);
-  left: var(--tiao-tab-pad);
-  width: calc((100% - var(--tiao-tab-pad) * (var(--tiao-tab-count) + 1)) / var(--tiao-tab-count));
-  translate: calc(var(--tiao-tab-index) * (100% + var(--tiao-tab-pad)));
-  border-radius: calc(var(--tiao-radius-sm) - var(--tiao-tab-pad));
-  background: var(--tiao-bg-solid);
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: calc((100% - var(--tiao-gutter) * (var(--tiao-tab-count) - 1)) / var(--tiao-tab-count));
+  translate: calc(var(--tiao-tab-index) * (100% + var(--tiao-gutter)));
+  border-radius: var(--tiao-radius-sm);
+  background: var(--tiao-fill);
   transition: translate var(--tiao-spring-select, 0.2s ease);
   pointer-events: none;
 }
 .tiao-tab-nav.tiao-tab-none::before {
   display: none;
 }
-.tiao-control > .tiao-tab-nav {
-  margin: 0;
-  width: 100%;
-}
-/* positioned, so the label paints over the pill */
+/* positioned, so the label paints over the highlight. Ringed inside, so the
+   strip's clip can't cut a focused tab's ring */
 .tiao-tab-button {
   position: relative;
   flex: 1;
@@ -1576,7 +1609,8 @@
   align-items: center;
   justify-content: center;
   height: var(--tiao-row-height);
-  border-radius: calc(var(--tiao-radius-sm) - var(--tiao-tab-pad));
+  border-radius: var(--tiao-radius-sm);
+  background: var(--tiao-surface);
   color: var(--tiao-fg-dim);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1586,14 +1620,11 @@
 .tiao-tab-button:hover {
   color: var(--tiao-fg-soft);
 }
+.tiao-tab-button:focus-visible {
+  outline-offset: -1.5px;
+}
 .tiao-tab-button.tiao-selected {
   color: var(--tiao-fg-strong);
-}
-.tiao-tab-page {
-  display: none;
-}
-.tiao-tab-page.tiao-selected {
-  display: block;
 }
 
 /* ---- buttons: UI font, unlike value fields ---- */
@@ -1613,12 +1644,15 @@
   transform: translateY(0.5px);
 }
 
-/* ---- button groups: equal-width siblings sharing one row ---- */
+/* ---- button groups: equal-width siblings sharing one row, as one segmented
+   pill like a tab strip's ---- */
 .tiao-btngroup {
   display: flex;
-  gap: 2px;
+  gap: var(--tiao-gutter);
   width: 100%;
   min-width: 0;
+  overflow: hidden;
+  border-radius: calc(var(--tiao-row-height) / 2);
 }
 .tiao-btngroup .tiao-button {
   flex: 1;
@@ -1627,6 +1661,9 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.tiao-btngroup .tiao-button:focus-visible {
+  outline-offset: -1.5px;
 }
 
 /* ---- number: full-width fill slider with the value overlaid on the right ---- */
@@ -2282,7 +2319,7 @@
   overflow-y: auto;
 }
 /* the notch's paste box for imported settings, dropped like the settings
-   menu; content insets match a pane's rack + row padding at this spacing */
+   menu; content insets match a pane's rack + row padding at this size */
 .tiao-import {
   position: absolute;
   top: calc(100% + 6px);
@@ -2421,7 +2458,7 @@
   width: var(--tiao-control-height);
   height: var(--tiao-control-height);
   flex: none;
-  border-radius: var(--tiao-radius-sm);
+  border-radius: 50%;
   box-shadow: inset 0 0 0 1px var(--tiao-border);
   transition: transform 0.1s ease;
 }
@@ -2772,10 +2809,6 @@ body:has(> .tiao-dock-drawer.tiao-open) > .tiao-pins {
 .tiao-pin :is(.tiao-check, .tiao-point-pad-toggle) {
   border-radius: var(--tiao-pin-item-radius);
 }
-/* a round swatch, the same size and inset as a pinned dial */
-.tiao-pin .tiao-color-swatch {
-  border-radius: 50%;
-}
 /* an outline rather than a filled chip, so the on state is the only fill */
 .tiao-pin .tiao-check {
   background: none;
@@ -2873,12 +2906,148 @@ body:has(> .tiao-dock-drawer.tiao-open) > .tiao-pins {
   white-space: nowrap;
 }
 /* about as wide as "359.9°", so the label gets the rest */
-.tiao-pin .tiao-angle-field {
+:is(.tiao-pin, :root[data-tiao-mode="full-width"] .tiao-pane) .tiao-angle-field {
   flex: none;
   width: 4.5em;
 }
-.tiao-pin .tiao-angle-field .tiao-num-input {
+:is(.tiao-pin, :root[data-tiao-mode="full-width"] .tiao-pane) .tiao-angle-field .tiao-num-input {
   text-align: right;
+}
+/* full width panes build their sliders and dials the way cards do, at the pane's
+   scale: the track stays inside the row's padding, so the label insets as far
+   as the value opposite it */
+:root[data-tiao-mode="full-width"] .tiao-pane:not(.tiao-pin) .tiao-slider-label {
+  padding-left: 6px;
+  line-height: var(--tiao-control-height);
+}
+:root[data-tiao-mode="full-width"] .tiao-pane .tiao-row-full .tiao-angle {
+  cursor: ew-resize;
+}
+/* and every labelled row is a card too: one surface the size of a slider's
+   track, inset in the row's padding, with the label inside it. Full views that
+   lay out their own label (thumbnails) count. A control's own surface gives way
+   to the card, and the toggle, swatch, or pad button at its end shrinks to sit
+   as far in from the card's edge as from its top, like a pinned card's */
+:root[data-tiao-mode="full-width"]
+  .tiao-pane:not(.tiao-pin)
+  :is(.tiao-row:not(.tiao-row-full), .tiao-row-full:has(> * > .tiao-label))::before {
+  display: block;
+  inset: calc(var(--tiao-row-pad-y) + (var(--tiao-row-height) - var(--tiao-control-height)) / 2)
+    var(--tiao-row-pad-x);
+  background: var(--tiao-surface);
+}
+:root[data-tiao-mode="full-width"]
+  .tiao-pane:not(.tiao-pin)
+  :is(.tiao-row:not(.tiao-row-full), .tiao-row-full:has(> * > .tiao-label)):is(
+    :hover,
+    .tiao-row-active,
+    .tiao-row-context
+  )::before {
+  background: var(--tiao-surface-hover);
+}
+:root[data-tiao-mode="full-width"] .tiao-pane:not(.tiao-pin) .tiao-row-full > .tiao-angle {
+  height: var(--tiao-control-height);
+  padding: 0 var(--tiao-card-item-inset) 0 6px;
+  border-radius: var(--tiao-radius-sm);
+  background: var(--tiao-surface);
+  transition: background 0.12s ease;
+}
+:root[data-tiao-mode="full-width"]
+  .tiao-pane:not(.tiao-pin)
+  .tiao-row-full:is(:hover, .tiao-row-active)
+  > .tiao-angle {
+  background: var(--tiao-surface-hover);
+}
+/* cards fill the row's whole line, so their gap is just the row padding */
+:root[data-tiao-mode="full-width"] .tiao-pane:not(.tiao-pin) .tiao-row {
+  --tiao-control-height: var(--tiao-row-height);
+  --tiao-card-item-inset: 2px;
+  --tiao-card-item: calc(var(--tiao-control-height) - var(--tiao-card-item-inset) * 2);
+}
+:root[data-tiao-mode="full-width"]
+  .tiao-pane:not(.tiao-pin)
+  :is(.tiao-row:not(.tiao-row-full), .tiao-row-full:has(> * > .tiao-label))
+  .tiao-label {
+  margin-left: 6px;
+}
+/* those full views run taller than one line, so their card wraps the whole view
+   and pads it, keeping their grid or drop zone off the card's edge */
+:root[data-tiao-mode="full-width"]
+  .tiao-pane:not(.tiao-pin)
+  .tiao-row-full:has(> * > .tiao-label)::before {
+  inset: var(--tiao-row-pad-y) var(--tiao-row-pad-x);
+}
+:root[data-tiao-mode="full-width"]
+  .tiao-pane:not(.tiao-pin)
+  .tiao-row-full:has(> * > .tiao-label)
+  > * {
+  padding: var(--tiao-card-item-inset);
+}
+:root[data-tiao-mode="full-width"]
+  .tiao-pane:not(.tiao-pin)
+  .tiao-row-full:has(> * > .tiao-label)
+  > *
+  > .tiao-label {
+  margin-left: calc(6px - var(--tiao-card-item-inset));
+}
+:root[data-tiao-mode="full-width"]
+  .tiao-pane:not(.tiao-pin)
+  .tiao-row:not(.tiao-row-full)
+  :is(
+    .tiao-num-input,
+    .tiao-text-input,
+    .tiao-select,
+    .tiao-color-text,
+    .tiao-slider,
+    .tiao-radiogrid-cell,
+    .tiao-tab-button,
+    .tiao-button,
+    .tiao-monitor-log
+  ) {
+  background: transparent;
+  box-shadow: none;
+}
+:root[data-tiao-mode="full-width"]
+  .tiao-pane:not(.tiao-pin)
+  .tiao-row:not(.tiao-row-full)
+  .tiao-button:hover {
+  background: var(--tiao-hover);
+}
+:root[data-tiao-mode="full-width"]
+  .tiao-pane:not(.tiao-pin)
+  .tiao-row:not(.tiao-row-full)
+  .tiao-monitor-text {
+  padding-right: 6px;
+}
+:root[data-tiao-mode="full-width"]
+  .tiao-pane:not(.tiao-pin)
+  .tiao-row:not(.tiao-row-full):has(
+    :is(.tiao-check, .tiao-color-swatch, .tiao-point-pad-toggle, .tiao-angle-knob)
+  )
+  > .tiao-control {
+  padding-right: var(--tiao-card-item-inset);
+}
+:root[data-tiao-mode="full-width"]
+  .tiao-pane:not(.tiao-pin)
+  .tiao-row
+  :is(.tiao-check, .tiao-color-swatch, .tiao-point-pad-toggle, .tiao-angle-knob) {
+  width: var(--tiao-card-item);
+  height: var(--tiao-card-item);
+}
+:root[data-tiao-mode="full-width"]
+  .tiao-pane:not(.tiao-pin)
+  .tiao-row
+  :is(.tiao-check, .tiao-point-pad-toggle) {
+  border-radius: max(0px, var(--tiao-radius-sm) - var(--tiao-card-item-inset));
+}
+/* an outline rather than a filled chip, so the on state is the only fill */
+:root[data-tiao-mode="full-width"] .tiao-pane:not(.tiao-pin) .tiao-row .tiao-check {
+  background: none;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tiao-fg) 22%, transparent);
+}
+:root[data-tiao-mode="full-width"] .tiao-pane:not(.tiao-pin) .tiao-row .tiao-check::after {
+  inset: 2px;
+  border-radius: max(0px, var(--tiao-radius-sm) - var(--tiao-card-item-inset) - 2px);
 }
 /* a pinned slider's label, at the left end of its track */
 .tiao-slider-label {
@@ -2986,28 +3155,28 @@ body:has(> .tiao-dock-drawer.tiao-open) > .tiao-pins {
   color: var(--tiao-fg-dim);
 }
 
-/* ---- quiet rows: every pinned card, and every pane under the global Hover
-   Controls setting. Values show, and the rest of a control waits for the
+/* ---- quiet rows: every pinned card, and every pane in the minimal or full
+   width mode (Pane.mode). Values show, and the rest of a control waits for the
    pointer, keyboard focus, or a drag in its row: slider tracks, scrub grips,
    dropdown carets, and field backgrounds, while ranges and vectors read as
    comma-separated lists. Text sits right-aligned, and swatches, dials, and pad
    buttons after it, the whole time ---- */
-:is(:root[data-tiao-hover-controls] .tiao-pane, .tiao-pane.tiao-pin)
+:is(:root[data-tiao-mode] .tiao-pane, .tiao-pane.tiao-pin)
   .tiao-row
   :is(.tiao-text-input, .tiao-select, .tiao-color-text) {
   text-align: right;
   text-align-last: right;
 }
-:is(:root[data-tiao-hover-controls] .tiao-pane, .tiao-pane.tiao-pin)
+:is(:root[data-tiao-mode] .tiao-pane, .tiao-pane.tiao-pin)
   .tiao-row
   :is(.tiao-color-swatch, .tiao-angle-knob, .tiao-point-pad-toggle) {
   order: 1;
 }
-:is(:root[data-tiao-hover-controls] .tiao-pane, .tiao-pane.tiao-pin) .tiao-row .tiao-color-swatch {
+:is(:root[data-tiao-mode] .tiao-pane, .tiao-pane.tiao-pin) .tiao-row .tiao-color-swatch {
   width: calc(var(--tiao-control-height) * 0.6);
   height: calc(var(--tiao-control-height) * 0.6);
 }
-:is(:root[data-tiao-hover-controls] .tiao-pane, .tiao-pane.tiao-pin)
+:is(:root[data-tiao-mode] .tiao-pane, .tiao-pane.tiao-pin)
   .tiao-row
   :is(.tiao-scrub-grip, .tiao-select-wrap > .tiao-icon-chevron) {
   transition: opacity 0.12s ease;
@@ -3015,17 +3184,17 @@ body:has(> .tiao-dock-drawer.tiao-open) > .tiao-pins {
 /* touch screens can't hover, so they keep every control showing */
 @media (hover: hover) {
   /* a pinned slider keeps its track, which is the card */
-  :is(:root[data-tiao-hover-controls] .tiao-pane, .tiao-pane.tiao-pin)
+  :is(:root[data-tiao-mode] .tiao-pane, .tiao-pane.tiao-pin)
     .tiao-row:not(.tiao-row-full, :hover, .tiao-row-active, :has(:focus-visible))
     :is(.tiao-number > .tiao-slider, .tiao-scrub-grip, .tiao-select-wrap > .tiao-icon-chevron) {
     opacity: 0;
   }
-  .tiao-pin
+  :is(:root[data-tiao-mode="full-width"] .tiao-pane, .tiao-pin)
     .tiao-row-full:not(:hover, .tiao-row-active, :has(:focus-visible))
     .tiao-slider-handles {
     opacity: 0;
   }
-  :is(:root[data-tiao-hover-controls] .tiao-pane, .tiao-pane.tiao-pin)
+  :is(:root[data-tiao-mode] .tiao-pane, .tiao-pane.tiao-pin)
     .tiao-row:not(:hover, .tiao-row-active, :has(:focus-visible))
     :is(
       .tiao-num-input,
@@ -3037,7 +3206,7 @@ body:has(> .tiao-dock-drawer.tiao-open) > .tiao-pins {
     ) {
     background: transparent;
   }
-  :is(:root[data-tiao-hover-controls] .tiao-pane, .tiao-pane.tiao-pin)
+  :is(:root[data-tiao-mode] .tiao-pane, .tiao-pane.tiao-pin)
     .tiao-row:not(:hover, .tiao-row-active, :has(:focus-visible))
     .tiao-select {
     padding-right: 6px;
@@ -3050,7 +3219,7 @@ body:has(> .tiao-dock-drawer.tiao-open) > .tiao-pins {
     background: color-mix(in srgb, var(--tiao-fg) 9%, transparent);
   }
   /* a hidden track's readouts sit at rest */
-  :is(:root[data-tiao-hover-controls] .tiao-pane, .tiao-pane.tiao-pin)
+  :is(:root[data-tiao-mode] .tiao-pane, .tiao-pane.tiao-pin)
     .tiao-row:not(:hover, .tiao-row-active, :has(:focus-visible))
     .tiao-number
     > :is(.tiao-slider-num, .tiao-slider-label, .tiao-interval-min, .tiao-interval-max) {
@@ -3060,7 +3229,7 @@ body:has(> .tiao-dock-drawer.tiao-open) > .tiao-pins {
 /* a list needs fields as wide as their text; without that they keep their layout */
 @media (hover: hover) {
   @supports (field-sizing: content) {
-    :is(:root[data-tiao-hover-controls] .tiao-pane, .tiao-pane.tiao-pin)
+    :is(:root[data-tiao-mode] .tiao-pane, .tiao-pane.tiao-pin)
       .tiao-row:not(:hover, .tiao-row-active, :has(:focus-visible))
       :is(.tiao-interval, .tiao-point-fields) {
       display: flex;
@@ -3068,7 +3237,7 @@ body:has(> .tiao-dock-drawer.tiao-open) > .tiao-pins {
       align-items: center;
       gap: 0;
     }
-    :is(:root[data-tiao-hover-controls] .tiao-pane, .tiao-pane.tiao-pin)
+    :is(:root[data-tiao-mode] .tiao-pane, .tiao-pane.tiao-pin)
       .tiao-row:not(:hover, .tiao-row-active, :has(:focus-visible))
       :is(.tiao-interval-min, .tiao-interval-max, .tiao-point-fields > .tiao-scrub) {
       position: static;
@@ -3077,7 +3246,7 @@ body:has(> .tiao-dock-drawer.tiao-open) > .tiao-pins {
       flex: none;
       width: auto;
     }
-    :is(:root[data-tiao-hover-controls] .tiao-pane, .tiao-pane.tiao-pin)
+    :is(:root[data-tiao-mode] .tiao-pane, .tiao-pane.tiao-pin)
       .tiao-row:not(:hover, .tiao-row-active, :has(:focus-visible))
       :is(.tiao-interval, .tiao-point-fields)
       .tiao-num-input {
@@ -3085,13 +3254,13 @@ body:has(> .tiao-dock-drawer.tiao-open) > .tiao-pins {
       padding: 0;
       field-sizing: content;
     }
-    :is(:root[data-tiao-hover-controls] .tiao-pane, .tiao-pane.tiao-pin)
+    :is(:root[data-tiao-mode] .tiao-pane, .tiao-pane.tiao-pin)
       .tiao-row:not(:hover, .tiao-row-active, :has(:focus-visible))
       :is(.tiao-interval-max, .tiao-point-fields > .tiao-scrub:last-child)
       .tiao-num-input {
       padding-right: 6px;
     }
-    :is(:root[data-tiao-hover-controls] .tiao-pane, .tiao-pane.tiao-pin)
+    :is(:root[data-tiao-mode] .tiao-pane, .tiao-pane.tiao-pin)
       .tiao-row:not(:hover, .tiao-row-active, :has(:focus-visible))
       :is(.tiao-interval-min, .tiao-point-fields > .tiao-scrub:not(:last-child))::after {
       content: ", ";
@@ -3121,7 +3290,6 @@ body:has(> .tiao-dock-drawer.tiao-open) > .tiao-pins {
   contain: strict;
   border-radius: var(--tiao-radius-sm);
   background: color-mix(in srgb, var(--tiao-graph-accent) 3%, var(--tiao-surface));
-  box-shadow: inset 0 0 0 1px var(--tiao-border);
   overflow: hidden;
 }
 .tiao-graph-canvas {
@@ -3164,7 +3332,6 @@ body:has(> .tiao-dock-drawer.tiao-open) > .tiao-pins {
   padding: 4px 6px;
   border-radius: var(--tiao-radius-sm);
   background: var(--tiao-surface);
-  box-shadow: inset 0 0 0 1px var(--tiao-border);
   overflow-y: auto;
   overscroll-behavior: contain;
   font-family: var(--tiao-font-mono);

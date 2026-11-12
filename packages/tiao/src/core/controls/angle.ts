@@ -18,6 +18,7 @@ const toScreen = (rad: number) => rad - Math.PI / 2
 export const angleInputPlugin: InputPlugin<number> = {
   id: 'angle',
   type: 'input',
+  featurable: true,
   accept(value, options) {
     return typeof value === 'number' && options.view === 'angle'
   },

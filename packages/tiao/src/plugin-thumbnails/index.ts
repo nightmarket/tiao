@@ -110,9 +110,8 @@ const CSS = `
   width: 100%;
   min-width: 0;
 }
-/* same depth-aware split as core rows so the grid spans the full control column */
+/* keeps the core label's depth-aware split, so the grid fills just the control column */
 .tiao-thumbs > .tiao-label {
-  flex: 0 0 calc(50% - (var(--tiao-depth, 0) + 1) * var(--tiao-indent) / 2);
   padding-top: 2px;
 }
 .tiao-thumbs-grid {
@@ -122,9 +121,9 @@ const CSS = `
   /* reflows to the column width, stretching to fill when a row is short;
      an explicit \`columns\` overrides from JS */
   grid-template-columns: repeat(auto-fit, minmax(var(--tiao-thumbs-min, 44px), 1fr));
-  /* matches the grid's own inset from the pane edge (3px rack + 4px row) so the
+  /* matches the grid's own inset from the pane edge (rack + row padding) so the
      spacing between cards and around them is even */
-  gap: 7px;
+  gap: calc(var(--tiao-rack-pad-x) + var(--tiao-row-pad-x));
 }
 /* artwork and caption share one card: the frame wraps both, and the 2px inset
    keeps the two radii concentric */
@@ -135,21 +134,17 @@ const CSS = `
   padding: 2px;
   border-radius: calc(var(--tiao-radius-sm) + 2px);
   background: var(--tiao-surface);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--tiao-border) 50%, transparent);
   color: var(--tiao-fg-dim);
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
 }
 .tiao-thumbs-cell:hover {
   background: var(--tiao-surface-hover);
-  box-shadow: 0 0 0 1px var(--tiao-border);
 }
-/* ring sits outside a gap of pane background so it reads on busy artwork */
 .tiao-thumbs-cell.tiao-selected {
+  background: color-mix(in srgb, var(--tiao-fg) 12%, var(--tiao-surface));
   color: var(--tiao-fg-soft);
-  box-shadow: 0 0 0 1px var(--tiao-bg-solid), 0 0 0 2px var(--tiao-fg-dim);
-}
-.tiao-thumbs-cell:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 1px var(--tiao-bg-solid), 0 0 0 2px var(--tiao-focus);
 }
 .tiao-thumbs-image {
   aspect-ratio: var(--tiao-thumbs-aspect, 1);

@@ -12,8 +12,8 @@ export interface SunriseTour {
   cursor: HTMLElement
   /** whether the pane is up where a cursor could reach it: shown, expanded, and not in the drawer */
   reachable(): boolean
-  /** the tab that holds the sun's rows */
-  tab: HTMLElement
+  /** the title of the collapsed folder that holds the sun's rows */
+  folder: HTMLElement
   /** the row the cursor drags to bring the sun up */
   slider: {
     /** its track, which the cursor drags with real pointer events */
@@ -56,7 +56,7 @@ const EASE = [0.4, 0, 0.2, 1] as const
 const STOPPED = Symbol('stopped')
 
 /**
- * A cursor that moves on arcs to the pane, opens the sun's tab, drags a
+ * A cursor that moves on arcs to the pane, opens the sun's folder, drags a
  * slider so the sun rises over the planet, pins an angle, and turns the
  * pinned card's dial. Every press is a real pointer event, so rows light up
  * and edits land in undo like any other. A click, key, scroll, or touch from
@@ -242,9 +242,10 @@ export function startSunriseTour(tour: SunriseTour): () => void {
     place({ x: rect.left + rect.width * 0.4, y: rect.top + rect.height * 0.8 })
     await run(animate(cursor, { opacity: 1 }, { duration: 0.3 }))
 
-    await moveTo(centerOf(tour.tab))
-    await click(tour.tab)
-    await wait(200)
+    await moveTo(centerOf(tour.folder))
+    await click(tour.folder)
+    // past the folder's open spring, so the track holds still under the drag
+    await wait(300)
     await slide()
     await wait(250)
     if (!dial.pinned()) await pin()

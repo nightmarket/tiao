@@ -2,6 +2,7 @@ import { createExportPane } from '@nightmarket/tiao/export-pane'
 import type { MediaValue } from '@nightmarket/tiao/plugin-media'
 import { button, buttonGroup, monitor, tabs, useControls } from '@nightmarket/tiao/react'
 import { useEffect, useRef } from 'react'
+import { FULLSCREEN_CANVAS } from '../canvas'
 import { type SceneHandle, type SceneParams, startScene } from './scene'
 
 /** Contributes motion controls to the default pane from one component... */
@@ -92,5 +93,5 @@ export function ParticlesExample() {
     return () => pane.dispose()
   }, [])
 
-  return <canvas ref={canvasRef} style={{ width: '100vw', height: '100vh', display: 'block' }} />
+  return <canvas ref={canvasRef} {...FULLSCREEN_CANVAS} />
 }

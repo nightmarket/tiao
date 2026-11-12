@@ -31,10 +31,15 @@ function openNotchMenu(): HTMLElement {
   return document.querySelector('.tiao-notch .tiao-pane-menu') as HTMLElement
 }
 
+/** the settings row in `menu` with this label */
+function menuRow(menu: Element, label: string): HTMLElement {
+  const rows = [...menu.querySelectorAll('.tiao-row')]
+  return rows.find((r) => r.querySelector('.tiao-label')?.textContent === label) as HTMLElement
+}
+
 /** the notch settings row with this label */
 function notchMenuRow(label: string): HTMLElement {
-  const rows = [...openNotchMenu().querySelectorAll('.tiao-row')]
-  return rows.find((r) => r.querySelector('.tiao-label')?.textContent === label) as HTMLElement
+  return menuRow(openNotchMenu(), label)
 }
 
 function notchMenuCheck(label: string): HTMLElement {
@@ -715,7 +720,7 @@ describe('Pane registry and chrome', () => {
     expect(strip.style.getPropertyValue('--tiao-tab-count')).toBe('3')
     expect(strip.style.getPropertyValue('--tiao-tab-index')).toBe('1')
     // the global size covers floating panes; inline ones keep their own
-    expect(inline.size).toBe('m')
+    expect(inline.size).toBe('s')
     expect(JSON.parse(localStorage.getItem('tiao:notch')!).fontSize).toBe('normal')
 
     const later = new Pane()
@@ -724,7 +729,7 @@ describe('Pane registry and chrome', () => {
     notchMenuTab('Font size', 'L').click()
     expect(pane.size).toBe('l')
     expect(later.size).toBe('l')
-    expect(inline.size).toBe('m')
+    expect(inline.size).toBe('s')
     expect(JSON.parse(localStorage.getItem('tiao:notch')!).fontSize).toBe('large')
     // the notch's own icons scale with it
     const notch = document.querySelector('.tiao-notch')!
@@ -739,29 +744,6 @@ describe('Pane registry and chrome', () => {
 
     pane.dispose()
     inline.dispose()
-    later.dispose()
-  })
-
-  it('notch spacing pads every floating pane and persists', () => {
-    const pane = new Pane()
-    expect(pane.spacing).toBe('s')
-    expect(notchMenuTab('Spacing', 'S').classList.contains('tiao-selected')).toBe(true)
-
-    notchMenuTab('Spacing', 'M').click()
-    expect(pane.spacing).toBe('m')
-    expect(pane.element.classList.contains('tiao-spacing-m')).toBe(true)
-    expect(document.querySelector('.tiao-notch')!.classList.contains('tiao-spacing-m')).toBe(true)
-    expect(JSON.parse(localStorage.getItem('tiao:notch')!).spacing).toBe('m')
-
-    const later = new Pane()
-    expect(later.spacing).toBe('m')
-
-    notchMenuTab('Spacing', 'L').click()
-    expect(pane.spacing).toBe('l')
-    expect(later.spacing).toBe('l')
-    expect(JSON.parse(localStorage.getItem('tiao:notch')!).spacing).toBe('l')
-
-    pane.dispose()
     later.dispose()
   })
 
@@ -1124,9 +1106,8 @@ describe('Pane registry and chrome', () => {
     expect(b.element.classList.contains('tiao-theme-nord')).toBe(true)
     const gear = document.querySelector('.tiao-dock-gear') as HTMLButtonElement
     gear.click()
-    const select = document.querySelector(
-      '.tiao-dock .tiao-pane-menu .tiao-select',
-    ) as HTMLSelectElement
+    const menu = document.querySelector('.tiao-dock .tiao-pane-menu')!
+    const select = menuRow(menu, 'Theme').querySelector('.tiao-select') as HTMLSelectElement
     selectOption(select, 'Catppuccin')
     expect(a.element.classList.contains('tiao-theme-catppuccin')).toBe(true)
     expect(b.element.classList.contains('tiao-theme-catppuccin')).toBe(true)
@@ -1915,6 +1896,53 @@ describe('Pane registry and chrome', () => {
     pane.dispose()
   })
 
+  it('tab groups are folders headed by their page titles', () => {
+    const params = { speed: 1, note: 'hi' }
+    const pane = new Pane()
+    const tab = pane.addTab({ pages: [{ title: 'Motion' }, { title: 'Monitor' }] })
+    tab.pages[0]!.addBinding(params, 'speed')
+    const look = tab.pages[1]!.addFolder({ title: 'Look' })
+    look.addBinding(params, 'note')
+    const [motion, monitor] = tab.element.querySelectorAll<HTMLButtonElement>('.tiao-tab-title')
+    const body = tab.element.querySelector('.tiao-folder-body') as HTMLElement
+    const pageShown = (i: number) => tab.pages[i]!.element.classList.contains('tiao-selected')
+    expect(tab.element.classList.contains('tiao-folder')).toBe(true)
+    expect(motion!.getAttribute('aria-selected')).toBe('true')
+    expect(pageShown(0)).toBe(true)
+    // pages indent like a folder body, and folders inside them one more
+    expect(tab.pages[0]!.rack.style.getPropertyValue('--tiao-depth')).toBe('1')
+    expect(look.rack.style.getPropertyValue('--tiao-depth')).toBe('2')
+
+    monitor!.click()
+    expect(tab.selectedIndex).toBe(1)
+    expect(pageShown(1) && !pageShown(0)).toBe(true)
+
+    // the open page's title folds the group, like a folder header
+    monitor!.click()
+    expect(tab.expanded).toBe(false)
+    expect(body.hasAttribute('inert')).toBe(true)
+    // another title picks its page and opens it
+    motion!.click()
+    expect(tab.selectedIndex).toBe(0)
+    expect(tab.expanded).toBe(true)
+
+    // the depth line and the caret toggle it without changing the page
+    tab.element
+      .querySelector<HTMLButtonElement>(':scope > .tiao-folder-body > .tiao-folder-line')!
+      .click()
+    expect(tab.expanded).toBe(false)
+    tab.element.querySelector<HTMLButtonElement>('.tiao-tab-caret')!.click()
+    expect(tab.expanded).toBe(true)
+    expect(tab.selectedIndex).toBe(0)
+
+    // search opens a folded group holding a hit
+    tab.expanded = false
+    pane.filter('speed')
+    expect(tab.element.classList.contains('tiao-search-open')).toBe(true)
+    expect(body.hasAttribute('inert')).toBe(false)
+    pane.dispose()
+  })
+
   it('collapsible: false folders stay expanded and ignore header clicks', () => {
     const pane = new Pane()
     const folder = pane.addFolder({ title: 'Fixed', collapsible: false })
@@ -2580,7 +2608,7 @@ describe('Pane registry and chrome', () => {
     )
     const menu = pane.element.querySelector('.tiao-pane-menu.tiao-open')!
     // the settings menu is a real embedded pane, so theme is a select binding
-    const select = menu.querySelector('.tiao-select') as HTMLSelectElement
+    const select = menuRow(menu, 'Theme').querySelector('.tiao-select') as HTMLSelectElement
     expect(pane.theme).toBe('dark')
     expect(pane.element.classList.contains('tiao-theme-dark')).toBe(true)
     expect([...select.options].map((o) => o.textContent)).toEqual([
@@ -3289,34 +3317,61 @@ describe('Pane registry and chrome', () => {
     again.dispose()
   })
 
-  it('menu "Minimal mode" hides slider tracks until their row is hovered, for every pane', () => {
+  it('menu "Mode" sets how every pane draws its rows: default, minimal, or full width', () => {
     const root = document.documentElement
-    const pane = new Pane({ id: 'hover-controls' })
-    pane.addBinding({ speed: 0.5 }, 'speed', { min: 0, max: 1 })
-    expect(Pane.hoverControls).toBe(false)
-    expect(root.hasAttribute('data-tiao-hover-controls')).toBe(false)
+    const params = { speed: 0.5, on: true }
+    const pane = new Pane({ id: 'mode' })
+    const speed = pane.addBinding(params, 'speed', { min: 0, max: 1 })
+    const on = pane.addBinding(params, 'on')
+    const modeSelect = () => notchMenuRow('Mode').querySelector('select') as HTMLSelectElement
+    expect(Pane.mode).toBe('default')
+    expect(root.dataset['tiaoMode']).toBeUndefined()
 
-    notchMenuCheck('Minimal mode').click()
-    expect(Pane.hoverControls).toBe(true)
-    expect(root.hasAttribute('data-tiao-hover-controls')).toBe(true)
-    expect(JSON.parse(localStorage.getItem('tiao:notch')!).hoverControls).toBe(true)
+    selectOption(modeSelect(), 'Minimal')
+    expect(Pane.mode).toBe('minimal')
+    expect(root.dataset['tiaoMode']).toBe('minimal')
+    expect(JSON.parse(localStorage.getItem('tiao:notch')!).mode).toBe('minimal')
+    expect(speed.element.classList.contains('tiao-row-full')).toBe(false)
+
+    // full width rebuilds the slider the way a pinned card draws it, in the same row
+    const row = speed.element
+    selectOption(modeSelect(), 'Full Width')
+    expect(root.dataset['tiaoMode']).toBe('full-width')
+    expect(speed.element).toBe(row)
+    expect(row.parentElement).toBe(pane.rack)
+    expect(row.classList.contains('tiao-row-full')).toBe(true)
+    expect(row.querySelector('.tiao-number .tiao-slider-label')?.textContent).toBe('speed')
+    expect(row.querySelector(':scope > .tiao-label')).toBeNull()
+    // rows a card draws beside their label keep the label
+    expect(on.element.querySelector('.tiao-label')?.textContent).toBe('on')
+
+    // the rebuilt slider edits the same value
+    speed.value.set(0.75)
+    expect(params.speed).toBe(0.75)
+    expect(row.querySelector<HTMLInputElement>('.tiao-num-input')!.value).toBe('0.75')
+    speed.label = 'rate'
+    expect(row.querySelector('.tiao-slider-label')?.textContent).toBe('rate')
 
     // a pane's own menu shows the same global setting
     titlebarOf(pane).dispatchEvent(
       new MouseEvent('contextmenu', { bubbles: true, cancelable: true }),
     )
-    const paneMenu = pane.element.querySelector('.tiao-pane-menu') as HTMLElement
-    const row = [...paneMenu.querySelectorAll('.tiao-row')].find(
-      (r) => r.querySelector('.tiao-label')?.textContent === 'Minimal mode',
-    )
-    expect(row?.querySelector('.tiao-check')?.getAttribute('aria-checked')).toBe('true')
+    const paneMenu = pane.element.querySelector('.tiao-pane-menu')!
+    const paneModeSelect = menuRow(paneMenu, 'Mode').querySelector('select')!
+    expect(paneModeSelect.selectedOptions[0]?.textContent).toBe('Full Width')
 
-    // a later page load applies it before anything paints
-    root.removeAttribute('data-tiao-hover-controls')
+    // a later page load applies it before anything paints, sliders included
+    delete root.dataset['tiaoMode']
     const later = new Pane()
-    expect(root.hasAttribute('data-tiao-hover-controls')).toBe(true)
-    Pane.setHoverControls(false)
-    expect(root.hasAttribute('data-tiao-hover-controls')).toBe(false)
+    const gain = later.addBinding({ gain: 1 }, 'gain', { min: 0, max: 2 })
+    expect(root.dataset['tiaoMode']).toBe('full-width')
+    expect(gain.element.classList.contains('tiao-row-full')).toBe(true)
+
+    Pane.setMode('default')
+    expect(root.dataset['tiaoMode']).toBeUndefined()
+    expect(row.classList.contains('tiao-row-full')).toBe(false)
+    expect(row.querySelector(':scope > .tiao-label')?.textContent).toBe('rate')
+    expect(row.querySelector('.tiao-slider-label')).toBeNull()
     later.dispose()
     pane.dispose()
   })

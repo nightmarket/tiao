@@ -14,6 +14,7 @@ const PINNED_TICKS = [25, 50, 75]
 export const numberInputPlugin: InputPlugin<number> = {
   id: 'number',
   type: 'input',
+  featurable: true,
   accept(value) {
     return typeof value === 'number'
   },

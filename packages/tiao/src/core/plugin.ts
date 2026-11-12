@@ -36,7 +36,11 @@ export interface PluginContext<T> {
   options: BindingOptions
   /** row label (plugins with full-row layouts render it themselves) */
   label: string
-  /** a pinned copy, drawn large at the bottom of the page; a plugin may lay out for it */
+  /**
+   * laid out the way a pinned card draws it: the pinned copy itself, or every
+   * row while the panes are full width (Pane.mode). Plugins that read it set
+   * `featurable`
+   */
   featured?: boolean
   /** register cleanup to run when the binding (or its pinned copy) is disposed */
   onDispose(fn: () => void): void
@@ -58,6 +62,8 @@ export interface InputPlugin<T = unknown> {
   /** return true to claim this (value, options) pair */
   accept(value: unknown, options: BindingOptions): boolean
   create(ctx: PluginContext<T>): PluginView
+  /** lays out differently when `featured`, so its rows rebuild when the pane mode flips */
+  featurable?: boolean
 }
 
 export interface MonitorPlugin<T = unknown> {
@@ -65,6 +71,8 @@ export interface MonitorPlugin<T = unknown> {
   type: 'monitor'
   accept(value: unknown, options: BindingOptions): boolean
   create(ctx: PluginContext<T>): PluginView
+  /** lays out differently when `featured`, so its rows rebuild when the pane mode flips */
+  featurable?: boolean
 }
 
 export interface BladePluginContext {
